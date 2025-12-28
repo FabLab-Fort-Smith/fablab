@@ -37,6 +37,62 @@ const commands = [
                 min_value: 1
             }
         ]
+    },
+    {
+        name: 'balance',
+        description: 'Check your current Stake balance',
+        type: 1, // CHAT_INPUT
+    },
+    {
+        name: 'leaderboard',
+        description: 'View the top Stake holders',
+        type: 1, // CHAT_INPUT
+    },
+    {
+        name: 'checkin',
+        description: 'Toggle your check-in status at the Lab',
+        type: 1,
+    },
+    {
+        name: 'profile',
+        description: 'View your FabLab profile card',
+        type: 1,
+    },
+    {
+        name: 'badges',
+        description: 'View your earned badges',
+        type: 1,
+    },
+    {
+        name: 'wifi',
+        description: 'Get the Lab Wi-Fi password (Members Only)',
+        type: 1,
+    },
+    {
+        name: 'award',
+        description: 'Award Stake to a user (Admin Only)',
+        type: 1,
+        options: [
+            {
+                name: 'user',
+                description: 'The user to award stake to',
+                type: 6, // USER
+                required: true
+            },
+            {
+                name: 'amount',
+                description: 'Amount of stake to award',
+                type: 4, // INTEGER
+                required: true,
+                min_value: 1
+            },
+            {
+                name: 'reason',
+                description: 'Reason for the award',
+                type: 3, // STRING
+                required: true
+            }
+        ]
     }
 ];
 

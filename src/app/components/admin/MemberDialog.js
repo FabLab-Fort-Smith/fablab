@@ -342,6 +342,11 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                         <Button autoFocus color="inherit" onClick={handleSave} disabled={loading}>
                             {loading ? <CircularProgress size={24} color="inherit" /> : 'Save'}
                         </Button>
+                        <Tooltip title="Award Stake">
+                            <IconButton onClick={() => setAwardDialogOpen(true)} color="inherit" sx={{ ml: 1 }}>
+                                <StarIcon />
+                            </IconButton>
+                        </Tooltip>
                         <Tooltip title="Send Reminder (Nudge)">
                             <IconButton onClick={handleNudge} color="warning" sx={{ ml: 1 }}>
                                 <NotificationsActiveIcon />

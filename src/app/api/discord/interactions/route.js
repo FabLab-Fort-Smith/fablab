@@ -114,6 +114,254 @@ export async function POST(request) {
                 });
             }
         }
+
+        if (name === 'balance') {
+            const senderDiscordId = interaction.member ? interaction.member.user.id : interaction.user.id;
+
+            try {
+                const { default: UserModel } = await import('@/app/api/v1/users/model');
+                const user = await UserModel.getUserByQuery({ discordId: senderDiscordId });
+
+                if (!user) {
+                    return NextResponse.json({
+                        type: 4,
+                        data: {
+                            content: "❌ You haven't linked your Discord account to FabLab yet.\n\nPlease log in to the website and link your Discord account to view your balance and earn Stake.",
+                            flags: 64 // Ephemeral
+                        }
+                    });
+                }
+
+                return NextResponse.json({
+                    type: 4,
+                    data: {
+                        content: `💰 **Your Balance:** ${user.stake || 0} Stake`,
+                        flags: 64 // Ephemeral (privacy)
+                    }
+                });
+
+            } catch (error) {
+                console.error("Balance Error:", error);
+                return NextResponse.json({
+                    type: 4,
+                    data: {
+                        content: "❌ Failed to retrieve balance.",
+                        flags: 64
+                    }
+                });
+            }
+        }
+
+        if (name === 'leaderboard') {
+            try {
+                const { default: UserModel } = await import('@/app/api/v1/users/model');
+                const topUsers = await UserModel.getTopStakeHolders(10);
+
+                if (!topUsers || topUsers.length === 0) {
+                    return NextResponse.json({
+                        type: 4,
+                        data: {
+                            content: "🏆 **Leaderboard is empty!** Start earning stake to be the first."
+                        }
+                    });
+                }
+
+                const leaderboardString = topUsers.map((u, index) => {
+                    const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`;
+                    return `${medal} **${u.username || 'Unknown'}** - ${u.stake} Stake`;
+                }).join('\n');
+
+                return NextResponse.json({
+                    type: 4,
+                    data: {
+                        embeds: [{
+                            title: "🏆 FabLab Stake Leaderboard",
+                            description: leaderboardString,
+                            color: 0xFFD700 // Gold color
+                        }]
+                    }
+                });
+
+            } catch (error) {
+                console.error("Leaderboard Error:", error);
+                return NextResponse.json({
+                    type: 4,
+                    data: {
+                        content: "❌ Failed to retrieve leaderboard.",
+                        flags: 64
+                    }
+                });
+            }
+        }
+
+        if (name === 'checkin') {
+            const senderDiscordId = interaction.member ? interaction.member.user.id : interaction.user.id;
+            try {
+                const { default: UserModel } = await import('@/app/api/v1/users/model');
+                const { default: CheckInModel } = await import('@/app/api/v1/checkin/model');
+                
+                const user = await UserModel.getUserByQuery({ discordId: senderDiscordId });
+                if (!user) {
+                    return NextResponse.json({ type: 4, data: { content: "❌ You must link your Discord account to check in.", flags: 64 } });
+                }
+
+                if (user.isCheckedIn) {
+                    await CheckInModel.completeCheckIn(user.userID);
+                    await UserModel.updateUser({ userID: user.userID }, { isCheckedIn: false });
+                    return NextResponse.json({ type: 4, data: { content: `👋 Goodbye **${user.firstName}**! Checked out successfully.` } });
+                } else {
+                    await CheckInModel.createCheckIn(user.userID);
+                    await UserModel.updateUser({ userID: user.userID }, { isCheckedIn: true, lastCheckIn: new Date() });
+                    return NextResponse.json({ type: 4, data: { content: `📍 Welcome to the Lab, **${user.firstName}**! You are now checked in.` } });
+                }
+            } catch (error) {
+                console.error("Checkin Error:", error);
+                return NextResponse.json({ type: 4, data: { content: "❌ Check-in failed.", flags: 64 } });
+            }
+        }
+
+        if (name === 'profile') {
+            const senderDiscordId = interaction.member ? interaction.member.user.id : interaction.user.id;
+            try {
+                const { default: UserModel } = await import('@/app/api/v1/users/model');
+                const user = await UserModel.getUserByQuery({ discordId: senderDiscordId });
+                
+                if (!user) {
+                    return NextResponse.json({ type: 4, data: { content: "❌ Account not linked.", flags: 64 } });
+                }
+
+                const joinDate = new Date(user.createdAt).toLocaleDateString();
+                const membershipStatus = user.membership?.status || 'None';
+                const badgeCount = user.badges ? user.badges.length : 0;
+
+                return NextResponse.json({
+                    type: 4,
+                    data: {
+                        embeds: [{
+                            title: `👤 ${user.firstName} ${user.lastName}`,
+                            thumbnail: { url: user.image },
+                            fields: [
+                                { name: 'Username', value: user.username || 'N/A', inline: true },
+                                { name: 'Membership', value: membershipStatus.toUpperCase(), inline: true },
+                                { name: 'Stake', value: `${user.stake || 0}`, inline: true },
+                                { name: 'Badges', value: `${badgeCount}`, inline: true },
+                                { name: 'Joined', value: joinDate, inline: true },
+                            ],
+                            color: 0x0099ff,
+                            url: `${process.env.NEXT_PUBLIC_URL}/dashboard/profile`
+                        }]
+                    }
+                });
+            } catch (error) {
+                return NextResponse.json({ type: 4, data: { content: "❌ Failed to load profile.", flags: 64 } });
+            }
+        }
+
+        if (name === 'badges') {
+            const senderDiscordId = interaction.member ? interaction.member.user.id : interaction.user.id;
+            try {
+                const { default: UserModel } = await import('@/app/api/v1/users/model');
+                const { default: Constants } = await import('@/lib/constants');
+                
+                const user = await UserModel.getUserByQuery({ discordId: senderDiscordId });
+                if (!user) return NextResponse.json({ type: 4, data: { content: "❌ Account not linked.", flags: 64 } });
+
+                const userBadges = user.badges || [];
+                if (userBadges.length === 0) {
+                    return NextResponse.json({ type: 4, data: { content: "You haven't earned any badges yet. Keep building! 🛠️", flags: 64 } });
+                }
+
+                const badgeList = userBadges.map(b => {
+                    // Find badge details in Constants if stored as ID, or use object if stored fully
+                    // Assuming stored as IDs or objects with ID
+                    const badgeId = typeof b === 'string' ? b : b.id;
+                    // Search through Constants.BADGES values
+                    const badgeDef = Object.values(Constants.BADGES).find(def => def.id === badgeId);
+                    return badgeDef ? `${badgeDef.icon} **${badgeDef.name}**` : `🏅 ${badgeId}`;
+                }).join('\n');
+
+                return NextResponse.json({
+                    type: 4,
+                    data: {
+                        embeds: [{
+                            title: `🏅 Badges: ${user.firstName}`,
+                            description: badgeList,
+                            color: 0xFFA500
+                        }]
+                    }
+                });
+            } catch (error) {
+                return NextResponse.json({ type: 4, data: { content: "❌ Failed to load badges.", flags: 64 } });
+            }
+        }
+
+        if (name === 'wifi') {
+            const senderDiscordId = interaction.member ? interaction.member.user.id : interaction.user.id;
+            try {
+                const { default: UserModel } = await import('@/app/api/v1/users/model');
+                const user = await UserModel.getUserByQuery({ discordId: senderDiscordId });
+
+                if (!user) return NextResponse.json({ type: 4, data: { content: "❌ Account not linked.", flags: 64 } });
+
+                const isActive = user.membership?.status === 'active' || user.membership?.status === 'probation' || user.membership?.isWaived;
+                
+                if (!isActive) {
+                    return NextResponse.json({ type: 4, data: { content: "🔒 Wi-Fi access is reserved for active members.", flags: 64 } });
+                }
+
+                const wifiSSID = process.env.WIFI_SSID || "FabLab_Member";
+                const wifiPass = process.env.WIFI_PASSWORD || "AskStaffIfMissing";
+
+                return NextResponse.json({
+                    type: 4,
+                    data: {
+                        content: `📶 **Wi-Fi Access**\n**SSID:** \`${wifiSSID}\`\n**Password:** \`${wifiPass}\``,
+                        flags: 64 // Ephemeral
+                    }
+                });
+            } catch (error) {
+                return NextResponse.json({ type: 4, data: { content: "❌ Failed to retrieve Wi-Fi info.", flags: 64 } });
+            }
+        }
+
+        if (name === 'award') {
+            const senderDiscordId = interaction.member ? interaction.member.user.id : interaction.user.id;
+            const options = interaction.data.options;
+            const receiverDiscordId = options.find(o => o.name === 'user').value;
+            const amount = options.find(o => o.name === 'amount').value;
+            const reason = options.find(o => o.name === 'reason').value;
+
+            try {
+                const { default: UserModel } = await import('@/app/api/v1/users/model');
+                const { default: TransactionService } = await import('@/app/api/v1/transactions/service');
+
+                // 1. Verify Admin
+                const adminUser = await UserModel.getUserByQuery({ discordId: senderDiscordId });
+                if (!adminUser || adminUser.role !== 'admin') {
+                    return NextResponse.json({ type: 4, data: { content: "❌ Unauthorized. Only admins can award stake.", flags: 64 } });
+                }
+
+                // 2. Find Receiver
+                const receiver = await UserModel.getUserByQuery({ discordId: receiverDiscordId });
+                if (!receiver) {
+                    return NextResponse.json({ type: 4, data: { content: "❌ Receiver has not linked their Discord account to FabLab.", flags: 64 } });
+                }
+
+                // 3. Award Stake
+                await TransactionService.awardStake(adminUser.userID, receiver.userID, amount, reason);
+
+                return NextResponse.json({
+                    type: 4,
+                    data: {
+                        content: `🎉 **${adminUser.firstName}** awarded **${amount} Stake** to <@${receiverDiscordId}>!\n📝 **Reason:** ${reason}`
+                    }
+                });
+
+            } catch (error) {
+                console.error("Award Error:", error);
+                return NextResponse.json({ type: 4, data: { content: `❌ Failed to award stake: ${error.message}`, flags: 64 } });
+            }
+        }
     }
 
     return NextResponse.json({ error: 'Unknown interaction type' }, { status: 400 });
