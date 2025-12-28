@@ -145,6 +145,15 @@ export default class UserService {
                 
                 if (willHaveBio && willHaveImage) {
                      updateData.stake = (currentUser.stake || 0) + Constants.ONBOARDING_REWARDS.COMPLETE_PROFILE;
+                     
+                     if (!updateData.$push) updateData.$push = {};
+                     if (!updateData.$push.stakeHistory) updateData.$push.stakeHistory = { $each: [] };
+                     
+                     updateData.$push.stakeHistory.$each.push({
+                        amount: Constants.ONBOARDING_REWARDS.COMPLETE_PROFILE,
+                        reason: "Profile Completion Reward",
+                        timestamp: new Date()
+                     });
                 }
             }
 
@@ -220,6 +229,15 @@ export default class UserService {
                     applicationSubmitted = true;
                     const currentStake = updateData.stake !== undefined ? updateData.stake : (currentUser.stake || 0);
                     updateData.stake = currentStake + Constants.ONBOARDING_REWARDS.SUBMIT_APPLICATION;
+                    
+                    if (!updateData.$push) updateData.$push = {};
+                    if (!updateData.$push.stakeHistory) updateData.$push.stakeHistory = { $each: [] };
+                    
+                    updateData.$push.stakeHistory.$each.push({
+                        amount: Constants.ONBOARDING_REWARDS.SUBMIT_APPLICATION,
+                        reason: "Application Submitted Reward",
+                        timestamp: new Date()
+                    });
                 }
 
                 // Check if we should auto-update status

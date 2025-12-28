@@ -22,8 +22,10 @@ import PaletteIcon from '@mui/icons-material/Palette';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import CloseIcon from '@mui/icons-material/Close';
 import StarIcon from '@mui/icons-material/Star';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { useRouter } from 'next/navigation';
 import Constants from '@/lib/constants';
+import StakeLedger from './tabs/StakeLedger';
 
 export default function UserProfileView({ user, isPublicView = false }) {
     const router = useRouter();
@@ -59,7 +61,9 @@ export default function UserProfileView({ user, isPublicView = false }) {
     if (!user) return null;
 
     // Helper to get badge details
-    const getBadgeDetails = (badgeId) => {
+    const getBadgeDetails = (badgeEntry) => {
+        // Handle both string IDs and legacy object storage
+        const badgeId = typeof badgeEntry === 'object' ? badgeEntry.id : badgeEntry;
         const badgeKey = Object.keys(Constants.BADGES).find(key => Constants.BADGES[key].id === badgeId);
         return badgeKey ? Constants.BADGES[badgeKey] : null;
     };
@@ -218,6 +222,7 @@ export default function UserProfileView({ user, isPublicView = false }) {
                     <Tab icon={<AssignmentIcon />} aria-label="bounties" />
                     <Tab icon={<EmojiEventsIcon />} aria-label="badges" />
                     <Tab icon={<AutoAwesomeIcon />} aria-label="interests" />
+                    {isOwnProfile && <Tab icon={<ReceiptLongIcon />} aria-label="ledger" />}
                 </Tabs>
             </Box>
 
@@ -581,6 +586,11 @@ export default function UserProfileView({ user, isPublicView = false }) {
                         );
                     })()}
                 </Box>
+            )}
+
+            {/* Ledger Tab */}
+            {tabValue === 4 && isOwnProfile && (
+                <StakeLedger stakeHistory={user.stakeHistory} currentStake={user.stake} />
             )}
 
             {/* Showcase Item Dialog */}

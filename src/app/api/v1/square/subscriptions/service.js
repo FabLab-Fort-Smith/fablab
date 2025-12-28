@@ -63,6 +63,15 @@ export default class SubscriptionService {
       // Check if this is a new ACTIVE subscription
       if (subscriptionStatus === 'ACTIVE' && labUser.membership?.subscriptionStatus !== 'ACTIVE') {
           updateData.stake = (labUser.stake || 0) + Constants.ONBOARDING_REWARDS.SUBSCRIBE;
+          
+          if (!updateData.$push) updateData.$push = {};
+          if (!updateData.$push.stakeHistory) updateData.$push.stakeHistory = { $each: [] };
+          
+          updateData.$push.stakeHistory.$each.push({
+              amount: Constants.ONBOARDING_REWARDS.SUBSCRIBE,
+              reason: "Subscription Reward",
+              timestamp: new Date()
+          });
       }
 
       const updatedUser = await UserService.updateUser(encryptedEmail, updateData);

@@ -66,6 +66,16 @@ export default class BugService {
                 // 1. Stake Reward
                 if (stakeReward > 0) {
                     userUpdates.stake = (submitter.stake || 0) + Number(stakeReward);
+                    
+                    if (!userUpdates.$push) userUpdates.$push = {};
+                    if (!userUpdates.$push.stakeHistory) userUpdates.$push.stakeHistory = { $each: [] };
+                    
+                    userUpdates.$push.stakeHistory.$each.push({
+                        amount: Number(stakeReward),
+                        reason: `Bug Bounty Reward: ${bug.title}`,
+                        timestamp: new Date()
+                    });
+
                     updated = true;
                 }
 
@@ -74,6 +84,16 @@ export default class BugService {
                     userUpdates.badges = [...(submitter.badges || []), Constants.BADGES.BUG_SQUASHER.id];
                     // Add badge reward
                     userUpdates.stake = (userUpdates.stake || submitter.stake || 0) + Constants.BADGES.BUG_SQUASHER.stakeReward;
+                    
+                    if (!userUpdates.$push) userUpdates.$push = {};
+                    if (!userUpdates.$push.stakeHistory) userUpdates.$push.stakeHistory = { $each: [] };
+                    
+                    userUpdates.$push.stakeHistory.$each.push({
+                        amount: Constants.BADGES.BUG_SQUASHER.stakeReward,
+                        reason: `Badge Earned: ${Constants.BADGES.BUG_SQUASHER.name}`,
+                        timestamp: new Date()
+                    });
+
                     updated = true;
                     
                     // Notify about badge

@@ -15,8 +15,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 export default class BountyService {
     static async createBounty(data) {
-        // Calculate total stake: Base (3) + Additional
-        const baseStake = 3;
+        // Calculate total stake: Base (50) + Additional
+        const baseStake = 50;
         const additionalStake = Number(data.stakeValue) || 0;
         const totalStake = baseStake + additionalStake;
 
@@ -35,7 +35,16 @@ export default class BountyService {
                 // Deduct stake
                 await UserModel.updateUser(
                     { userID: data.creatorID }, 
-                    { stake: (creator.stake || 0) - additionalStake }
+                    { 
+                        stake: (creator.stake || 0) - additionalStake,
+                        $push: {
+                            stakeHistory: {
+                                amount: -additionalStake,
+                                reason: `Bounty Creation Cost: ${data.title}`,
+                                timestamp: new Date()
+                            }
+                        }
+                    }
                 );
             }
         }
@@ -402,7 +411,14 @@ export default class BountyService {
             const user = await UserModel.getUserByQuery({ userID: assigneeID });
             if (user) {
                 const updates = {
-                    stake: (user.stake || 0) + (bounty.stakeValue || 0)
+                    stake: (user.stake || 0) + (bounty.stakeValue || 0),
+                    $push: {
+                        stakeHistory: {
+                            amount: bounty.stakeValue || 0,
+                            reason: `Bounty Completed: ${bounty.title}`,
+                            timestamp: new Date()
+                        }
+                    }
                 };
 
                 // If reward is volunteer hours, log them

@@ -191,6 +191,15 @@ export default class AuthService {
         user.status = 'verified';
         user.verificationToken = null;
         user.stake = (user.stake || 0) + Constants.ONBOARDING_REWARDS.VERIFY_EMAIL;
+        
+        user.$push = {
+            stakeHistory: {
+                amount: Constants.ONBOARDING_REWARDS.VERIFY_EMAIL,
+                reason: "Email Verification Reward",
+                timestamp: new Date()
+            }
+        };
+
         await UserModel.updateById(user.userID, user);
 
         return { message: "Email successfully verified." };

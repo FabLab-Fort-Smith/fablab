@@ -173,7 +173,23 @@ export default class UserModel {
                 };
             }
 
-            const result = await dbUsers.updateOne(filter, { $set: updateFields });
+            // Construct update operation to support both $set and other operators (like $push)
+            const updateOp = {};
+            const setFields = {};
+
+            Object.keys(updateFields).forEach(key => {
+                if (key.startsWith('$')) {
+                    updateOp[key] = updateFields[key];
+                } else {
+                    setFields[key] = updateFields[key];
+                }
+            });
+
+            if (Object.keys(setFields).length > 0) {
+                updateOp.$set = { ...(updateOp.$set || {}), ...setFields };
+            }
+
+            const result = await dbUsers.updateOne(filter, updateOp);
 
             if (result.matchedCount === 0) {
                 throw new Error("No user found to update.");

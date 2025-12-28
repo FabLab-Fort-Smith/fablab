@@ -19,6 +19,7 @@ import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import HistoryIcon from '@mui/icons-material/History';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import EmailIcon from '@mui/icons-material/Email';
+import TerminalIcon from '@mui/icons-material/Terminal';
 
 const getUserNavigation = (userID) => [
     {
@@ -30,6 +31,11 @@ const getUserNavigation = (userID) => [
         segment: `dashboard/${userID}/profile`,
         title: 'Profile',
         icon: <BuildIcon />,
+    },
+    {
+        segment: 'dashboard/terminal',
+        title: 'HackTheLab',
+        icon: <TerminalIcon />,
     },
     {
         segment: 'dashboard/feed',

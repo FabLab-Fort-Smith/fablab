@@ -54,6 +54,18 @@ export default class DiscordService {
     }
 
     /**
+     * Send a notification to the Hack the Lab channel
+     * @param {string|object} content 
+     */
+    static async sendHackTheLabNotification(content) {
+        if (!Constants.DISCORD_HACK_THE_LAB_CHANNEL_ID) {
+            console.warn("⚠️ DISCORD_HACK_THE_LAB_CHANNEL_ID is not set.");
+            return;
+        }
+        return await this.sendChannelMessage(Constants.DISCORD_HACK_THE_LAB_CHANNEL_ID, content);
+    }
+
+    /**
      * Add a user to the Discord Guild (Server)
      * Requires 'guilds.join' scope on the user's access token
      * @param {string} discordUserId - The user's Discord ID

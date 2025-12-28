@@ -64,9 +64,26 @@ export default class UserModel {
      */
     static updateById = async (userID, updateData) => {
         const dbInstance = await db.connect();
+        
+        const { _id, ...rest } = updateData;
+        const updateOp = {};
+        const setFields = { updatedAt: new Date() };
+        
+        Object.keys(rest).forEach(key => {
+            if (key.startsWith('$')) {
+                updateOp[key] = rest[key];
+            } else {
+                setFields[key] = rest[key];
+            }
+        });
+        
+        if (Object.keys(setFields).length > 0) {
+            updateOp.$set = { ...(updateOp.$set || {}), ...setFields };
+        }
+
         const result = await dbInstance.collection("users").updateOne(
             { userID },
-            { $set: { ...updateData, updatedAt: new Date() } }
+            updateOp
         );
 
         if (result.matchedCount === 0) {
