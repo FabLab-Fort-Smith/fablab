@@ -73,6 +73,8 @@ export default function OnboardingPage() {
                     },
                     bio: formData.bio,
                     interests: formData.interests,
+                    isPublic: true, // Automatically set profile to public
+                    profileCompleted: true, // Mark profile as completed
                     membership: {
                         applicationDate: new Date().toISOString()
                     }
