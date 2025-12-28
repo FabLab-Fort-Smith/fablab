@@ -4,7 +4,7 @@ import {
     Box, Typography, Avatar, Grid, Chip, Paper, IconButton, 
     Stack, Divider, Button, Container, Link,
     Tabs, Tab, ImageList, ImageListItem, Card, CardContent, CardMedia,
-    Dialog, DialogTitle, DialogContent, Snackbar, useTheme, Tooltip, Alert
+    Dialog, DialogTitle, DialogContent, Snackbar, useTheme, Tooltip, Alert, TextField
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import { useSession } from 'next-auth/react';
@@ -731,25 +731,26 @@ export default function UserProfileView({ user, isPublicView = false }) {
                     <Typography variant="body2" sx={{ mb: 2 }}>
                         Send some of your stake to show appreciation!
                     </Typography>
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-                        {[10, 50, 100, 500].map((amount) => (
-                            <Chip 
-                                key={amount} 
-                                label={`${amount} Stake`} 
-                                onClick={() => setTipAmount(amount)} 
-                                color={tipAmount === amount ? "primary" : "default"}
-                                clickable
-                            />
-                        ))}
-                    </Box>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        id="amount"
+                        label="Stake Amount"
+                        type="number"
+                        fullWidth
+                        variant="outlined"
+                        value={tipAmount}
+                        onChange={(e) => setTipAmount(e.target.value)}
+                        InputProps={{ inputProps: { min: 1 } }}
+                    />
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
                         <Button onClick={() => setTipDialogOpen(false)}>Cancel</Button>
                         <Button 
                             variant="contained" 
                             onClick={handleTip} 
-                            disabled={tipLoading}
+                            disabled={tipLoading || !tipAmount || parseInt(tipAmount) <= 0}
                         >
-                            {tipLoading ? "Sending..." : `Send ${tipAmount} Stake`}
+                            {tipLoading ? "Sending..." : `Send ${tipAmount || 0} Stake`}
                         </Button>
                     </Box>
                 </DialogContent>
