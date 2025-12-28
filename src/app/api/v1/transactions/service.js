@@ -80,6 +80,40 @@ export default class TransactionService {
     }
 
     /**
+     * Award stake to a user (Admin only)
+     * @param {string} adminId - Admin User ID
+     * @param {string} receiverId - Receiver User ID
+     * @param {number} amount - Amount to award
+     * @param {string} reason - Reason for award
+     */
+    static awardStake = async (adminId, receiverId, amount, reason) => {
+        try {
+            const receiver = await UserModel.getUserByID(receiverId);
+            if (!receiver) throw new Error("Receiver not found");
+
+            // Add stake to receiver
+            await UserModel.updateUser({ userID: receiverId }, { $inc: { stake: amount } });
+
+            // Record Transaction
+            await TransactionModel.createTransaction({
+                senderId: adminId,
+                receiverId: receiverId,
+                amount,
+                type: 'award',
+                status: 'completed',
+                metadata: {
+                    reason
+                }
+            });
+
+            return { status: 'completed', receiver };
+        } catch (error) {
+            console.error("Error awarding stake:", error);
+            throw error;
+        }
+    }
+
+    /**
      * Claim pending tips for a user who just linked Discord
      * @param {string} userId 
      * @param {string} discordId 

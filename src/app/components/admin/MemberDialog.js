@@ -16,6 +16,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import SettingsIcon from '@mui/icons-material/Settings';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import StarIcon from '@mui/icons-material/Star';
 import NudgeConfirmDialog from './NudgeConfirmDialog';
 import Constants from '@/lib/constants';
 
@@ -60,6 +61,12 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
     const [nudgeDialogOpen, setNudgeDialogOpen] = useState(false);
     const [nudgeDetails, setNudgeDetails] = useState(null);
     const [nudgeLoading, setNudgeLoading] = useState(false);
+
+    // Award Stake State
+    const [awardDialogOpen, setAwardDialogOpen] = useState(false);
+    const [awardAmount, setAwardAmount] = useState(10);
+    const [awardReason, setAwardReason] = useState('');
+    const [awardLoading, setAwardLoading] = useState(false);
 
     useEffect(() => {
         if (user) {
@@ -217,6 +224,37 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
         }
     };
 
+    const handleAwardStake = async () => {
+        setAwardLoading(true);
+        try {
+            const response = await fetch('/api/v1/transactions/award', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    receiverId: user.userID,
+                    amount: parseInt(awardAmount),
+                    reason: awardReason
+                })
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to award stake');
+            }
+
+            alert(`Successfully awarded ${awardAmount} stake!`);
+            setAwardDialogOpen(false);
+            setAwardAmount(10);
+            setAwardReason('');
+            // Ideally refresh user data here, but for now we just close
+        } catch (error) {
+            console.error("Error awarding stake:", error);
+            alert(error.message);
+        } finally {
+            setAwardLoading(false);
+        }
+    };
+
     const handleSyncSubscription = async () => {
         if (!formData.squareID) return;
         setLoading(true);
@@ -315,6 +353,11 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                 <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     Manage Member: {user.firstName} {user.lastName}
                     <Box>
+                        <Tooltip title="Award Stake">
+                            <IconButton onClick={() => setAwardDialogOpen(true)} color="primary" sx={{ mr: 1 }}>
+                                <StarIcon />
+                            </IconButton>
+                        </Tooltip>
                         <Tooltip title="Send Reminder (Nudge)">
                             <IconButton onClick={handleNudge} color="warning" sx={{ mr: 1 }}>
                                 <NotificationsActiveIcon />
@@ -785,6 +828,44 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                 nudgeDetails={nudgeDetails}
                 loading={nudgeLoading}
             />
+
+            {/* Award Stake Dialog */}
+            <Dialog open={awardDialogOpen} onClose={() => setAwardDialogOpen(false)}>
+                <DialogTitle>Award Stake to {user.firstName}</DialogTitle>
+                <DialogContent>
+                    <Box sx={{ pt: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 300 }}>
+                        <TextField
+                            label="Amount"
+                            type="number"
+                            fullWidth
+                            value={awardAmount}
+                            onChange={(e) => setAwardAmount(e.target.value)}
+                            InputProps={{
+                                startAdornment: <StarIcon color="warning" sx={{ mr: 1 }} />
+                            }}
+                        />
+                        <TextField
+                            label="Reason / Note"
+                            fullWidth
+                            multiline
+                            rows={2}
+                            value={awardReason}
+                            onChange={(e) => setAwardReason(e.target.value)}
+                            placeholder="e.g. Volunteer work, Workshop host"
+                        />
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setAwardDialogOpen(false)}>Cancel</Button>
+                    <Button 
+                        onClick={handleAwardStake} 
+                        variant="contained" 
+                        disabled={awardLoading || !awardAmount}
+                    >
+                        {awardLoading ? <CircularProgress size={24} /> : "Award Stake"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Dialog>
     );
 }
