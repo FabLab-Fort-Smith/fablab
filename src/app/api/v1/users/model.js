@@ -80,8 +80,11 @@ export default class UserModel {
             const query = {};
 
             if (filters.isPublic) {
-                query.isPublic = true;
-                query["membership.status"] = { $in: ["active", "probation"] };
+                query.isPublic = { $ne: false };
+                query.$or = [
+                    { "membership.status": { $in: ["active", "probation"] } },
+                    { "membership.isWaived": true }
+                ];
             }
 
             if (filters.role) {
@@ -106,8 +109,11 @@ export default class UserModel {
             const query = {};
 
             if (filters.isPublic) {
-                query.isPublic = true;
-                query["membership.status"] = { $in: ["active", "probation"] };
+                query.isPublic = { $ne: false };
+                query.$or = [
+                    { "membership.status": { $in: ["active", "probation"] } },
+                    { "membership.isWaived": true }
+                ];
             }
 
             if (filters.role) {

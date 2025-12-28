@@ -21,7 +21,7 @@ export default function PublicProfilePage() {
                 const fetchedUser = await UsersService.getUserByQuery({ property: 'username', value: username });
                 
                 if (fetchedUser) {
-                    if (fetchedUser.isPublic) {
+                    if (fetchedUser.isPublic !== false) {
                         setUser(fetchedUser);
                     } else {
                         setError("This profile is private.");
