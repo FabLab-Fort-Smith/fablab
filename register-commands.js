@@ -18,6 +18,26 @@ const commands = [
         description: 'Replies with Pong!',
         type: 1, // CHAT_INPUT
     },
+    {
+        name: 'tip',
+        description: 'Tip stake to another user',
+        type: 1,
+        options: [
+            {
+                name: 'user',
+                description: 'The user to tip',
+                type: 6, // USER
+                required: true
+            },
+            {
+                name: 'amount',
+                description: 'The amount of stake to tip',
+                type: 4, // INTEGER
+                required: true,
+                min_value: 1
+            }
+        ]
+    }
 ];
 
 async function registerCommands() {

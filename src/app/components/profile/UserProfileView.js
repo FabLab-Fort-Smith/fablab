@@ -37,6 +37,32 @@ export default function UserProfileView({ user, isPublicView = false }) {
     const [selectedShowcaseItem, setSelectedShowcaseItem] = useState(null);
     const [loadingData, setLoadingData] = useState(false);
     const [badges, setBadges] = useState({});
+    
+    // Tipping State
+    const [tipDialogOpen, setTipDialogOpen] = useState(false);
+    const [tipAmount, setTipAmount] = useState(10);
+    const [tipLoading, setTipLoading] = useState(false);
+    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+
+    const handleTip = async () => {
+        setTipLoading(true);
+        try {
+            const res = await fetch('/api/v1/transactions/tip', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ receiverId: user.userID, amount: parseInt(tipAmount) })
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            
+            setSnackbar({ open: true, message: `Successfully tipped ${tipAmount} stake!`, severity: 'success' });
+            setTipDialogOpen(false);
+        } catch (err) {
+            setSnackbar({ open: true, message: err.message, severity: 'error' });
+        } finally {
+            setTipLoading(false);
+        }
+    };
 
     useEffect(() => {
         // Fetch Badges
@@ -131,6 +157,22 @@ export default function UserProfileView({ user, isPublicView = false }) {
                                         }}
                                     >
                                         Edit Profile
+                                    </Button>
+                                ) : isPublicView && session ? (
+                                    <Button 
+                                        variant="contained" 
+                                        size="small" 
+                                        onClick={() => setTipDialogOpen(true)}
+                                        startIcon={<StarIcon />}
+                                        sx={{ 
+                                            bgcolor: 'primary.main', 
+                                            color: 'white',
+                                            textTransform: 'none',
+                                            fontWeight: 600,
+                                            '&:hover': { bgcolor: 'primary.dark' }
+                                        }}
+                                    >
+                                        Tip Stake
                                     </Button>
                                 ) : isPublicView && (
                                     <Button variant="contained" size="small" href="/login">
@@ -662,6 +704,47 @@ export default function UserProfileView({ user, isPublicView = false }) {
                     </>
                 )}
             </Dialog>
+
+            {/* Tip Dialog */}
+            <Dialog open={tipDialogOpen} onClose={() => setTipDialogOpen(false)}>
+                <DialogTitle>Tip Stake to {user.username}</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body2" sx={{ mb: 2 }}>
+                        Send some of your stake to show appreciation!
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+                        {[10, 50, 100, 500].map((amount) => (
+                            <Chip 
+                                key={amount} 
+                                label={`${amount} Stake`} 
+                                onClick={() => setTipAmount(amount)} 
+                                color={tipAmount === amount ? "primary" : "default"}
+                                clickable
+                            />
+                        ))}
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
+                        <Button onClick={() => setTipDialogOpen(false)}>Cancel</Button>
+                        <Button 
+                            variant="contained" 
+                            onClick={handleTip} 
+                            disabled={tipLoading}
+                        >
+                            {tipLoading ? "Sending..." : `Send ${tipAmount} Stake`}
+                        </Button>
+                    </Box>
+                </DialogContent>
+            </Dialog>
+
+            <Snackbar 
+                open={snackbar.open} 
+                autoHideDuration={6000} 
+                onClose={() => setSnackbar({ ...snackbar, open: false })}
+            >
+                <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
         </Box>
     );
 }

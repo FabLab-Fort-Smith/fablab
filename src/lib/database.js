@@ -61,6 +61,11 @@ class Database {
         await this.connect();
         return this._instance.collection("contact_submissions");
     }
+
+    async dbTransactions() {
+        await this.connect();
+        return this._instance.collection("transactions");
+    }
 }
 
 export const db = new Database();

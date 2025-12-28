@@ -6,6 +6,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import UsersService from '@/app/api/v1/users/service'; // Import Server Service
 import AuthController from '@/app/api/auth/[...nextauth]/controller'; // Import Auth Controller
 import DiscordService from '@/lib/discord';
+import TransactionService from '@/app/api/v1/transactions/service';
 
 const baseURL = `${process.env.NEXT_PUBLIC_URL}`;
 
@@ -109,6 +110,15 @@ const providers = [
                 });
 
                 console.log("New User:", newUser);
+
+                // ✅ Claim Pending Tips
+                try {
+                    const claimedAmount = await TransactionService.claimPendingTips(newUser.userID, profile.id);
+                    if (claimedAmount > 0) console.log(`💰 Claimed ${claimedAmount} stake for new user ${newUser.userID}`);
+                } catch (err) {
+                    console.error("Error claiming tips:", err);
+                }
+
                 return {
                     userID: newUser.userID,
                     name: `${newUser.firstName} ${newUser.lastName}`,
@@ -137,6 +147,14 @@ const providers = [
                         image: user.image || (profile.avatar ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png` : null)
                     }
                 );
+            }
+
+            // ✅ Claim Pending Tips
+            try {
+                const claimedAmount = await TransactionService.claimPendingTips(user.userID, profile.id);
+                if (claimedAmount > 0) console.log(`💰 Claimed ${claimedAmount} stake for user ${user.userID}`);
+            } catch (err) {
+                console.error("Error claiming tips:", err);
             }
 
             return {

@@ -56,6 +56,64 @@ export async function POST(request) {
                 },
             });
         }
+
+        if (name === 'tip') {
+            const senderDiscordId = interaction.member ? interaction.member.user.id : interaction.user.id;
+            const options = interaction.data.options;
+            const receiverOption = options.find(o => o.name === 'user');
+            const amountOption = options.find(o => o.name === 'amount');
+            
+            const receiverDiscordId = receiverOption.value;
+            const amount = amountOption.value;
+
+            try {
+                // Import dynamically to avoid top-level await issues if any
+                const { default: TransactionService } = await import('@/app/api/v1/transactions/service');
+                const { default: UserModel } = await import('@/app/api/v1/users/model');
+
+                // Find Sender
+                const sender = await UserModel.getUserByQuery({ discordId: senderDiscordId });
+                
+                if (!sender) {
+                     return NextResponse.json({
+                        type: 4,
+                        data: {
+                            content: "❌ You must link your Discord account to your FabLab account to send tips.",
+                            flags: 64 // Ephemeral (only user sees it)
+                        }
+                    });
+                }
+
+                // Process Tip
+                const result = await TransactionService.processTip(sender.userID, amount, null, receiverDiscordId);
+
+                if (result.status === 'completed') {
+                    return NextResponse.json({
+                        type: 4,
+                        data: {
+                            content: `✅ **${sender.username}** tipped **${amount} Stake** to <@${receiverDiscordId}>! 💸`
+                        }
+                    });
+                } else {
+                    return NextResponse.json({
+                        type: 4,
+                        data: {
+                            content: `✅ **${sender.username}** sent **${amount} Stake** to <@${receiverDiscordId}>!\n⚠️ The receiver hasn't linked their Discord yet. The stake is held in escrow until they join.`
+                        }
+                    });
+                }
+
+            } catch (error) {
+                console.error("Tip Error:", error);
+                return NextResponse.json({
+                    type: 4,
+                    data: {
+                        content: `❌ Transaction failed: ${error.message}`,
+                        flags: 64
+                    }
+                });
+            }
+        }
     }
 
     return NextResponse.json({ error: 'Unknown interaction type' }, { status: 400 });
