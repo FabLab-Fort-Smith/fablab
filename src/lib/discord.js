@@ -199,4 +199,22 @@ export default class DiscordService {
             await this.removeRole(discordUserId, LAB_RATZ_ROLE_ID);
         }
     }
+
+    /**
+     * Send a Direct Message to a user
+     * @param {string} userId - The Discord User ID
+     * @param {string|object} content - Message content
+     */
+    static async sendDirectMessage(userId, content) {
+        // 1. Create DM Channel
+        const channel = await this.request(`/users/@me/channels`, 'POST', { recipient_id: userId });
+        if (!channel || !channel.id) {
+            console.error(`❌ Failed to create DM channel with user ${userId}`);
+            return null;
+        }
+
+        // 2. Send Message
+        const body = typeof content === 'string' ? { content } : content;
+        return await this.request(`/channels/${channel.id}/messages`, 'POST', body);
+    }
 }

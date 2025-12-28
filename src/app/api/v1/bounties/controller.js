@@ -69,6 +69,9 @@ export default class BountyController {
                 case 'comment':
                     result = await BountyService.addComment(bountyID, data.userID, data.text);
                     break;
+                case 'share':
+                    result = await BountyService.shareBounty(bountyID, data.senderID, data.recipientID);
+                    break;
                 default:
                     return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400 });
             }

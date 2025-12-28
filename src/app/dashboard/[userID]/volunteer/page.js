@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Typography, Paper, CircularProgress, Alert, Button } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
 import Link from 'next/link';
@@ -7,10 +7,12 @@ import VolunteerLog from '@/app/components/profile/tabs/VolunteerLog';
 import UsersService from '@/services/users';
 import LoadingTerminal from '@/app/components/LoadingTerminal';
 import { useSession } from 'next-auth/react';
+import { useParams } from 'next/navigation';
 
-export default function VolunteerPage({ params }) {
+export default function VolunteerPage() {
     const { data: session } = useSession();
-    const resolvedParams = use(params);
+    const params = useParams();
+    const resolvedParams = params; // Keep variable name to minimize changes
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');

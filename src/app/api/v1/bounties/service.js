@@ -670,4 +670,32 @@ export default class BountyService {
 
         return comment;
     }
+
+    static async shareBounty(bountyID, senderID, recipientID) {
+        const bounty = await BountyModel.getBountyById(bountyID);
+        if (!bounty) throw new Error("Bounty not found");
+
+        const sender = await UserModel.getUserByQuery({ userID: senderID });
+        const recipient = await UserModel.getUserByQuery({ userID: recipientID });
+
+        if (!sender || !recipient) throw new Error("User not found");
+
+        // 1. Send In-App Notification
+        await NotificationService.create({
+            userID: recipientID,
+            type: 'info',
+            title: 'Bounty Shared',
+            message: `${sender.firstName} shared a bounty with you: ${bounty.title}`,
+            link: `/dashboard/bounties?highlight=${bountyID}`,
+            metadata: { bountyID, senderID }
+        });
+
+        // 2. Send Discord DM (if recipient has linked Discord)
+        if (recipient.discordId) {
+            const message = `👋 **${sender.firstName}** thought you'd be interested in this bounty!\n\n**${bounty.title}**\n${bounty.description}\n\nCheck it out here: ${process.env.NEXT_PUBLIC_URL}/dashboard/bounties?highlight=${bountyID}`;
+            await DiscordService.sendDirectMessage(recipient.discordId, message);
+        }
+
+        return { success: true };
+    }
 }

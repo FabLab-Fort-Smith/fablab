@@ -11,12 +11,12 @@ const steps = [
     {
         label: 'Personal Information',
         description: 'Tell us a bit about yourself.',
-        fields: ['bio', 'hobbies']
+        fields: ['bio', 'interests']
     },
     {
         label: 'Membership Questions',
         description: 'Why do you want to join the FabLab?',
-        fields: ['reason', 'skills', 'projects']
+        fields: ['reason', 'projects']
     },
     {
         label: 'Emergency Contact',
@@ -25,13 +25,10 @@ const steps = [
     }
 ];
 
-const commonSkills = [
+const commonInterests = [
     "3D Printing", "Laser Cutting", "CNC Machining", "Woodworking", "Metalworking",
     "Electronics", "Arduino", "Raspberry Pi", "Programming", "Web Development",
-    "Graphic Design", "CAD/CAM", "Sewing", "Embroidery", "Vinyl Cutting"
-];
-
-const commonHobbies = [
+    "Graphic Design", "CAD/CAM", "Sewing", "Embroidery", "Vinyl Cutting",
     "Gaming", "Reading", "Hiking", "Cooking", "Traveling", "Photography", 
     "Music", "Art", "Gardening", "DIY", "Robotics", "Cosplay", "Board Games"
 ];
@@ -69,14 +66,13 @@ export default function OnboardingPage() {
                 body: JSON.stringify({
                     questions: {
                         reason: formData.reason,
-                        skills: formData.skills,
+                        interests: formData.interests,
                         projects: formData.projects,
                         emergencyContactName: formData.emergencyContactName,
                         emergencyContactPhone: formData.emergencyContactPhone
                     },
                     bio: formData.bio,
-                    skills: formData.skills,
-                    hobbies: formData.hobbies,
+                    interests: formData.interests,
                     membership: {
                         applicationDate: new Date().toISOString()
                     }
@@ -120,13 +116,13 @@ export default function OnboardingPage() {
                                 <Typography>{step.description}</Typography>
                                 <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
                                     {step.fields.map((field) => {
-                                        if (field === 'skills' || field === 'hobbies') {
+                                        if (field === 'interests') {
                                             return (
                                                 <Autocomplete
                                                     key={field}
                                                     multiple
                                                     freeSolo
-                                                    options={field === 'skills' ? commonSkills : commonHobbies}
+                                                    options={commonInterests}
                                                     value={formData[field] || []}
                                                     onChange={(event, newValue) => setFormData({ ...formData, [field]: newValue })}
                                                     renderTags={(value, getTagProps) =>
@@ -138,9 +134,9 @@ export default function OnboardingPage() {
                                                         <TextField 
                                                             {...params} 
                                                             variant="outlined" 
-                                                            label={field.charAt(0).toUpperCase() + field.slice(1)}
-                                                            placeholder={`Add ${field}...`}
-                                                            helperText={`Press Enter to add custom ${field}`}
+                                                            label="Interests & Skills"
+                                                            placeholder="Add interests..."
+                                                            helperText="Press Enter to add custom interests"
                                                         />
                                                     )}
                                                 />

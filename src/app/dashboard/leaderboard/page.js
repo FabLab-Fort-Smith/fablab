@@ -41,9 +41,9 @@ export default function LeaderboardPage() {
         fetchData();
     }, []);
 
-    const handleUserClick = (username) => {
-        if (username) {
-            router.push(`/members/${username}`);
+    const handleUserClick = (userID) => {
+        if (userID) {
+            router.push(`/dashboard/member/${userID}`);
         }
     };
 
@@ -82,7 +82,7 @@ export default function LeaderboardPage() {
                         {users.map((user, index) => (
                             <Box 
                                 key={user.userID || index} 
-                                onClick={() => handleUserClick(user.username)}
+                                onClick={() => handleUserClick(user.userID)}
                                 sx={{ 
                                     display: 'flex', 
                                     alignItems: 'center', 

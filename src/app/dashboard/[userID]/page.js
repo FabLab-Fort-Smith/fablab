@@ -181,12 +181,6 @@ const DashboardPage = ({ params }) => {
           desc: 'Plans & Billing'
       },
       { 
-          title: 'Check In', 
-          icon: <CheckInIcon fontSize="large" />, 
-          path: `/dashboard/checkin`,
-          desc: 'Check in/out of the lab'
-      },
-      { 
           title: 'Bounties', 
           icon: <BountyIcon fontSize="large" />, 
           path: `/dashboard/bounties`,

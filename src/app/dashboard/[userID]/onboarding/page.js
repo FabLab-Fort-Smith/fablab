@@ -23,7 +23,10 @@ import { useSession } from "next-auth/react";
 import { useRouter, useParams } from "next/navigation";
 import LoadingTerminal from "@/app/components/LoadingTerminal";
 
-const commonHobbies = [
+const commonInterests = [
+    "3D Printing", "Laser Cutting", "CNC Machining", "Woodworking", "Metalworking",
+    "Electronics", "Arduino", "Raspberry Pi", "Programming", "Web Development",
+    "Graphic Design", "CAD/CAM", "Sewing", "Embroidery", "Vinyl Cutting",
     "Gaming", "Reading", "Hiking", "Cooking", "Traveling", "Photography", 
     "Music", "Art", "Gardening", "DIY", "Robotics", "Cosplay", "Board Games"
 ];
@@ -41,7 +44,7 @@ const OnboardingPage = () => {
     discordHandle: "",
     bio: "",
     creatorType: [],
-    hobbies: [],
+    interests: [],
     cityChange: "",
     knownMembers: "",
     questions: "",
@@ -66,7 +69,7 @@ const OnboardingPage = () => {
               discordHandle: userData.discordHandle || (userData.provider === 'discord' ? userData.username : ""),
               bio: userData.bio || "",
               creatorType: Array.isArray(userData.creatorType) ? userData.creatorType : (userData.creatorType ? [userData.creatorType] : []),
-              hobbies: Array.isArray(userData.hobbies) ? userData.hobbies : (userData.hobbies ? [userData.hobbies] : []),
+              interests: Array.isArray(userData.interests) ? userData.interests : [],
               cityChange: userData.cityChange || "",
               knownMembers: userData.knownMembers || "",
               questions: userData.questions || "",
@@ -245,9 +248,9 @@ const OnboardingPage = () => {
               <Autocomplete
                 multiple
                 freeSolo
-                options={commonHobbies}
-                value={form.hobbies || []}
-                onChange={(event, newValue) => setForm({ ...form, hobbies: newValue })}
+                options={commonInterests}
+                value={form.interests || []}
+                onChange={(event, newValue) => setForm({ ...form, interests: newValue })}
                 renderTags={(value, getTagProps) =>
                   value.map((option, index) => (
                     <Chip variant="outlined" label={option} {...getTagProps({ index })} />
@@ -257,9 +260,9 @@ const OnboardingPage = () => {
                   <TextField
                     {...params}
                     variant="outlined"
-                    label="What are your hobbies and interests?"
-                    placeholder="Add hobbies..."
-                    helperText="Press Enter to add custom hobbies"
+                    label="What are your interests and skills?"
+                    placeholder="Add interests..."
+                    helperText="Press Enter to add custom interests"
                   />
                 )}
               />

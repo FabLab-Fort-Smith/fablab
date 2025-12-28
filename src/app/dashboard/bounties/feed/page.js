@@ -3,12 +3,16 @@ import React, { useState, useEffect } from 'react';
 import { 
     Box, Typography, Grid, Card, CardContent, CardMedia, 
     Container, Button, TextField, IconButton, Avatar, 
-    CircularProgress, Chip, ToggleButton, ToggleButtonGroup
+    CircularProgress, Chip, ToggleButton, ToggleButtonGroup,
+    Dialog, DialogTitle, DialogContent, DialogActions, List, ListItem, ListItemAvatar, ListItemText,
+    Snackbar, Alert
 } from '@mui/material';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import SendIcon from '@mui/icons-material/Send';
+import ShareIcon from '@mui/icons-material/Share';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import WhatshotIcon from '@mui/icons-material/Whatshot';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
@@ -25,6 +29,13 @@ export default function BountiesFeedPage() {
     const [loading, setLoading] = useState(true);
     const [sort, setSort] = useState('latest');
     const [commentText, setCommentText] = useState({});
+    
+    // Share Dialog State
+    const [openShare, setOpenShare] = useState(false);
+    const [selectedBounty, setSelectedBounty] = useState(null);
+    const [users, setUsers] = useState([]);
+    const [loadingUsers, setLoadingUsers] = useState(false);
+    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
     useEffect(() => {
         fetchItems();
@@ -53,6 +64,78 @@ export default function BountiesFeedPage() {
             console.error("Failed to fetch bounties:", error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchUsers = async () => {
+        setLoadingUsers(true);
+        try {
+            const res = await fetch('/api/v1/users');
+            if (res.ok) {
+                const data = await res.json();
+                // Filter out current user
+                setUsers(data.users.filter(u => u.userID !== session?.user?.userID));
+            }
+        } catch (error) {
+            console.error("Failed to fetch users:", error);
+        } finally {
+            setLoadingUsers(false);
+        }
+    };
+
+    const handleOpenShare = (bounty) => {
+        setSelectedBounty(bounty);
+        setOpenShare(true);
+        if (users.length === 0) fetchUsers();
+    };
+
+    const handleCloseShare = () => {
+        setOpenShare(false);
+        setSelectedBounty(null);
+    };
+
+    const handleCopyLink = () => {
+        const link = `${window.location.origin}/dashboard/bounties?highlight=${selectedBounty.bountyID}`;
+        navigator.clipboard.writeText(link);
+        setSnackbar({ open: true, message: 'Link copied to clipboard!', severity: 'success' });
+        handleCloseShare();
+    };
+
+    const handleShareToUser = async (recipientID) => {
+        try {
+            const res = await fetch(`/api/v1/bounties?bountyID=${selectedBounty.bountyID}&action=share`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    senderID: session.user.userID,
+                    recipientID 
+                })
+            });
+            
+            if (res.ok) {
+                setSnackbar({ open: true, message: 'Bounty shared successfully!', severity: 'success' });
+                handleCloseShare();
+            } else {
+                throw new Error('Failed to share');
+            }
+        } catch (error) {
+            console.error("Error sharing bounty:", error);
+            setSnackbar({ open: true, message: 'Failed to share bounty.', severity: 'error' });
+        }
+    };
+
+    const handleNativeShare = async () => {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: selectedBounty.title,
+                    text: `Check out this bounty: ${selectedBounty.title}`,
+                    url: `${window.location.origin}/dashboard/bounties?highlight=${selectedBounty.bountyID}`,
+                });
+                handleCloseShare();
+            } catch (error) {
+                console.log('Error sharing:', error);
+            }
         }
     };
 
@@ -126,7 +209,15 @@ export default function BountiesFeedPage() {
     };
 
     return (
-        <Container maxWidth={false} disableGutters sx={{ py: { xs: 0, md: 4 } }}>
+        <Container 
+            maxWidth={false} 
+            disableGutters 
+            sx={{ 
+                py: { xs: 0, md: 4 },
+                mx: { xs: '-1rem', md: 0 },
+                width: { xs: 'calc(100% + 2rem)', md: '100%' }
+            }}
+        >
             <Box sx={{ mb: 4, textAlign: 'center', display: { xs: 'none', md: 'block' } }}>
                 <Typography variant="h3" component="h1" gutterBottom fontWeight="bold">
                     Bounty Feed
@@ -164,18 +255,22 @@ export default function BountiesFeedPage() {
                 <Grid container spacing={0} justifyContent="center">
                     {items.map((item) => (
                         <Grid item xs={12} sm={8} md={6} lg={5} key={item.bountyID} sx={{ mb: { xs: 0, md: 4 } }}>
-                            <Card sx={{ 
-                                width: '100%', 
-                                borderRadius: { xs: 0, md: 1 },
-                                boxShadow: { xs: 'none', md: 1 },
-                                borderBottom: { xs: '1px solid #eee', md: 'none' }
-                            }}>
+                            <Card 
+                                elevation={0}
+                                sx={{ 
+                                    width: '100%', 
+                                    borderRadius: { xs: 0, md: 1 },
+                                    bgcolor: 'transparent',
+                                    backgroundImage: 'none',
+                                    borderBottom: { xs: '1px solid rgba(0, 255, 0, 0.2)', md: 'none' }
+                                }}
+                            >
                                 {/* Header */}
                                 <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                                         <Avatar 
                                             src={item.creatorImage} // Assuming backend provides this or we need to fetch
-                                            sx={{ width: 32, height: 32, border: '1px solid #eee' }} 
+                                            sx={{ width: 32, height: 32, border: '1px solid rgba(0, 255, 0, 0.2)' }} 
                                         >
                                             {item.creatorUsername?.[0]}
                                         </Avatar>
@@ -214,16 +309,17 @@ export default function BountiesFeedPage() {
                                         sx={{ 
                                             width: '100%', 
                                             aspectRatio: '16/9', 
-                                            bgcolor: 'grey.100', 
+                                            bgcolor: 'rgba(0, 255, 0, 0.05)', 
+                                            border: '1px dashed #00ff00',
                                             display: 'flex', 
                                             alignItems: 'center', 
                                             justifyContent: 'center',
                                             cursor: 'pointer',
-                                            p: 4
+                                            p: 2
                                         }}
                                         onClick={() => router.push(`/dashboard/bounties/${item.bountyID}`)}
                                     >
-                                        <Typography variant="h5" fontWeight="bold" align="center" color="text.secondary">
+                                        <Typography variant="h6" fontWeight="bold" align="center" color="primary" sx={{ wordBreak: 'break-word' }}>
                                             {item.title}
                                         </Typography>
                                     </Box>
@@ -238,7 +334,7 @@ export default function BountiesFeedPage() {
                                         <IconButton>
                                             <ChatBubbleOutlineIcon />
                                         </IconButton>
-                                        <IconButton sx={{ transform: 'rotate(-30deg)', mt: -0.5 }}>
+                                        <IconButton onClick={() => handleOpenShare(item)} sx={{ transform: 'rotate(-30deg)', mt: -0.5 }}>
                                             <SendIcon />
                                         </IconButton>
                                     </Box>
@@ -319,6 +415,68 @@ export default function BountiesFeedPage() {
                     ))}
                 </Grid>
             )}
+            {/* Share Dialog */}
+            <Dialog open={openShare} onClose={handleCloseShare} maxWidth="xs" fullWidth>
+                <DialogTitle>Share Bounty</DialogTitle>
+                <DialogContent>
+                    <List>
+                        <ListItem button onClick={handleCopyLink}>
+                            <ListItemAvatar>
+                                <Avatar sx={{ bgcolor: 'primary.main' }}>
+                                    <ContentCopyIcon />
+                                </Avatar>
+                            </ListItemAvatar>
+                            <ListItemText primary="Copy Link" secondary="Copy link to clipboard" />
+                        </ListItem>
+                        
+                        {typeof navigator !== 'undefined' && navigator.share && (
+                            <ListItem button onClick={handleNativeShare}>
+                                <ListItemAvatar>
+                                    <Avatar sx={{ bgcolor: 'secondary.main' }}>
+                                        <ShareIcon />
+                                    </Avatar>
+                                </ListItemAvatar>
+                                <ListItemText primary="Share via..." secondary="Use native share sheet" />
+                            </ListItem>
+                        )}
+
+                        <Typography variant="subtitle2" sx={{ mt: 2, mb: 1, color: 'text.secondary' }}>
+                            Send to Member
+                        </Typography>
+                        
+                        {loadingUsers ? (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                                <CircularProgress size={24} />
+                            </Box>
+                        ) : (
+                            users.map(user => (
+                                <ListItem button key={user.userID} onClick={() => handleShareToUser(user.userID)}>
+                                    <ListItemAvatar>
+                                        <Avatar src={user.image}>{user.firstName?.[0]}</Avatar>
+                                    </ListItemAvatar>
+                                    <ListItemText 
+                                        primary={`${user.firstName} ${user.lastName}`} 
+                                        secondary={user.discordId ? "Discord Connected" : "In-App Only"} 
+                                    />
+                                </ListItem>
+                            ))
+                        )}
+                    </List>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseShare}>Cancel</Button>
+                </DialogActions>
+            </Dialog>
+
+            <Snackbar 
+                open={snackbar.open} 
+                autoHideDuration={3000} 
+                onClose={() => setSnackbar({ ...snackbar, open: false })}
+            >
+                <Alert severity={snackbar.severity} sx={{ width: '100%' }}>
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
         </Container>
     );
 }

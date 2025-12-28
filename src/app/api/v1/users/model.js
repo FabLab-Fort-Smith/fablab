@@ -26,6 +26,21 @@ export default class UserModel {
     }
 
     /**
+     * ✅ Get a user by their exact User ID
+     * @param {string} userID - The user ID to search for
+     * @returns {Object|null} - The found user or null
+     */
+    static getUserByID = async (userID) => {
+        try {
+            const dbUsers = await db.dbUsers();
+            return await dbUsers.findOne({ userID: userID });
+        } catch (error) {
+            console.error("Error getting user by ID:", error);
+            return null;
+        }
+    }
+
+    /**
      * ✅ Get a single user by any query parameter
      * @param {Object} query - Query object to search for a user
      * @returns {Object|null} - The found user or null if not found

@@ -25,19 +25,13 @@ const UserHeader = ({ onSave, hasChanges, activeTab, setActiveTab, user }) => {
 
     const handleViewProfile = () => {
         if (user?.username) {
-            window.open(`/members/${user.username}`, '_blank');
-        } else if (user?.userID) {
-            window.open(`/members/${user.userID}`, '_blank');
+            window.open(`/u/${user.username}`, '_blank');
         }
     };
 
     const handleShareProfile = () => {
         if (user?.username) {
-            const url = `${window.location.origin}/members/${user.username}`;
-            navigator.clipboard.writeText(url);
-            setSnackbarOpen(true);
-        } else if (user?.userID) {
-            const url = `${window.location.origin}/members/${user.userID}`;
+            const url = `${window.location.origin}/u/${user.username}`;
             navigator.clipboard.writeText(url);
             setSnackbarOpen(true);
         }

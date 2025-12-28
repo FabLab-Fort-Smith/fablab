@@ -54,7 +54,6 @@ export default class User {
 
         // ✅ Public Profile Fields
         this.bio = bio || '';
-        this.skills = skills || [];
         this.socials = {
             github: '',
             linkedin: '',
@@ -62,7 +61,7 @@ export default class User {
             website: '',
             instagram: ''
         };
-        this.skills = []; // Array of strings
+        this.interests = skills || []; // Merging skills/hobbies into interests
         this.isPublic = false;
 
         // ✅ Membership Tracking

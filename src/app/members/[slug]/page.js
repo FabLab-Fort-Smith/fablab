@@ -229,14 +229,14 @@ export default function PublicProfilePage() {
                             )}
                         </Box>
 
-                        <Typography variant="h6" gutterBottom>Skills</Typography>
+                        <Typography variant="h6" gutterBottom>Interests & Skills</Typography>
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                            {(user.skills || []).length > 0 ? (
-                                user.skills.map(skill => (
-                                    <Chip key={skill} label={skill} variant="outlined" />
+                            {(user.interests || []).length > 0 ? (
+                                user.interests.map(interest => (
+                                    <Chip key={interest} label={interest} variant="outlined" />
                                 ))
                             ) : (
-                                <Typography variant="body2" color="text.secondary">No skills listed.</Typography>
+                                <Typography variant="body2" color="text.secondary">No interests listed.</Typography>
                             )}
                         </Box>
                     </Grid>

@@ -31,8 +31,8 @@ export default function ReviewDialog({ open, onClose, user, onReview }) {
                         </Box>
                         
                         <Box sx={{ mb: 2 }}>
-                            <Typography variant="subtitle2" color="text.secondary">Hobbies & Interests</Typography>
-                            <Typography paragraph>{user.hobbies || "N/A"}</Typography>
+                            <Typography variant="subtitle2" color="text.secondary">Interests</Typography>
+                            <Typography paragraph>{(user.interests && user.interests.length > 0) ? user.interests.join(', ') : "N/A"}</Typography>
                         </Box>
 
                         <Box sx={{ mb: 2 }}>

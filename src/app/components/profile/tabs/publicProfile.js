@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, TextField, Grid, Switch, FormControlLabel, Typography, useTheme, Paper, FormControl, FormLabel, FormGroup, Checkbox, Chip, Autocomplete, Tooltip } from '@mui/material';
+import { Box, TextField, Grid, Switch, FormControlLabel, Typography, useTheme, Paper, FormControl, FormLabel, FormGroup, Checkbox, Chip, Autocomplete, Tooltip, Link } from '@mui/material';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import TwitterIcon from '@mui/icons-material/Twitter';
@@ -35,21 +35,14 @@ const PublicProfileTab = ({ user, onEdit }) => {
         onEdit("socials", { ...currentSocials, [platform]: value });
     };
 
-    const handleSkillsChange = (event, newValue) => {
-        onEdit("skills", newValue);
+    const handleInterestsChange = (event, newValue) => {
+        onEdit("interests", newValue);
     };
 
-    const handleHobbiesChange = (event, newValue) => {
-        onEdit("hobbies", newValue);
-    };
-
-    const commonSkills = [
+    const commonInterests = [
         "3D Printing", "Laser Cutting", "CNC Machining", "Woodworking", "Metalworking",
         "Electronics", "Arduino", "Raspberry Pi", "Programming", "Web Development",
-        "Graphic Design", "CAD/CAM", "Sewing", "Embroidery", "Vinyl Cutting"
-    ];
-
-    const commonHobbies = [
+        "Graphic Design", "CAD/CAM", "Sewing", "Embroidery", "Vinyl Cutting",
         "Gaming", "Reading", "Hiking", "Cooking", "Traveling", "Photography", 
         "Music", "Art", "Gardening", "DIY", "Robotics", "Cosplay", "Board Games"
     ];
@@ -84,6 +77,17 @@ const PublicProfileTab = ({ user, onEdit }) => {
             <Typography variant="caption" display="block" sx={{ mb: 3, color: theme.palette.text.secondary }}>
                 Profiles are public by default. You can toggle this off to keep your profile private.
             </Typography>
+
+            {user.isPublic !== false && user.username && (
+                <Box sx={{ mb: 3, p: 2, bgcolor: 'rgba(0,255,0,0.05)', borderRadius: 1, border: '1px solid rgba(0,255,0,0.2)' }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                        Your Public Profile Link:
+                    </Typography>
+                    <Link href={`/u/${user.username}`} target="_blank" rel="noopener noreferrer" sx={{ wordBreak: 'break-all', fontWeight: 'bold' }}>
+                        {typeof window !== 'undefined' ? `${window.location.origin}/u/${user.username}` : `/u/${user.username}`}
+                    </Link>
+                </Box>
+            )}
 
             {/* Badges Section */}
             <Paper sx={{ p: 2, mb: 3, bgcolor: 'rgba(0,0,0,0.02)' }}>
@@ -126,13 +130,13 @@ const PublicProfileTab = ({ user, onEdit }) => {
                 </Grid>
 
                 <Grid item xs={12}>
-                    <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>Skills & Interests</Typography>
+                    <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>Interests & Skills</Typography>
                     <Autocomplete
                         multiple
                         freeSolo
-                        options={commonSkills}
-                        value={Array.isArray(user.skills) ? user.skills : []}
-                        onChange={handleSkillsChange}
+                        options={commonInterests}
+                        value={Array.isArray(user.interests) ? user.interests : []}
+                        onChange={handleInterestsChange}
                         renderTags={(value, getTagProps) =>
                             value.map((option, index) => (
                                 <Chip variant="outlined" label={option} {...getTagProps({ index })} />
@@ -142,34 +146,9 @@ const PublicProfileTab = ({ user, onEdit }) => {
                             <TextField 
                                 {...params} 
                                 variant="outlined" 
-                                label="Skills" 
-                                placeholder="Add skills..." 
-                                helperText="Press Enter to add custom skills"
-                            />
-                        )}
-                    />
-                </Grid>
-
-                <Grid item xs={12}>
-                    <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>Hobbies & Interests</Typography>
-                    <Autocomplete
-                        multiple
-                        freeSolo
-                        options={commonHobbies}
-                        value={Array.isArray(user.hobbies) ? user.hobbies : []}
-                        onChange={handleHobbiesChange}
-                        renderTags={(value, getTagProps) =>
-                            value.map((option, index) => (
-                                <Chip variant="outlined" label={option} {...getTagProps({ index })} />
-                            ))
-                        }
-                        renderInput={(params) => (
-                            <TextField 
-                                {...params} 
-                                variant="outlined" 
-                                label="Hobbies" 
-                                placeholder="Add hobbies..." 
-                                helperText="Press Enter to add custom hobbies"
+                                label="Interests & Skills" 
+                                placeholder="Add interests..." 
+                                helperText="Press Enter to add custom interests"
                             />
                         )}
                     />

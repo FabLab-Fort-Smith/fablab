@@ -23,7 +23,6 @@ export default function MembersDirectory() {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedSkills, setSelectedSkills] = useState([]);
     const [selectedInterests, setSelectedInterests] = useState([]);
     const [hasAccess, setHasAccess] = useState(false);
     
@@ -33,7 +32,6 @@ export default function MembersDirectory() {
     const [sponsorshipType, setSponsorshipType] = useState('one-time');
     
     // Derived lists for filters
-    const [allSkills, setAllSkills] = useState([]);
     const [allInterests, setAllInterests] = useState([]);
 
     useEffect(() => {
@@ -79,16 +77,13 @@ export default function MembersDirectory() {
                 setTotalPages(data.totalPages || 1);
                 setPage(data.page || 1);
                 
-                // Extract unique skills and interests
-                const skills = new Set();
+                // Extract unique interests
                 const interests = new Set();
                 
                 (data.users || []).forEach(user => {
-                    (user.skills || []).forEach(skill => skills.add(skill));
-                    (user.creatorType || []).forEach(type => interests.add(type));
+                    (user.interests || []).forEach(interest => interests.add(interest));
                 });
                 
-                setAllSkills(Array.from(skills).sort());
                 setAllInterests(Array.from(interests).sort());
             }
         } catch (error) {
@@ -143,18 +138,15 @@ export default function MembersDirectory() {
             (user.lastName || '').toLowerCase().includes(searchTerm.toLowerCase())
         );
 
-        const matchesSkills = selectedSkills.length === 0 || 
-            selectedSkills.every(skill => (user.skills || []).includes(skill));
-
         const matchesInterests = selectedInterests.length === 0 || 
-            selectedInterests.every(interest => (user.creatorType || []).includes(interest));
+            selectedInterests.every(interest => (user.interests || []).includes(interest));
 
-        return matchesSearch && matchesSkills && matchesInterests;
+        return matchesSearch && matchesInterests;
     });
 
-    const handleCardClick = (username) => {
-        if (username) {
-            router.push(`/members/${username}`);
+    const handleCardClick = (userID) => {
+        if (userID) {
+            router.push(`/dashboard/member/${userID}`);
         }
     };
 
@@ -221,38 +213,14 @@ export default function MembersDirectory() {
                             }}
                         />
                     </Grid>
-                    <Grid item xs={12} md={4}>
+                    <Grid item xs={12} md={8}>
                         <FormControl fullWidth>
-                            <InputLabel>Filter by Skills</InputLabel>
-                            <Select
-                                multiple
-                                value={selectedSkills}
-                                onChange={(e) => setSelectedSkills(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
-                                input={<OutlinedInput label="Filter by Skills" />}
-                                renderValue={(selected) => (
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                        {selected.map((value) => (
-                                            <Chip key={value} label={value} size="small" />
-                                        ))}
-                                    </Box>
-                                )}
-                            >
-                                {allSkills.map((skill) => (
-                                    <MenuItem key={skill} value={skill}>
-                                        {skill}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                        <FormControl fullWidth>
-                            <InputLabel>Filter by Interests</InputLabel>
+                            <InputLabel>Filter by Interests & Skills</InputLabel>
                             <Select
                                 multiple
                                 value={selectedInterests}
                                 onChange={(e) => setSelectedInterests(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
-                                input={<OutlinedInput label="Filter by Interests" />}
+                                input={<OutlinedInput label="Filter by Interests & Skills" />}
                                 renderValue={(selected) => (
                                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                                         {selected.map((value) => (
@@ -292,7 +260,7 @@ export default function MembersDirectory() {
                                         borderColor: theme.palette.primary.main
                                     }
                                 }}
-                                onClick={() => handleCardClick(user.username)}
+                                onClick={() => handleCardClick(user.userID)}
                             >
                                 <Box sx={{ 
                                     height: 60, 
@@ -325,17 +293,17 @@ export default function MembersDirectory() {
                                     )}
                                     
                                     <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 0.5 }}>
-                                        {(user.creatorType || []).slice(0, 3).map((type) => (
+                                        {(user.interests || []).slice(0, 3).map((interest) => (
                                             <Chip 
-                                                key={type} 
-                                                label={type} 
+                                                key={interest} 
+                                                label={interest} 
                                                 size="small" 
                                                 variant="outlined" 
                                                 color="primary"
                                             />
                                         ))}
-                                        {(user.creatorType || []).length > 3 && (
-                                            <Chip label={`+${user.creatorType.length - 3}`} size="small" variant="outlined" color="primary" />
+                                        {(user.interests || []).length > 3 && (
+                                            <Chip label={`+${user.interests.length - 3}`} size="small" variant="outlined" color="primary" />
                                         )}
                                     </Box>
 
@@ -349,28 +317,6 @@ export default function MembersDirectory() {
                                     }}>
                                         {user.bio || "No bio provided."}
                                     </Typography>
-
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 0.5 }}>
-                                        {(user.skills || []).slice(0, 4).map((skill) => (
-                                            <Chip 
-                                                key={skill} 
-                                                label={skill} 
-                                                size="small" 
-                                                sx={{ 
-                                                    bgcolor: 'rgba(0, 255, 0, 0.1)',
-                                                    border: '1px solid rgba(0, 255, 0, 0.2)',
-                                                    color: theme.palette.text.primary
-                                                }} 
-                                            />
-                                        ))}
-                                        {(user.skills || []).length > 4 && (
-                                            <Chip 
-                                                label={`+${user.skills.length - 4}`} 
-                                                size="small" 
-                                                sx={{ bgcolor: 'rgba(0, 255, 0, 0.1)' }} 
-                                            />
-                                        )}
-                                    </Box>
                                 </CardContent>
                                 <Box sx={{ p: 2, pt: 0 }}>
                                     <Button 

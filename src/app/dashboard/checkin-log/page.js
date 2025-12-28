@@ -19,6 +19,8 @@ export default function CheckInLogPage() {
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
     useEffect(() => {
         if (status === 'unauthenticated') {
             router.push('/auth/signin');
@@ -79,31 +81,118 @@ export default function CheckInLogPage() {
         }
     ];
 
+    const MobileLogCard = ({ log }) => (
+        <Card variant="outlined" sx={{ mb: 2, bgcolor: 'background.paper', borderColor: 'divider' }}>
+            <CardContent>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                        {log.userName}
+                    </Typography>
+                    <Chip 
+                        label={log.status} 
+                        color={log.status === 'active' ? 'success' : 'default'} 
+                        size="small" 
+                        variant="outlined"
+                    />
+                </Stack>
+                
+                <Grid container spacing={2}>
+                    <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary" display="block">
+                            Check In
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <AccessTimeIcon sx={{ fontSize: 16, color: 'success.main' }} />
+                            <Typography variant="body2">
+                                {new Date(log.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </Typography>
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                            {new Date(log.checkInTime).toLocaleDateString()}
+                        </Typography>
+                    </Grid>
+                    
+                    <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary" display="block">
+                            Check Out
+                        </Typography>
+                        {log.checkOutTime ? (
+                            <>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    <AccessTimeIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                                    <Typography variant="body2">
+                                        {new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </Typography>
+                                </Box>
+                                <Typography variant="caption" color="text.secondary">
+                                    {new Date(log.checkOutTime).toLocaleDateString()}
+                                </Typography>
+                            </>
+                        ) : (
+                            <Typography variant="body2" color="text.secondary">-</Typography>
+                        )}
+                    </Grid>
+
+                    {log.durationMinutes && (
+                        <Grid item xs={12}>
+                            <Box sx={{ 
+                                p: 1, 
+                                bgcolor: 'action.hover', 
+                                borderRadius: 1, 
+                                display: 'flex', 
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                            }}>
+                                <Typography variant="body2" color="text.secondary">Duration</Typography>
+                                <Typography variant="body2" fontWeight="bold">
+                                    {Math.floor(log.durationMinutes / 60)}h {log.durationMinutes % 60}m
+                                </Typography>
+                            </Box>
+                        </Grid>
+                    )}
+                </Grid>
+            </CardContent>
+        </Card>
+    );
+
     return (
-        <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-            <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
-                <IconButton onClick={() => router.back()}>
+        <Container maxWidth="xl" sx={{ mt: 2, mb: 4, px: { xs: 2, md: 3 } }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
+                <IconButton onClick={() => router.back()} edge="start">
                     <ArrowBackIcon />
                 </IconButton>
-                <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold', color: theme.palette.primary.main }}>
+                <Typography variant="h5" component="h1" sx={{ fontWeight: 'bold', color: theme.palette.primary.main }}>
                     Check-In Log
                 </Typography>
             </Stack>
 
-            <Paper sx={{ height: 600, width: '100%', p: 2 }}>
-                <DataGrid
-                    rows={logs}
-                    columns={columns}
-                    getRowId={(row) => row.checkInID}
-                    loading={loading}
-                    components={{ Toolbar: GridToolbar }}
-                    initialState={{
-                        sorting: {
-                            sortModel: [{ field: 'checkInTime', sort: 'desc' }],
-                        },
-                    }}
-                />
-            </Paper>
+            {isMobile ? (
+                <Box>
+                    {logs.map((log) => (
+                        <MobileLogCard key={log.checkInID} log={log} />
+                    ))}
+                    {logs.length === 0 && !loading && (
+                        <Typography variant="body1" color="text.secondary" align="center" sx={{ py: 4 }}>
+                            No check-in logs found.
+                        </Typography>
+                    )}
+                </Box>
+            ) : (
+                <Paper sx={{ height: 600, width: '100%', p: 2 }}>
+                    <DataGrid
+                        rows={logs}
+                        columns={columns}
+                        getRowId={(row) => row.checkInID}
+                        loading={loading}
+                        components={{ Toolbar: GridToolbar }}
+                        initialState={{
+                            sorting: {
+                                sortModel: [{ field: 'checkInTime', sort: 'desc' }],
+                            },
+                        }}
+                    />
+                </Paper>
+            )}
         </Container>
     );
 }

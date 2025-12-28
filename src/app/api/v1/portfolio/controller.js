@@ -49,6 +49,12 @@ export default class PortfolioController {
                 if (!text) return NextResponse.json({ error: "Missing comment text" }, { status: 400 });
                 const comment = await PortfolioService.addComment(id, userID, text);
                 return NextResponse.json(comment, { status: 200 });
+            } else if (action === 'share') {
+                const { senderID, recipientID } = data;
+                if (!senderID || !recipientID) return NextResponse.json({ error: "Missing sender or recipient" }, { status: 400 });
+                
+                await PortfolioService.shareItem(id, senderID, recipientID);
+                return NextResponse.json({ success: true }, { status: 200 });
             } else {
                 // Default to toggle like
                 const result = await PortfolioService.toggleLike(id, userID);

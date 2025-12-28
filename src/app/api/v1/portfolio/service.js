@@ -177,4 +177,23 @@ export default class PortfolioService {
 
         return comment;
     }
+
+    static async shareItem(itemID, senderID, recipientID) {
+        const item = await PortfolioModel.getItemById(itemID);
+        if (!item) throw new Error("Item not found");
+
+        const sender = await UserModel.getUserByQuery({ userID: senderID });
+        const senderName = sender ? `${sender.firstName} ${sender.lastName}` : "Someone";
+
+        await NotificationService.create({
+            userID: recipientID,
+            type: 'info',
+            title: 'Project Shared',
+            message: `${senderName} shared a project with you: "${item.title}"`,
+            link: `/dashboard/showcase?highlight=${itemID}`,
+            metadata: { type: 'share', senderID, itemID }
+        });
+        
+        return { success: true };
+    }
 }

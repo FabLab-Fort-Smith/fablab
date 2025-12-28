@@ -30,8 +30,8 @@ const getUserNavigation = (userID) => [
         icon: <BuildIcon />,
     },
     {
-        segment: 'dashboard/showcase',
-        title: 'Maker Showcase',
+        segment: 'dashboard/feed',
+        title: 'The Lab Feed',
         icon: <CollectionsIcon />,
     },
     {

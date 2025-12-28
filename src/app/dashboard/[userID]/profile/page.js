@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useEffect, use } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import React, { useState, useEffect } from 'react';
+import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Box, Typography, Button, Breadcrumbs, Link, Snackbar, useTheme, Fab, Zoom, Alert } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
@@ -13,11 +13,11 @@ import PublicProfileTab from '@/app/components/profile/tabs/publicProfile';
 import SettingsTab from '@/app/components/profile/tabs/settings';
 import LoadingTerminal from '@/app/components/LoadingTerminal';
 
-const ViewUserPage = ({ params }) => {
+const ViewUserPage = () => {
     const { data: session } = useSession();
-    const resolvedParams = use(params);
+    const params = useParams();
     const searchParams = useSearchParams();
-    const [userID, setUserID] = useState(resolvedParams?.userID);
+    const [userID, setUserID] = useState(params?.userID);
     const [user, setUser] = useState(null);
     const [updatedUser, setUpdatedUser] = useState({});
     const [snackbarOpen, setSnackbarOpen] = useState(false);
