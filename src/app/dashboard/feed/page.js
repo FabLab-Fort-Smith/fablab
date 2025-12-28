@@ -20,6 +20,7 @@ import ShareIcon from '@mui/icons-material/Share';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import AccessAlarmIcon from '@mui/icons-material/AccessAlarm';
+import StarIcon from '@mui/icons-material/Star';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 
@@ -38,6 +39,12 @@ export default function FeedPage() {
     const [users, setUsers] = useState([]);
     const [loadingUsers, setLoadingUsers] = useState(false);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+
+    // Tip State
+    const [tipDialogOpen, setTipDialogOpen] = useState(false);
+    const [tipAmount, setTipAmount] = useState(10);
+    const [tipLoading, setTipLoading] = useState(false);
+    const [tipRecipient, setTipRecipient] = useState(null);
 
     useEffect(() => {
         fetchFeed();
@@ -217,6 +224,32 @@ export default function FeedPage() {
         }
     };
 
+    const handleOpenTip = (item) => {
+        setTipRecipient(item.creator);
+        setTipDialogOpen(true);
+    };
+
+    const handleTip = async () => {
+        if (!tipRecipient) return;
+        setTipLoading(true);
+        try {
+            const res = await fetch('/api/v1/transactions/tip', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ receiverId: tipRecipient.userID, amount: parseInt(tipAmount) })
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            
+            setSnackbar({ open: true, message: `Successfully tipped ${tipAmount} stake to ${tipRecipient.username}!`, severity: 'success' });
+            setTipDialogOpen(false);
+        } catch (err) {
+            setSnackbar({ open: true, message: err.message, severity: 'error' });
+        } finally {
+            setTipLoading(false);
+        }
+    };
+
     return (
         <Container maxWidth={false} disableGutters sx={{ py: { xs: 0, md: 4 } }}>
             <Box sx={{ mb: 4, textAlign: 'center', display: { xs: 'none', md: 'block' } }}>
@@ -348,6 +381,9 @@ export default function FeedPage() {
                                             <IconButton onClick={() => handleOpenShare(item)} sx={{ transform: 'rotate(-30deg)', mt: -0.5 }}>
                                                 <SendIcon />
                                             </IconButton>
+                                            <IconButton onClick={() => handleOpenTip(item)} color="primary">
+                                                <StarIcon />
+                                            </IconButton>
                                         </Box>
                                         {isBounty && (
                                             <Chip 
@@ -475,6 +511,37 @@ export default function FeedPage() {
                 <DialogActions>
                     <Button onClick={handleCloseShare}>Cancel</Button>
                 </DialogActions>
+            </Dialog>
+
+            {/* Tip Dialog */}
+            <Dialog open={tipDialogOpen} onClose={() => setTipDialogOpen(false)}>
+                <DialogTitle>Tip Stake to {tipRecipient?.username}</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body2" sx={{ mb: 2 }}>
+                        Send some of your stake to show appreciation!
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+                        {[10, 50, 100, 500].map((amount) => (
+                            <Chip 
+                                key={amount} 
+                                label={`${amount} Stake`} 
+                                onClick={() => setTipAmount(amount)} 
+                                color={tipAmount === amount ? "primary" : "default"}
+                                clickable
+                            />
+                        ))}
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
+                        <Button onClick={() => setTipDialogOpen(false)}>Cancel</Button>
+                        <Button 
+                            variant="contained" 
+                            onClick={handleTip} 
+                            disabled={tipLoading}
+                        >
+                            {tipLoading ? "Sending..." : `Send ${tipAmount} Stake`}
+                        </Button>
+                    </Box>
+                </DialogContent>
             </Dialog>
 
             <Snackbar 

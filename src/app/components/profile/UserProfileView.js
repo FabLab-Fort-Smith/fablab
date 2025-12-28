@@ -649,6 +649,25 @@ export default function UserProfileView({ user, isPublicView = false }) {
                                             <Typography variant="body1" fontWeight="bold" align="center">
                                                 {item.label}
                                             </Typography>
+                                            
+                                            {/* Tip Button on Overlay */}
+                                            {isPublicView && session && (
+                                                <IconButton 
+                                                    size="small" 
+                                                    sx={{ 
+                                                        color: 'white', 
+                                                        mt: 1, 
+                                                        bgcolor: 'rgba(255,255,255,0.2)',
+                                                        '&:hover': { bgcolor: 'rgba(255,255,255,0.4)' }
+                                                    }}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setTipDialogOpen(true);
+                                                    }}
+                                                >
+                                                    <StarIcon />
+                                                </IconButton>
+                                            )}
                                         </Box>
                                     </Box>
                                 ))}
