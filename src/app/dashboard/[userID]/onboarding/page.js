@@ -245,6 +245,7 @@ const OnboardingPage = () => {
             </Grid>
 
             <Grid item xs={12}>
+              <FormLabel component="legend" sx={{ color: 'primary.main', mb: 1, display: 'block' }}>What are your interests and skills?</FormLabel>
               <Autocomplete
                 multiple
                 freeSolo
@@ -260,7 +261,6 @@ const OnboardingPage = () => {
                   <TextField
                     {...params}
                     variant="outlined"
-                    label="What are your interests and skills?"
                     placeholder="Add interests..."
                     helperText="Press Enter to add custom interests"
                   />
@@ -269,9 +269,9 @@ const OnboardingPage = () => {
             </Grid>
 
             <Grid item xs={12}>
+              <FormLabel component="legend" sx={{ color: 'primary.main', mb: 1, display: 'block' }}>If you could change one thing in our city, what would it be?</FormLabel>
               <TextField
                 fullWidth
-                label="If you could change one thing in our city, what would it be?"
                 name="cityChange"
                 multiline
                 rows={2}
@@ -282,9 +282,9 @@ const OnboardingPage = () => {
             </Grid>
 
             <Grid item xs={12}>
+              <FormLabel component="legend" sx={{ color: 'primary.main', mb: 1, display: 'block' }}>Do you know any current co-op members? If so, who?</FormLabel>
               <TextField
                 fullWidth
-                label="Do you know any current co-op members? If so, who?"
                 name="knownMembers"
                 value={form.knownMembers}
                 onChange={handleChange}
@@ -292,9 +292,9 @@ const OnboardingPage = () => {
             </Grid>
 
             <Grid item xs={12}>
+              <FormLabel component="legend" sx={{ color: 'primary.main', mb: 1, display: 'block' }}>Do you have any questions for us?</FormLabel>
               <TextField
                 fullWidth
-                label="Do you have any questions for us?"
                 name="questions"
                 multiline
                 rows={2}
