@@ -34,12 +34,34 @@ export default class TransactionService {
             }
 
             // 3. Deduct from Sender
-            await UserModel.updateUser({ userID: senderId }, { $inc: { stake: -amount } });
+            await UserModel.updateUser({ userID: senderId }, { 
+                $inc: { stake: -amount },
+                $push: { 
+                    stakeHistory: {
+                        amount: -amount,
+                        reason: `Tip to ${receiver ? receiver.username : 'User'}`,
+                        timestamp: new Date(),
+                        type: 'tip_sent',
+                        receiverId: receiverId || receiverDiscordId
+                    }
+                }
+            });
 
             // 4. Handle Receiver
             if (receiver) {
                 // Receiver exists, add stake immediately
-                await UserModel.updateUser({ userID: receiver.userID }, { $inc: { stake: amount } });
+                await UserModel.updateUser({ userID: receiver.userID }, { 
+                    $inc: { stake: amount },
+                    $push: { 
+                        stakeHistory: {
+                            amount: amount,
+                            reason: `Tip from ${sender.username}`,
+                            timestamp: new Date(),
+                            type: 'tip_received',
+                            senderId: sender.userID
+                        }
+                    }
+                });
                 
                 // Record Transaction
                 await TransactionModel.createTransaction({
@@ -92,7 +114,18 @@ export default class TransactionService {
             if (!receiver) throw new Error("Receiver not found");
 
             // Add stake to receiver
-            await UserModel.updateUser({ userID: receiverId }, { $inc: { stake: amount } });
+            await UserModel.updateUser({ userID: receiverId }, { 
+                $inc: { stake: amount },
+                $push: { 
+                    stakeHistory: {
+                        amount,
+                        reason,
+                        timestamp: new Date(),
+                        type: 'award',
+                        senderId: adminId
+                    }
+                }
+            });
 
             // Record Transaction
             await TransactionModel.createTransaction({
