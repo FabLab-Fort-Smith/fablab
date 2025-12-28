@@ -477,6 +477,15 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                         ? `✅ Profile Setup Complete (${formData.isPublic ? "Public" : "Private"})` 
                                         : "⚠️ Profile Setup Incomplete"}
                                 </Typography>
+                                <FormControlLabel
+                                    control={
+                                        <Checkbox
+                                            checked={formData.isPublic || false}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, isPublic: e.target.checked }))}
+                                        />
+                                    }
+                                    label="Public Profile"
+                                />
                             </StepContent>
                         </Step>
 
