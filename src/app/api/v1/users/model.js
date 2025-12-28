@@ -83,7 +83,8 @@ export default class UserModel {
                 query.isPublic = { $ne: false };
                 query.$or = [
                     { "membership.status": { $in: ["active", "probation"] } },
-                    { "membership.isWaived": true }
+                    { "membership.isWaived": true },
+                    { "membership.subscriptionStatus": "ACTIVE" }
                 ];
             }
 
@@ -112,7 +113,8 @@ export default class UserModel {
                 query.isPublic = { $ne: false };
                 query.$or = [
                     { "membership.status": { $in: ["active", "probation"] } },
-                    { "membership.isWaived": true }
+                    { "membership.isWaived": true },
+                    { "membership.subscriptionStatus": "ACTIVE" }
                 ];
             }
 

@@ -84,7 +84,7 @@ export default function PublicProfilePage() {
                     // Check if profile is public or if viewer is admin/self
                     const isSelf = session?.user?.userID === userProfile.userID;
                     const isAdmin = session?.user?.role === 'admin';
-                    const isActiveMember = ['active', 'probation'].includes(userProfile.membership?.status) || userProfile.membership?.isWaived === true;
+                    const isActiveMember = ['active', 'probation'].includes(userProfile.membership?.status) || userProfile.membership?.isWaived === true || userProfile.membership?.subscriptionStatus === 'ACTIVE';
                     
                     if ((userProfile.isPublic !== false && isActiveMember) || isSelf || isAdmin) {
                         setUser(userProfile);

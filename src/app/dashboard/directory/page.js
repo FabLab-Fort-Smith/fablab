@@ -49,8 +49,10 @@ export default function MembersDirectory() {
                 if (userRes.ok) {
                     const userData = await userRes.json();
                     const memberStatus = userData.user?.membership?.status;
+                    const isWaived = userData.user?.membership?.isWaived;
+                    const subscriptionStatus = userData.user?.membership?.subscriptionStatus;
                     
-                    if (memberStatus === 'active' || memberStatus === 'probation' || session.user.role === 'admin') {
+                    if (memberStatus === 'active' || memberStatus === 'probation' || isWaived || subscriptionStatus === 'ACTIVE' || session.user.role === 'admin') {
                         setHasAccess(true);
                         await fetchMembers(1);
                     } else {
