@@ -167,7 +167,11 @@ const ViewUserPage = () => {
             {/* User Details Tab */}
             {activeTab === 0 && (
                 <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'center', md: 'flex-start' }, gap: 4, mt: 3 }}>
-                    <UserImage picture={session?.user?.image} />
+                    <UserImage 
+                        picture={updatedUser.image || session?.user?.image} 
+                        onUpload={(url) => handleEditChange('image', url)}
+                        editable={true}
+                    />
                     <UserDetailsForm user={updatedUser} onEdit={handleEditChange} />
                 </Box>
             )}
