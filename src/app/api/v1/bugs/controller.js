@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import BugService from "./service";
-import AuthService from "../../auth/[...nextauth]/service";
+import { auth } from "../../../../../auth";
 
 export default class BugController {
     static async createBug(req) {
         try {
-            const session = await AuthService.getSession(req);
+            const session = await auth();
             if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
             const data = await req.json();
@@ -38,7 +38,7 @@ export default class BugController {
 
     static async updateBug(req) {
         try {
-            const session = await AuthService.getSession(req);
+            const session = await auth();
             if (!session || session.user.role !== 'admin') {
                 return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
             }
