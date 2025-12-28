@@ -64,7 +64,7 @@ export default class User {
             instagram: ''
         };
         this.interests = skills || []; // Merging skills/hobbies into interests
-        this.isPublic = false;
+        this.isPublic = true;
 
         // ✅ Membership Tracking
         this.membership = {

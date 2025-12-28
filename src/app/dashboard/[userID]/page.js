@@ -35,6 +35,7 @@ import {
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import LoadingTerminal from "@/app/components/LoadingTerminal";
+import WaysToEarnStake from "@/app/components/dashboard/WaysToEarnStake";
 
 const DashboardPage = ({ params }) => {
   const { data: session, status } = useSession();
@@ -413,6 +414,9 @@ const DashboardPage = ({ params }) => {
           )}
       </Card>
       )}
+
+      {/* Ways to Earn Stake */}
+      {userData && <WaysToEarnStake user={userData} />}
 
       {/* Dashboard Options Grid */}
       <Grid container spacing={2}>

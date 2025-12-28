@@ -139,13 +139,29 @@ export default class UserService {
             const currentUser = await UserModel.getUserByQuery(searchObj);
             
             // Check for profile completion reward
-            if (currentUser && (!currentUser.bio || !currentUser.image)) {
-                const willHaveBio = updateData.bio || currentUser.bio;
-                const willHaveImage = updateData.image || currentUser.image;
+            if (currentUser) {
+                const hasBio = !!currentUser.bio;
+                const hasImage = !!currentUser.image;
+                const willHaveBio = !!(updateData.bio || currentUser.bio);
+                const willHaveImage = !!(updateData.image || currentUser.image);
                 
-                if (willHaveBio && willHaveImage) {
+                // Check if already awarded by looking at stakeHistory
+                const alreadyAwarded = currentUser.stakeHistory?.some(h => h.reason === "Profile Completion Reward");
+
+                console.log(`🔍 Profile Completion Check for ${currentUser.userID}:`);
+                console.log(`   Current: Bio=${hasBio}, Image=${hasImage}`);
+                console.log(`   Future:  Bio=${willHaveBio}, Image=${willHaveImage}`);
+                console.log(`   Already Awarded: ${alreadyAwarded}`);
+
+                if (willHaveBio && willHaveImage && !alreadyAwarded) {
+                     console.log("🎉 Awarding Profile Completion Stake!");
                      updateData.stake = (currentUser.stake || 0) + Constants.ONBOARDING_REWARDS.COMPLETE_PROFILE;
                      
+                     // Auto-set to public if not explicitly disabled in this update
+                     if (updateData.isPublic !== false) {
+                        updateData.isPublic = true;
+                     }
+
                      if (!updateData.$push) updateData.$push = {};
                      if (!updateData.$push.stakeHistory) updateData.$push.stakeHistory = { $each: [] };
                      

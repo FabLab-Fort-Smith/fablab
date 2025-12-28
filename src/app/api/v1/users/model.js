@@ -104,6 +104,24 @@ export default class UserModel {
         }
     }
 
+    /**
+     * ✅ Get top stake holders
+     * @param {number} limit - Number of users to return
+     * @returns {Array} - Array of users sorted by stake
+     */
+    static getTopStakeHolders = async (limit = 10) => {
+        try {
+            const dbUsers = await db.dbUsers();
+            return await dbUsers.find({ stake: { $gt: 0 } })
+                .sort({ stake: -1 })
+                .limit(limit)
+                .toArray();
+        } catch (error) {
+            console.error("Error retrieving top stake holders:", error);
+            return [];
+        }
+    }
+
     static countUsers = async (filters = {}) => {
         try {
             const dbUsers = await db.dbUsers();
