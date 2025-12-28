@@ -240,6 +240,22 @@ export default function UserProfileView({ user, isPublicView = false }) {
                         >
                             Edit Profile
                         </Button>
+                    ) : isPublicView && session ? (
+                        <Button 
+                            fullWidth 
+                            variant="contained" 
+                            onClick={() => setTipDialogOpen(true)}
+                            startIcon={<StarIcon />}
+                            sx={{ 
+                                bgcolor: 'primary.main', 
+                                color: 'white',
+                                textTransform: 'none',
+                                fontWeight: 600,
+                                '&:hover': { bgcolor: 'primary.dark' }
+                            }}
+                        >
+                            Tip Stake
+                        </Button>
                     ) : isPublicView && (
                         <Button fullWidth variant="contained" href="/login">
                             Connect
