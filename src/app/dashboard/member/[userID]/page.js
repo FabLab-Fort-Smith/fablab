@@ -55,7 +55,7 @@ export default function MemberProfilePage() {
 
     return (
         <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-            <UserProfileView user={user} />
+            <UserProfileView user={user} isPublicView={true} />
         </Box>
     );
 }
