@@ -88,7 +88,8 @@ const BASE_FILE_SYSTEM = {
       'curl': { type: 'file', content: "Binary file" },
       'crack': { type: 'file', content: "Binary file" },
       'unzip': { type: 'file', content: "Binary file" },
-      'mission': { type: 'file', content: "Binary file" }
+      'mission': { type: 'file', content: "Binary file" },
+      'crittercodes': { type: 'file', content: "Binary file" }
     }
   },
   'etc': {
