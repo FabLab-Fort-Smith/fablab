@@ -37,6 +37,8 @@ export default function Layout({ children }) {
         }}
       >
         <PageContainer sx={{ flex: 1 }}>{children}</PageContainer>
+        {/* Spacer to prevent bottom nav from covering content on mobile */}
+        <Box sx={{ height: { xs: '120px', md: 0 }, flexShrink: 0 }} />
         <MobileBottomNav />
       </Box>
     </DashboardLayout>
