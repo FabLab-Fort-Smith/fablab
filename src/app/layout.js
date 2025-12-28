@@ -11,6 +11,25 @@ export const viewport = {
     userScalable: false,
 };
 
+export const metadata = {
+    title: "The Lab | Fort Smith's Premier Hackerspace & Makerspace",
+    description: "Join the most active hackerspace in the River Valley. Access 3D printers, laser cutters, and a community of creators in Fort Smith, AR. Learn, build, and collaborate.",
+    keywords: ["Hackerspace", "Maker Space", "Fort Smith", "Arkansas", "FabLab", "3D Printing", "Community", "DIY", "River Valley", "Workshops", "Coworking"],
+    authors: [{ name: "The Lab Community" }],
+    openGraph: {
+        title: "The Lab - Create, Collaborate, Innovate in Fort Smith",
+        description: "More than just tools. We are a community of hackers, makers, learners, and doers in Fort Smith, AR. Join us today.",
+        url: "https://thelab.critter.codes", // Replace with actual domain if different
+        siteName: "The Lab",
+        locale: "en_US",
+        type: "website",
+    },
+    robots: {
+        index: true,
+        follow: true,
+    },
+};
+
 export default async function RootLayout({ children }) {
     const session = await auth();
 

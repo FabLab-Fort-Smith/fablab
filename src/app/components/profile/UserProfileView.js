@@ -150,6 +150,11 @@ export default function UserProfileView({ user, isPublicView = false }) {
                     <Typography variant="subtitle1" fontWeight="bold">
                         {user.firstName} {user.lastName}
                     </Typography>
+                    {user.boardPosition && (
+                        <Typography variant="subtitle2" color="primary" sx={{ mb: 1, fontWeight: 'bold' }}>
+                            {user.boardPosition}
+                        </Typography>
+                    )}
                     {user.bio && (
                         <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mb: 1 }}>
                             {user.bio}

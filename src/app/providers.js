@@ -18,6 +18,7 @@ import CollectionsIcon from '@mui/icons-material/Collections';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import HistoryIcon from '@mui/icons-material/History';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
+import EmailIcon from '@mui/icons-material/Email';
 
 const getUserNavigation = (userID) => [
     {
@@ -109,6 +110,11 @@ const ADMIN_NAVIGATION = [
         segment: 'dashboard/admin/bounty-ideas',
         title: 'Bounty Ideas',
         icon: <LightbulbIcon />
+    },
+    {
+        segment: 'dashboard/admin/contact',
+        title: 'Contact Submissions',
+        icon: <EmailIcon />
     }
 ];
 

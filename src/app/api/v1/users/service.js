@@ -44,7 +44,8 @@ export default class UserService {
                 userData?.bio,
                 userData?.skills,
                 userData?.stake,
-                userData?.image
+                userData?.image,
+                userData?.boardPosition
             );
             return await UserModel.createUser(newUser);
         } catch (error) {
@@ -82,16 +83,16 @@ export default class UserService {
 
     /**
      * ✅ Fetch all users
-     * @param {boolean} isPublic - If true, return only public users
+     * @param {Object} filters - Filter criteria
      * @param {number} page - Page number
      * @param {number} limit - Items per page
      * @returns {Object} - List of users and pagination info
      */
-    static getAllUsers = async (isPublic = false, page = 1, limit = 10) => {
+    static getAllUsers = async (filters = {}, page = 1, limit = 10) => {
         try {
             const skip = (page - 1) * limit;
-            const users = await UserModel.getAllUsers(isPublic, skip, limit);
-            const total = await UserModel.countUsers(isPublic);
+            const users = await UserModel.getAllUsers(filters, skip, limit);
+            const total = await UserModel.countUsers(filters);
             
             const decryptedUsers = users.map(user => {
                 // Decrypt fields for each user

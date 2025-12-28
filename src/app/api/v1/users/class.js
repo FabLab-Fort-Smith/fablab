@@ -22,7 +22,8 @@ export default class User {
         bio,
         skills,
         stake,
-        image
+        image,
+        boardPosition
     ) {
         this.userID = `user-${uuidv4().slice(0, 8)}`;
         this.firstName = firstName;
@@ -33,6 +34,7 @@ export default class User {
         this.address = {};
         this.image = image || '';
         this.role = role || 'user';
+        this.boardPosition = boardPosition || ''; // ✅ Board Position or Job Title
         this.status = status ? status : 'unverified';
         this.password = password;
         this.provider = provider || 'local';

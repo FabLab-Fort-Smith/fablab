@@ -1,11 +1,37 @@
 "use client";
 
-import { Box, Typography, TextField, Button, useTheme } from "@mui/material";
+import { Box, Typography, TextField, Button, useTheme, Alert, Snackbar } from "@mui/material";
 import { motion, useReducedMotion } from "motion/react";
+import { useState } from "react";
 
 const ContactSection = () => {
   const shouldReduceMotion = useReducedMotion();
   const theme = useTheme();
+  const [status, setStatus] = useState('idle'); // idle, submitting, success, error
+  const [formData, setFormData] = useState({ name: '', email: '', message: '' });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setStatus('submitting');
+
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+
+      if (res.ok) {
+        setStatus('success');
+        setFormData({ name: '', email: '', message: '' });
+      } else {
+        setStatus('error');
+      }
+    } catch (error) {
+      console.error("Contact form error:", error);
+      setStatus('error');
+    }
+  };
 
   return (
     <motion.div
@@ -62,6 +88,7 @@ const ContactSection = () => {
         {/* Contact Form */}
         <Box
           component="form"
+          onSubmit={handleSubmit}
           sx={{
             display: "flex",
             flexDirection: "column",
@@ -76,6 +103,8 @@ const ContactSection = () => {
             variant="outlined"
             fullWidth
             required
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             sx={{
               backgroundColor: theme.palette.background.paper,
               "& .MuiInputBase-root": {
@@ -103,6 +132,8 @@ const ContactSection = () => {
             type="email"
             fullWidth
             required
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             sx={{
               backgroundColor: theme.palette.background.paper,
               "& .MuiInputBase-root": {
@@ -131,6 +162,8 @@ const ContactSection = () => {
             rows={4}
             fullWidth
             required
+            value={formData.message}
+            onChange={(e) => setFormData({ ...formData, message: e.target.value })}
             sx={{
               backgroundColor: theme.palette.background.paper,
               "& .MuiInputBase-root": {
@@ -163,6 +196,7 @@ const ContactSection = () => {
               type="submit"
               variant="contained"
               size="large"
+              disabled={status === 'submitting'}
               sx={{
                 width: "100%",
                 padding: { xs: "0.5rem 1rem", sm: "0.75rem 1.5rem" },
@@ -176,11 +210,23 @@ const ContactSection = () => {
                 },
               }}
             >
-              Submit
+              {status === 'submitting' ? 'Sending...' : 'Submit'}
             </Button>
           </motion.div>
         </Box>
       </Box>
+      
+      <Snackbar open={status === 'success'} autoHideDuration={6000} onClose={() => setStatus('idle')}>
+        <Alert onClose={() => setStatus('idle')} severity="success" sx={{ width: '100%' }}>
+          Message sent successfully! We'll get back to you soon.
+        </Alert>
+      </Snackbar>
+      
+      <Snackbar open={status === 'error'} autoHideDuration={6000} onClose={() => setStatus('idle')}>
+        <Alert onClose={() => setStatus('idle')} severity="error" sx={{ width: '100%' }}>
+          Failed to send message. Please try again or email us directly.
+        </Alert>
+      </Snackbar>
     </motion.div>
   );
 };

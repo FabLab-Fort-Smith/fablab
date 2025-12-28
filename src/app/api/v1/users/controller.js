@@ -92,11 +92,20 @@ export default class UserController {
     static getAllUsers = async (req) => {
         try {
             const { searchParams } = new URL(req.url);
-            const isPublic = searchParams.get('isPublic') === 'true';
+            const filters = {};
+            
+            if (searchParams.get('isPublic') === 'true') {
+                filters.isPublic = true;
+            }
+            
+            if (searchParams.get('role')) {
+                filters.role = searchParams.get('role');
+            }
+
             const page = parseInt(searchParams.get('page') || '1');
             const limit = parseInt(searchParams.get('limit') || '12');
             
-            const result = await UserService.getAllUsers(isPublic, page, limit);
+            const result = await UserService.getAllUsers(filters, page, limit);
             return new Response(
                 JSON.stringify(result),
                 { status: 200 }

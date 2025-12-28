@@ -439,6 +439,40 @@ export async function sendVolunteerHoursApprovedEmail(email, firstName, hours, d
 }
 
 /**
+ * ✅ Send a contact form submission email to the admin
+ * @param {string} name - The sender's name
+ * @param {string} email - The sender's email
+ * @param {string} message - The message content
+ */
+export async function sendContactEmail(name, email, message) {
+    const mailOptions = {
+        from: `"The Lab Contact Form" <${process.env.EMAIL_USER}>`,
+        to: process.env.EMAIL_USER, // Send to the admin
+        replyTo: email, // Allow replying directly to the sender
+        subject: `New Contact Form Submission from ${name}`,
+        html: `
+            <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
+                <h2 style="color: #00ff00;">New Contact Message</h2>
+                <p><strong>Name:</strong> ${name}</p>
+                <p><strong>Email:</strong> ${email}</p>
+                <div style="border: 1px solid #333; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                    <p><strong>Message:</strong></p>
+                    <p style="white-space: pre-wrap;">${message}</p>
+                </div>
+            </div>
+        `
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`Contact form email sent from ${email}`);
+    } catch (error) {
+        console.error(`Error sending contact form email:`, error);
+        throw new Error('Failed to send contact email');
+    }
+}
+
+/**
  * ✅ Send an invite email for admin-created clients
  * @param {string} email - The invited user's email address
  * @param {string} token - The invitation token

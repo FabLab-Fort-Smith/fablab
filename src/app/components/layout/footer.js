@@ -20,6 +20,10 @@ const Footer = () => (
             Code of Conduct
         </MuiLink>
         |
+        <MuiLink component={Link} href="/board-members" color="inherit" underline="hover" sx={{ mx: 1 }}>
+            Board Members
+        </MuiLink>
+        |
         <MuiLink component={Link} href="/about" color="inherit" underline="hover" sx={{ mx: 1 }}>
             About Us
         </MuiLink>

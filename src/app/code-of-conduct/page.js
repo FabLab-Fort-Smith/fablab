@@ -10,7 +10,7 @@ export default function CodeOfConductPage() {
                 </Typography>
                 
                 <Typography variant="body1" paragraph>
-                    <strong>Introduction:</strong> As a community of makers, hackers, inventors, and artists, we are committed to
+                    <strong>Introduction:</strong> As a community of hackers, makers, inventors, and artists, we are committed to
                     fostering an environment of creativity, innovation, and respect. This Code of Conduct outlines the
                     standards for behavior within our community and facilities.
                 </Typography>

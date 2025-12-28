@@ -66,7 +66,7 @@ const AboutSection = () => {
               color: theme.palette.text.primary,
             }}
           >
-            Fab Lab Fort Smith is a collaborative maker space where creativity
+            Fab Lab Fort Smith is a collaborative hackerspace where creativity
             meets technology. We empower the community by providing access to
             cutting-edge tools, workshops, and a supportive environment to
             innovate and grow.

@@ -69,20 +69,26 @@ export default class UserModel {
 
     /**
      * ✅ Get all users
-     * @param {boolean} isPublic - If true, return only public users who are active or on probation
+     * @param {Object} filters - Filter criteria
      * @param {number} skip - Number of records to skip
      * @param {number} limit - Number of records to return
      * @returns {Array} - Array of all users
      */
-    static getAllUsers = async (isPublic = false, skip = 0, limit = 0) => {
+    static getAllUsers = async (filters = {}, skip = 0, limit = 0) => {
         try {
             const dbUsers = await db.dbUsers();
-            const filter = isPublic ? { 
-                isPublic: true,
-                "membership.status": { $in: ["active", "probation"] }
-            } : {};
+            const query = {};
+
+            if (filters.isPublic) {
+                query.isPublic = true;
+                query["membership.status"] = { $in: ["active", "probation"] };
+            }
+
+            if (filters.role) {
+                query.role = filters.role;
+            }
             
-            let cursor = dbUsers.find(filter);
+            let cursor = dbUsers.find(query);
             if (skip > 0) cursor = cursor.skip(skip);
             if (limit > 0) cursor = cursor.limit(limit);
             
@@ -94,14 +100,21 @@ export default class UserModel {
         }
     }
 
-    static countUsers = async (isPublic = false) => {
+    static countUsers = async (filters = {}) => {
         try {
             const dbUsers = await db.dbUsers();
-            const filter = isPublic ? { 
-                isPublic: true,
-                "membership.status": { $in: ["active", "probation"] }
-            } : {};
-            return await dbUsers.countDocuments(filter);
+            const query = {};
+
+            if (filters.isPublic) {
+                query.isPublic = true;
+                query["membership.status"] = { $in: ["active", "probation"] };
+            }
+
+            if (filters.role) {
+                query.role = filters.role;
+            }
+
+            return await dbUsers.countDocuments(query);
         } catch (error) {
             console.error("Error counting users:", error);
             return 0;

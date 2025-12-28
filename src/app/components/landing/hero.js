@@ -8,26 +8,21 @@ import { useEffect, useState } from "react";
 const HeroSection = () => {
   const theme = useTheme();
   const [text, setText] = useState("");
-  const fullText = "U nleash Your Creativity";
+  const fullText = "Unleash Your Creativity";
   const typingSpeed = 100; // Adjust typing speed here
 
   useEffect(() => {
-    // Reset text when component mounts
-    setText("");
-    
-    const characters = fullText.split("");
     let currentIndex = 0;
-    
-    const typingInterval = setInterval(() => {
-      if (currentIndex < characters.length - 1) {
-        setText(prevText => prevText + characters[currentIndex]);
+    const interval = setInterval(() => {
+      if (currentIndex <= fullText.length) {
+        setText(fullText.slice(0, currentIndex));
         currentIndex++;
       } else {
-        clearInterval(typingInterval);
+        clearInterval(interval);
       }
     }, typingSpeed);
-    
-    return () => clearInterval(typingInterval);
+
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -125,8 +120,7 @@ const HeroSection = () => {
               textShadow: "2px 2px 4px rgba(0, 0, 0, 0.5)", // Add text shadow
             }}
           >
-            A community-driven space providing tools, resources, and education to
-            bring your ideas to life.
+            Fort Smith's Premier Hackerspace. Join a community of creators, builders, and innovators in the River Valley.
           </Typography>
         </motion.div>
 
@@ -138,7 +132,7 @@ const HeroSection = () => {
         >
           <Link href="auth/register" passHref>
             <Button
-              variant="outlined"
+              variant="contained"
               size="large"
               sx={{
                 padding: { xs: "0.5rem 1rem", sm: "0.75rem 2rem" },
@@ -152,7 +146,7 @@ const HeroSection = () => {
                 },
               }}
             >
-              Become a Member
+              Join The Community
             </Button>
           </Link>
         </motion.div>
