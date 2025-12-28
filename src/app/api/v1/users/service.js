@@ -212,12 +212,16 @@ export default class UserService {
                         console.log(`🌟 Awarding Volunteer Star Badge to ${currentUser.userID}`);
                         updateData.badges = [...currentBadges, Constants.BADGES.VOLUNTEER_STAR.id];
                         
+                        // Fetch badge details from DB for notification
+                        const badge = await BadgeModel.getBadgeById(Constants.BADGES.VOLUNTEER_STAR.id);
+                        const badgeName = badge ? badge.name : Constants.BADGES.VOLUNTEER_STAR.name;
+
                         // Notify about badge
                         await NotificationService.create({
                             userID: currentUser.userID,
                             type: 'success',
                             title: 'New Badge Earned!',
-                            message: `You earned the "${Constants.BADGES.VOLUNTEER_STAR.name}" badge for logging 10+ volunteer hours!`,
+                            message: `You earned the "${badgeName}" badge for logging 10+ volunteer hours!`,
                             link: `/dashboard/${currentUser.userID}/profile`,
                             metadata: { badgeID: Constants.BADGES.VOLUNTEER_STAR.id }
                         });

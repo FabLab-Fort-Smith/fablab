@@ -1,6 +1,7 @@
 import Bounty from "./class";
 import BountyModel from "./model";
 import UserModel from "../users/model";
+import BadgeModel from "../badges/model";
 import NotificationService from "../notifications/service";
 import AuthService from "../../auth/[...nextauth]/service";
 import { 
@@ -61,7 +62,8 @@ export default class BountyService {
             data.startsAt,
             data.isInfinite,
             data.endsAt,
-            data.imageUrl
+            data.imageUrl,
+            data.badgeRewardID
         );
         
         const createdBounty = await BountyModel.createBounty(bounty);
@@ -117,21 +119,40 @@ export default class BountyService {
                 const baseUrl = process.env.NEXT_PUBLIC_URL || 'https://the-lab.fablabfortsmith.org';
                 const bountyUrl = `${baseUrl}/dashboard/bounties/${bounty.bountyID}`;
                 
+                // Fetch badge image if applicable
+                let badgeImage = null;
+                if (bounty.badgeRewardID) {
+                    try {
+                        const badge = await BadgeModel.getBadgeById(bounty.badgeRewardID);
+                        if (badge && badge.imageUrl) {
+                            badgeImage = badge.imageUrl;
+                        }
+                    } catch (e) {
+                        console.error("Error fetching badge for Discord notification:", e);
+                    }
+                }
+
+                const embed = {
+                    title: `🆕 New Bounty: ${bounty.title}`,
+                    description: bounty.description.length > 200 ? bounty.description.substring(0, 200) + '...' : bounty.description,
+                    url: bountyUrl,
+                    color: 0x4caf50, // Green
+                    fields: [
+                        { name: "Reward", value: `${bounty.rewardValue} ${bounty.rewardType}`, inline: true },
+                        { name: "Stake", value: `${bounty.stakeValue} pts`, inline: true },
+                        { name: "Type", value: bounty.isInfinite ? "Infinite (Multi-user)" : "Single Claim", inline: true }
+                    ],
+                    footer: { text: "FabLab Fort Smith • The Lab" },
+                    timestamp: new Date().toISOString()
+                };
+
+                if (badgeImage) {
+                    embed.thumbnail = { url: badgeImage };
+                }
+                
                 // We don't await this to block the response, but we want to log if it fails
                 DiscordService.sendChannelMessage(BOUNTY_CHANNEL_ID, {
-                    embeds: [{
-                        title: `🆕 New Bounty: ${bounty.title}`,
-                        description: bounty.description.length > 200 ? bounty.description.substring(0, 200) + '...' : bounty.description,
-                        url: bountyUrl,
-                        color: 0x4caf50, // Green
-                        fields: [
-                            { name: "Reward", value: `${bounty.rewardValue} ${bounty.rewardType}`, inline: true },
-                            { name: "Stake", value: `${bounty.stakeValue} pts`, inline: true },
-                            { name: "Type", value: bounty.isInfinite ? "Infinite (Multi-user)" : "Single Claim", inline: true }
-                        ],
-                        footer: { text: "FabLab Fort Smith • The Lab" },
-                        timestamp: new Date().toISOString()
-                    }]
+                    embeds: [embed]
                 }).then(() => console.log("✅ Discord notification sent."))
                   .catch(err => console.error("❌ Failed to send Discord notification:", err));
 
@@ -440,12 +461,20 @@ export default class BountyService {
                     const totalHours = (updates.membership.volunteerLog || []).reduce((acc, log) => acc + (Number(log.hours) || 0), 0);
                     if (totalHours >= 10 && !user.badges?.includes(Constants.BADGES.VOLUNTEER_STAR.id)) {
                         updates.badges = [...(user.badges || []), Constants.BADGES.VOLUNTEER_STAR.id];
+                        
+                        // Fetch badge details from DB
+                        let badgeName = Constants.BADGES.VOLUNTEER_STAR.name;
+                        try {
+                            const badge = await BadgeModel.getBadgeById(Constants.BADGES.VOLUNTEER_STAR.id);
+                            if (badge) badgeName = badge.name;
+                        } catch (e) { console.error("Error fetching badge details", e); }
+
                         // Notify about badge
                         await NotificationService.create({
                             userID: assigneeID,
                             type: 'success',
                             title: 'New Badge Earned!',
-                            message: `You earned the "${Constants.BADGES.VOLUNTEER_STAR.name}" badge for logging 10+ volunteer hours!`,
+                            message: `You earned the "${badgeName}" badge for logging 10+ volunteer hours!`,
                             link: `/dashboard/${assigneeID}/profile`,
                             metadata: { badgeID: Constants.BADGES.VOLUNTEER_STAR.id }
                         });
@@ -466,15 +495,43 @@ export default class BountyService {
                 
                 if ((completedBountiesCount + 1) >= 5 && !user.badges?.includes(Constants.BADGES.BOUNTY_HUNTER.id)) {
                      updates.badges = [...(updates.badges || user.badges || []), Constants.BADGES.BOUNTY_HUNTER.id];
+                     
+                     // Fetch badge details from DB
+                     let badgeName = Constants.BADGES.BOUNTY_HUNTER.name;
+                     try {
+                         const badge = await BadgeModel.getBadgeById(Constants.BADGES.BOUNTY_HUNTER.id);
+                         if (badge) badgeName = badge.name;
+                     } catch (e) { console.error("Error fetching badge details", e); }
+
                      // Notify about badge
                         await NotificationService.create({
                             userID: assigneeID,
                             type: 'success',
                             title: 'New Badge Earned!',
-                            message: `You earned the "${Constants.BADGES.BOUNTY_HUNTER.name}" badge for completing 5+ bounties!`,
+                            message: `You earned the "${badgeName}" badge for completing 5+ bounties!`,
                             link: `/dashboard/${assigneeID}/profile`,
                             metadata: { badgeID: Constants.BADGES.BOUNTY_HUNTER.id }
                         });
+                }
+
+                // Check for specific Bounty Badge Reward
+                if (bounty.badgeRewardID) {
+                    const badge = await BadgeModel.getBadgeById(bounty.badgeRewardID);
+                    // Check if user already has it or if we already added it in updates
+                    const currentBadges = updates.badges || user.badges || [];
+                    if (badge && !currentBadges.includes(bounty.badgeRewardID)) {
+                        updates.badges = [...currentBadges, bounty.badgeRewardID];
+                        
+                        // Notify about badge
+                        await NotificationService.create({
+                            userID: assigneeID,
+                            type: 'success',
+                            title: 'New Badge Earned!',
+                            message: `You earned the "${badge.name}" badge for completing this bounty!`,
+                            link: `/dashboard/${assigneeID}/profile`,
+                            metadata: { badgeID: bounty.badgeRewardID }
+                        });
+                    }
                 }
 
                 await UserModel.updateUser({ userID: assigneeID }, updates);

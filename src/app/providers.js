@@ -118,6 +118,11 @@ const ADMIN_NAVIGATION = [
         icon: <LightbulbIcon />
     },
     {
+        segment: 'dashboard/admin/badges',
+        title: 'Badge Management',
+        icon: <EmojiEventsIcon />
+    },
+    {
         segment: 'dashboard/admin/contact',
         title: 'Contact Submissions',
         icon: <EmailIcon />

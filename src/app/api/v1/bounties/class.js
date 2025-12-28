@@ -13,7 +13,8 @@ export default class Bounty {
         startsAt = null,
         isInfinite = false,
         endsAt = null,
-        imageUrl = null
+        imageUrl = null,
+        badgeRewardID = null
     ) {
         this.bountyID = `bounty-${uuidv4().slice(0, 8)}`;
         this.title = title;
@@ -28,6 +29,7 @@ export default class Bounty {
         this.isInfinite = isInfinite;
         this.endsAt = endsAt ? new Date(endsAt) : null;
         this.imageUrl = imageUrl;
+        this.badgeRewardID = badgeRewardID;
         
         this.status = 'open'; // open, assigned, completed, verified, cancelled
         this.assignedTo = null; // userID (Legacy/Single claim)

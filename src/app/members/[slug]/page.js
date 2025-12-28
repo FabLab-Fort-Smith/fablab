@@ -33,11 +33,23 @@ export default function PublicProfilePage() {
     const [bounties, setBounties] = useState([]);
     const [tabValue, setTabValue] = useState(0);
     const [selectedShowcaseItem, setSelectedShowcaseItem] = useState(null);
+    const [badges, setBadges] = useState({});
+
+    useEffect(() => {
+        // Fetch Badges
+        fetch('/api/v1/badges')
+            .then(res => res.json())
+            .then(data => {
+                const badgeMap = {};
+                (data.badges || []).forEach(b => badgeMap[b.id] = b);
+                setBadges(badgeMap);
+            })
+            .catch(err => console.error("Failed to fetch badges", err));
+    }, []);
 
     // Helper to get badge details
     const getBadgeDetails = (badgeId) => {
-        const badgeKey = Object.keys(Constants.BADGES).find(key => Constants.BADGES[key].id === badgeId);
-        return badgeKey ? Constants.BADGES[badgeKey] : null;
+        return badges[badgeId] || null;
     };
 
     const handleDiscordClick = () => {

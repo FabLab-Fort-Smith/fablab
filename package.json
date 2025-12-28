@@ -43,7 +43,8 @@
     "react-qr-code": "^2.0.18",
     "react-square-web-payments-sdk": "^3.2.1",
     "recharts": "^2.15.0",
-    "square": "^39.1.1"
+    "square": "^39.1.1",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

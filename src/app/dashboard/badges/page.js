@@ -1,14 +1,30 @@
 "use client";
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Box, Typography, Grid, Card, CardContent, Avatar, 
-    Container, Paper, Chip, useTheme 
+    Container, Paper, Chip, useTheme, CircularProgress
 } from '@mui/material';
-import Constants from '@/lib/constants';
 
 export default function BadgeDirectoryPage() {
     const theme = useTheme();
-    const badges = Object.values(Constants.BADGES);
+    const [badges, setBadges] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetch('/api/v1/badges')
+            .then(res => res.json())
+            .then(data => setBadges(data.badges || []))
+            .catch(err => console.error("Failed to fetch badges", err))
+            .finally(() => setLoading(false));
+    }, []);
+
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
 
     return (
         <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -40,6 +56,7 @@ export default function BadgeDirectoryPage() {
                             }}
                         >
                             <Avatar 
+                                src={badge.imageUrl}
                                 sx={{ 
                                     width: 80, 
                                     height: 80, 
@@ -48,7 +65,7 @@ export default function BadgeDirectoryPage() {
                                     mb: 2
                                 }}
                             >
-                                {badge.icon}
+                                {!badge.imageUrl && (badge.icon || '🏅')}
                             </Avatar>
                             <CardContent>
                                 <Typography variant="h6" gutterBottom>

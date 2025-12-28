@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
 import Constants from '@/lib/constants';
 import DiscordService from '@/lib/discord';
+import BadgeModel from '../../badges/model';
 
 const FLAGS = {
     "flag{curiosity_killed_the_cat_but_satisfaction_brought_it_back}": {
@@ -108,9 +109,17 @@ export async function POST(request) {
         };
 
         // Add Badge if applicable
+        let badgeDetails = null;
         if (flagData.badge) {
             if (!updateOps.$addToSet) updateOps.$addToSet = {};
             updateOps.$addToSet.badges = flagData.badge.id;
+            
+            // Fetch from DB
+            try {
+                badgeDetails = await BadgeModel.getBadgeById(flagData.badge.id);
+            } catch (err) {
+                console.error("Failed to fetch badge details:", err);
+            }
         }
 
         // Update user
@@ -126,18 +135,29 @@ export async function POST(request) {
             
             // 1. Notify for Badge
             if (flagData.badge) {
+                const badgeName = badgeDetails ? badgeDetails.name : flagData.badge.name;
+                const badgeIcon = badgeDetails ? (badgeDetails.icon || '🏅') : flagData.badge.icon;
+                const badgeDesc = badgeDetails ? badgeDetails.description : flagData.badge.description;
+                const badgeImage = badgeDetails ? badgeDetails.imageUrl : null;
+
+                const embed = {
+                    title: "🏅 Badge Earned!",
+                    description: `**${username}** has earned the **${badgeName}** badge!`,
+                    color: 0xFFD700, // Gold
+                    fields: [
+                        { name: "Badge", value: `${badgeIcon} ${badgeDesc}`, inline: true },
+                        { name: "Reward", value: `${flagData.stake} Stake`, inline: true }
+                    ],
+                    footer: { text: "The Lab Terminal" },
+                    timestamp: new Date().toISOString()
+                };
+
+                if (badgeImage) {
+                    embed.thumbnail = { url: badgeImage };
+                }
+
                 await DiscordService.sendHackTheLabNotification({
-                    embeds: [{
-                        title: "🏅 Badge Earned!",
-                        description: `**${username}** has earned the **${flagData.badge.name}** badge!`,
-                        color: 0xFFD700, // Gold
-                        fields: [
-                            { name: "Badge", value: `${flagData.badge.icon} ${flagData.badge.description}`, inline: true },
-                            { name: "Reward", value: `${flagData.stake} Stake`, inline: true }
-                        ],
-                        footer: { text: "The Lab Terminal" },
-                        timestamp: new Date().toISOString()
-                    }]
+                    embeds: [embed]
                 });
             }
 

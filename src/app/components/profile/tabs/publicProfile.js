@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Box, TextField, Grid, Switch, FormControlLabel, Typography, useTheme, Paper, FormControl, FormLabel, FormGroup, Checkbox, Chip, Autocomplete, Tooltip, Link } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import { Box, TextField, Grid, Switch, FormControlLabel, Typography, useTheme, Paper, FormControl, FormLabel, FormGroup, Checkbox, Chip, Autocomplete, Tooltip, Link, Avatar } from '@mui/material';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import TwitterIcon from '@mui/icons-material/Twitter';
@@ -10,9 +10,30 @@ import Constants from '@/lib/constants';
 const PublicProfileTab = ({ user, onEdit }) => {
     const theme = useTheme();
     const [skillInput, setSkillInput] = useState('');
+    const [dbBadges, setDbBadges] = useState([]);
+
+    useEffect(() => {
+        const fetchBadges = async () => {
+            try {
+                const res = await fetch('/api/v1/badges');
+                if (res.ok) {
+                    const data = await res.json();
+                    setDbBadges(data.badges || []);
+                }
+            } catch (err) {
+                console.error("Failed to fetch badges", err);
+            }
+        };
+        fetchBadges();
+    }, []);
 
     // Helper to get badge details
     const getBadgeDetails = (badgeId) => {
+        // Check DB first
+        const dbBadge = dbBadges.find(b => b.id === badgeId);
+        if (dbBadge) return dbBadge;
+
+        // Fallback to Constants
         const badgeKey = Object.keys(Constants.BADGES).find(key => Constants.BADGES[key].id === badgeId);
         return badgeKey ? Constants.BADGES[badgeKey] : null;
     };
@@ -100,7 +121,8 @@ const PublicProfileTab = ({ user, onEdit }) => {
                             return (
                                 <Tooltip key={badgeId} title={badge.description}>
                                     <Chip 
-                                        label={`${badge.icon} ${badge.name}`} 
+                                        avatar={badge.imageUrl ? <Avatar src={badge.imageUrl} alt={badge.name} /> : null}
+                                        label={badge.imageUrl ? badge.name : `${badge.icon || ''} ${badge.name}`} 
                                         variant="outlined" 
                                         color="primary"
                                         sx={{ fontWeight: 'bold' }}

@@ -36,8 +36,19 @@ export default function UserProfileView({ user, isPublicView = false }) {
     const [bounties, setBounties] = useState([]);
     const [selectedShowcaseItem, setSelectedShowcaseItem] = useState(null);
     const [loadingData, setLoadingData] = useState(false);
+    const [badges, setBadges] = useState({});
 
     useEffect(() => {
+        // Fetch Badges
+        fetch('/api/v1/badges')
+            .then(res => res.json())
+            .then(data => {
+                const badgeMap = {};
+                (data.badges || []).forEach(b => badgeMap[b.id] = b);
+                setBadges(badgeMap);
+            })
+            .catch(err => console.error("Failed to fetch badges", err));
+
         if (user?.userID) {
             setLoadingData(true);
             // Fetch Showcase Items
@@ -64,8 +75,7 @@ export default function UserProfileView({ user, isPublicView = false }) {
     const getBadgeDetails = (badgeEntry) => {
         // Handle both string IDs and legacy object storage
         const badgeId = typeof badgeEntry === 'object' ? badgeEntry.id : badgeEntry;
-        const badgeKey = Object.keys(Constants.BADGES).find(key => Constants.BADGES[key].id === badgeId);
-        return badgeKey ? Constants.BADGES[badgeKey] : null;
+        return badges[badgeId] || null;
     };
 
     const SocialLink = ({ icon, url }) => {
@@ -412,12 +422,17 @@ export default function UserProfileView({ user, isPublicView = false }) {
                 <Box sx={{ maxWidth: 935, mx: 'auto' }}>
                     {user.badges && user.badges.length > 0 ? (
                         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: { xs: 0.5, md: 3 } }}>
-                            {user.badges.map((badgeId) => {
-                                const badge = getBadgeDetails(badgeId);
+                            {user.badges.map((badgeEntry, index) => {
+                                const badge = getBadgeDetails(badgeEntry);
                                 if (!badge) return null;
+                                
+                                // Ensure unique key even if badgeEntry is an object or duplicate
+                                const badgeId = typeof badgeEntry === 'object' ? (badgeEntry.id || index) : badgeEntry;
+                                const key = `${badgeId}-${index}`;
+
                                 return (
                                     <Box 
-                                        key={badgeId} 
+                                        key={key} 
                                         sx={{ 
                                             aspectRatio: '1/1', 
                                             position: 'relative', 
@@ -431,9 +446,22 @@ export default function UserProfileView({ user, isPublicView = false }) {
                                             '&:hover .overlay': { opacity: 1 }
                                         }}
                                     >
-                                        <Box sx={{ fontSize: '4rem' }}>
-                                            {badge.icon}
-                                        </Box>
+                                        {badge.imageUrl ? (
+                                            <Box 
+                                                component="img"
+                                                src={badge.imageUrl}
+                                                alt={badge.name}
+                                                sx={{ 
+                                                    width: '60%', 
+                                                    height: '60%', 
+                                                    objectFit: 'contain' 
+                                                }}
+                                            />
+                                        ) : (
+                                            <Box sx={{ fontSize: '4rem' }}>
+                                                {badge.icon}
+                                            </Box>
+                                        )}
                                         
                                         {/* Hover Overlay */}
                                         <Box 

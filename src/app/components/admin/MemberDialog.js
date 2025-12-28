@@ -45,6 +45,16 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
     const [formData, setFormData] = useState(null);
     const [newLog, setNewLog] = useState({ hours: '', description: '', date: new Date().toISOString().split('T')[0] });
     const [tabValue, setTabValue] = useState(0);
+    const [badges, setBadges] = useState([]);
+
+    useEffect(() => {
+        if (open) {
+            fetch('/api/v1/badges')
+                .then(res => res.json())
+                .then(data => setBadges(data.badges || []))
+                .catch(err => console.error("Failed to fetch badges", err));
+        }
+    }, [open]);
     
     // Nudge State
     const [nudgeDialogOpen, setNudgeDialogOpen] = useState(false);
@@ -715,7 +725,7 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                 <TabPanel value={tabValue} index={3}>
                     <Typography variant="h6" gutterBottom>Manage Badges</Typography>
                     <Grid container spacing={2}>
-                        {Object.values(Constants.BADGES).map((badge) => (
+                        {badges.map((badge) => (
                             <Grid item xs={12} sm={6} key={badge.id}>
                                 <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
                                     <Checkbox 
@@ -729,7 +739,11 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                     />
                                     <Box>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            <Typography variant="h5">{badge.icon}</Typography>
+                                            {badge.imageUrl ? (
+                                                <img src={badge.imageUrl} alt={badge.name} style={{ width: 32, height: 32, borderRadius: '50%' }} />
+                                            ) : (
+                                                <Typography variant="h5">{badge.icon}</Typography>
+                                            )}
                                             <Typography variant="subtitle1" fontWeight="bold">{badge.name}</Typography>
                                         </Box>
                                         <Typography variant="body2" color="text.secondary">{badge.description}</Typography>
