@@ -31,7 +31,7 @@ export default function Layout({ children }) {
           minHeight: "100vh",
           height: "100%",
           padding: { xs: "1rem", md: "2rem" },
-          paddingBottom: { xs: "80px", md: "2rem" },
+          paddingBottom: { xs: "120px", md: "2rem" },
           display: "flex",
           flexDirection: "column",
         }}

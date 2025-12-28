@@ -17,6 +17,7 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import CollectionsIcon from '@mui/icons-material/Collections';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import HistoryIcon from '@mui/icons-material/History';
+import LightbulbIcon from '@mui/icons-material/Lightbulb';
 
 const getUserNavigation = (userID) => [
     {
@@ -103,6 +104,11 @@ const ADMIN_NAVIGATION = [
         segment: 'dashboard/checkin-log',
         title: 'Check-in Log',
         icon: <HistoryIcon />
+    },
+    {
+        segment: 'dashboard/admin/bounty-ideas',
+        title: 'Bounty Ideas',
+        icon: <LightbulbIcon />
     }
 ];
 

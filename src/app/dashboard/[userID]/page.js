@@ -29,7 +29,8 @@ import {
     BugReport as BugIcon,
     EmojiEvents as BadgeIcon,
     Collections as ShowcaseIcon,
-    LocationOn as CheckInIcon
+    LocationOn as CheckInIcon,
+    Lightbulb as IdeaIcon
 } from "@mui/icons-material";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -221,7 +222,13 @@ const DashboardPage = ({ params }) => {
           icon: <HelpIcon fontSize="large" />, 
           action: () => window.open("/api/v1/discord/invite", "_blank"),
           desc: 'Get help'
-      }
+      },
+      ...(session?.user?.role === 'admin' ? [{
+          title: 'Bounty Ideas',
+          icon: <IdeaIcon fontSize="large" />,
+          path: '/dashboard/admin/bounty-ideas',
+          desc: 'Manage ideas'
+      }] : [])
   ];
 
   return (

@@ -97,6 +97,12 @@ const UserHeader = ({ onSave, hasChanges, activeTab, setActiveTab, user }) => {
                 <MenuItem onClick={onSave} disabled={!hasChanges}>
                     Save Changes
                 </MenuItem>
+                
+                {user?.role === 'admin' && (
+                    <MenuItem onClick={() => window.location.href = '/dashboard/admin/bounty-ideas'}>
+                        Manage Bounty Ideas
+                    </MenuItem>
+                )}
             </Menu>
 
             <Snackbar 

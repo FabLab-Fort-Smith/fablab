@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     Box, Typography, Paper, Chip, IconButton, Tooltip, CircularProgress,
     Container, Card, CardContent, Stack, Avatar, useTheme, useMediaQuery,
-    TextField, InputAdornment
+    TextField, InputAdornment, Tabs, Tab
 } from '@mui/material';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -29,6 +29,7 @@ export default function OnboardingReviewsPage() {
     const [selectedUser, setSelectedUser] = useState(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [tabValue, setTabValue] = useState(0);
 
     // Nudge State
     const [nudgeDialogOpen, setNudgeDialogOpen] = useState(false);
@@ -165,11 +166,34 @@ export default function OnboardingReviewsPage() {
         }
     };
 
-    const filteredUsers = users.filter(user => 
-        user.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const handleTabChange = (event, newValue) => {
+        setTabValue(newValue);
+    };
+
+    const getFilteredUsers = () => {
+        let filtered = users;
+        
+        // Filter by Tab
+        if (tabValue === 0) {
+            filtered = filtered.filter(u => u.membership?.reviewStatus !== 'reviewed');
+        } else {
+            filtered = filtered.filter(u => u.membership?.reviewStatus === 'reviewed');
+        }
+
+        // Filter by Search
+        if (searchTerm) {
+            const lowerTerm = searchTerm.toLowerCase();
+            filtered = filtered.filter(user => 
+                user.firstName?.toLowerCase().includes(lowerTerm) ||
+                user.lastName?.toLowerCase().includes(lowerTerm) ||
+                user.email?.toLowerCase().includes(lowerTerm)
+            );
+        }
+        
+        return filtered;
+    };
+
+    const displayUsers = getFilteredUsers();
 
     const columns = [
         { field: 'firstName', headerName: 'First Name', flex: 1 },
@@ -235,6 +259,19 @@ export default function OnboardingReviewsPage() {
                 </Typography>
             </Box>
 
+            <Paper sx={{ mb: 3 }}>
+                <Tabs 
+                    value={tabValue} 
+                    onChange={handleTabChange} 
+                    indicatorColor="primary" 
+                    textColor="primary"
+                    variant="fullWidth"
+                >
+                    <Tab label="Needs Review" />
+                    <Tab label="Reviewed" />
+                </Tabs>
+            </Paper>
+
             {isMobile ? (
                 <Box>
                     <TextField
@@ -252,7 +289,7 @@ export default function OnboardingReviewsPage() {
                         }}
                     />
                     <Stack spacing={2}>
-                        {filteredUsers.map((user) => {
+                        {displayUsers.map((user) => {
                             const isReviewed = user.membership?.reviewStatus === 'reviewed';
                             const date = user.membership?.applicationDate ? new Date(user.membership.applicationDate).toLocaleDateString() : 'N/A';
                             
@@ -306,7 +343,7 @@ export default function OnboardingReviewsPage() {
                                 </Card>
                             );
                         })}
-                        {filteredUsers.length === 0 && (
+                        {displayUsers.length === 0 && (
                             <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 4 }}>
                                 No applicants found matching your search.
                             </Typography>
@@ -316,7 +353,7 @@ export default function OnboardingReviewsPage() {
             ) : (
                 <Paper sx={{ height: 600, width: '100%' }}>
                     <DataGrid
-                        rows={users}
+                        rows={displayUsers}
                         columns={columns}
                         getRowId={(row) => row.userID}
                         slots={{ toolbar: GridToolbar }}
