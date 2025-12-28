@@ -61,7 +61,7 @@ const DashboardPage = ({ params }) => {
     const fetchUser = async () => {
       if (session?.user?.userID) {
         try {
-          const res = await fetch(`/api/v1/users?userID=${session.user.userID}`);
+          const res = await fetch(`/api/v1/users?userID=${session.user.userID}`, { cache: 'no-store' });
           if (res.ok) {
             const data = await res.json();
             setUserData(data.user);
@@ -135,9 +135,10 @@ const DashboardPage = ({ params }) => {
 
   // Determine active step
   let activeStep = 0;
-  let showProgress = true;
+  let showProgress = false;
 
   if (userData) {
+      showProgress = true;
       const m = userData.membership || {};
       // Calculate total hours from volunteer log
       const totalHours = (m.volunteerLog || []).reduce((acc, log) => acc + Number(log.hours), 0);
