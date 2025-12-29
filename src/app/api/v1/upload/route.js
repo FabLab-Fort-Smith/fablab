@@ -4,11 +4,11 @@ import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand } fr
 // Initialize S3 Client (Server-Side Only)
 const s3Client = new S3Client({
     region: process.env.S3_REGION || 'us-east-1',
-    endpoint: process.env.S3_ENDPOINT,
+    endpoint: process.env.S3_ENDPOINT || 'http://23.94.251.158:9000',
     forcePathStyle: true,
     credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY,
-        secretAccessKey: process.env.S3_SECRET_KEY,
+        accessKeyId: process.env.S3_ACCESS_KEY || 'admin',
+        secretAccessKey: process.env.S3_SECRET_KEY || 'Beyond66_Secure_Minio_2025',
     }
 });
 
@@ -31,11 +31,19 @@ export async function POST(req) {
         const formData = await req.formData();
         const file = formData.get('file');
 
+        // Fallback to hardcoded bucket if env var is missing (temporary fix)
+        const bucketName = process.env.S3_BUCKET_NAME || 'fablab-bounties';
+
+        console.log("DEBUG: S3 Env Vars:", {
+            bucket: bucketName,
+            endpoint: process.env.S3_ENDPOINT || 'http://23.94.251.158:9000',
+            region: process.env.S3_REGION || 'us-east-1'
+        });
+
         if (!file) {
             return NextResponse.json({ error: "No file provided" }, { status: 400 });
         }
 
-        const bucketName = process.env.S3_BUCKET_NAME;
         if (!bucketName) {
             console.error("S3_BUCKET_NAME is not defined");
             return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
@@ -60,7 +68,7 @@ export async function POST(req) {
         // If using MinIO locally, it might be http://localhost:9000/bucket/key
         // If using AWS, it might be https://bucket.s3.region.amazonaws.com/key
         // We'll use the endpoint + bucket + key logic for MinIO compatibility
-        const endpoint = process.env.S3_ENDPOINT;
+        const endpoint = process.env.S3_ENDPOINT || 'http://23.94.251.158:9000';
         const publicUrl = `${endpoint}/${bucketName}/${fileKey}`;
 
         return NextResponse.json({ url: publicUrl });

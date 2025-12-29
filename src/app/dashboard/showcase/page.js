@@ -137,6 +137,7 @@ export default function ShowcasePage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     id: selectedShowcase.id, 
+                    userID: session.user.userID, // Required by controller validation
                     action: 'share',
                     senderID: session.user.userID,
                     recipientID: recipientID
@@ -347,7 +348,7 @@ export default function ShowcasePage() {
                                 {/* Image */}
                                 <CardMedia
                                     component="img"
-                                    image={item.imageUrls[0]}
+                                    image={item.imageUrls[0]?.startsWith('http://') ? `/api/image-proxy?url=${encodeURIComponent(item.imageUrls[0])}` : item.imageUrls[0]}
                                     alt={item.title}
                                     sx={{ 
                                         width: '100%', 
