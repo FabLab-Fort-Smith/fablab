@@ -1,9 +1,9 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { 
-    Box, Typography, Grid, Card, CardContent, Chip, 
+    Box, Typography, Card, CardContent, Chip, 
     LinearProgress, useTheme, Dialog, DialogContent, IconButton,
-    CardActionArea, Button
+    CardActionArea, Button, Stack, Container, Avatar
 } from '@mui/material';
 import { motion, AnimatePresence } from 'motion/react';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
@@ -12,9 +12,11 @@ import StarIcon from '@mui/icons-material/Star';
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import LoopIcon from '@mui/icons-material/Loop';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import Link from 'next/link';
+import QRCode from "react-qr-code";
 
-const MotionGrid = motion(Grid);
+const MotionCard = motion(Card);
 
 export default function BoardBountiesPage() {
     const theme = useTheme();
@@ -30,7 +32,6 @@ export default function BoardBountiesPage() {
                 const res = await fetch('/api/v1/bounties');
                 if (res.ok) {
                     const data = await res.json();
-                    // Filter for open bounties only
                     const openBounties = (data.bounties || []).filter(b => b.status === 'open');
                     setBounties(openBounties);
                 }
@@ -42,8 +43,6 @@ export default function BoardBountiesPage() {
         };
 
         fetchBounties();
-        
-        // Refresh every 5 minutes
         const interval = setInterval(fetchBounties, 5 * 60 * 1000);
         return () => clearInterval(interval);
     }, []);
@@ -56,232 +55,167 @@ export default function BoardBountiesPage() {
         setSelectedBounty(null);
     };
 
-    if (loading) return <LinearProgress />;
+    if (loading) return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+            <LinearProgress sx={{ width: '50%' }} />
+        </Box>
+    );
 
     return (
-        <Box sx={{ p: 4, height: '100vh', display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ 
+            minHeight: '100vh', 
+            bgcolor: 'background.default',
+            p: 3
+        }}>
+            <Container maxWidth="sm" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                {/* Header */}
+                <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', position: 'relative' }}>
                     <Button 
                         component={Link} 
                         href="/board" 
                         startIcon={<ArrowBackIcon />}
-                        size="large"
-                        sx={{ color: 'text.primary' }}
+                        sx={{ 
+                            position: 'absolute', 
+                            left: 0,
+                            minWidth: 'auto',
+                            p: 1,
+                            borderRadius: '50%',
+                            bgcolor: 'action.hover'
+                        }}
                     >
-                        Back
                     </Button>
-                    <Typography variant="h3" component="h1" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                        Available Bounties
+                    <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold', width: '100%', textAlign: 'center' }}>
+                        Bounties
                     </Typography>
                 </Box>
-                <Box sx={{ textAlign: 'right' }}>
-                    <Typography variant="h5" color="text.secondary">
-                        Tap for Details
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary">
-                        FabLab Fort Smith
-                    </Typography>
-                </Box>
-            </Box>
 
-            <Grid container spacing={3} sx={{ flexGrow: 1, alignContent: 'flex-start', overflowY: 'auto' }}>
-                <AnimatePresence>
-                    {bounties.map((bounty, index) => (
-                        <MotionGrid 
-                            item xs={12} md={6} lg={4} key={bounty._id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.1 }}
-                            layout
-                        >
-                            <Card sx={{ 
-                                height: '100%', 
-                                border: '1px solid rgba(0, 255, 0, 0.2)',
-                                boxShadow: '0 0 10px rgba(0, 255, 0, 0.1)',
-                                transition: 'transform 0.2s',
-                                '&:hover': { transform: 'scale(1.02)', boxShadow: '0 0 20px rgba(0, 255, 0, 0.3)' }
-                            }}>
-                                <CardActionArea onClick={() => handleCardClick(bounty)} sx={{ height: '100%', p: 2 }}>
-                                    <CardContent sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                                        <Typography variant="h4" component="div" gutterBottom sx={{ fontWeight: 'bold' }}>
-                                            {bounty.title}
-                                        </Typography>
-                                        
-                                        <Box sx={{ display: 'flex', gap: 1, mb: 3, flexWrap: 'wrap' }}>
-                                            {bounty.rewardType === 'hours' ? (
-                                                <Chip 
-                                                    icon={<AccessTimeIcon />} 
-                                                    label={`${bounty.rewardValue} Hours`} 
-                                                    color="success" 
-                                                    variant="outlined"
-                                                    sx={{ fontSize: '1.1rem', py: 2 }}
-                                                />
-                                            ) : (
-                                                <Chip 
-                                                    icon={<MonetizationOnIcon />} 
-                                                    label={bounty.rewardValue} 
-                                                    color="success" 
-                                                    variant="outlined"
-                                                    sx={{ fontSize: '1.1rem', py: 2 }}
-                                                />
-                                            )}
-                                            
-                                            {bounty.stakeValue > 0 && (
-                                                <Chip 
-                                                    icon={<StarIcon />} 
-                                                    label={`+${bounty.stakeValue} Stake`} 
-                                                    color="warning" 
-                                                    variant="outlined"
-                                                    sx={{ fontSize: '1.1rem', py: 2 }}
-                                                />
-                                            )}
-
-                                            {bounty.recurrence && bounty.recurrence !== 'none' && (
-                                                <Chip 
-                                                    icon={<LoopIcon />} 
-                                                    label={bounty.recurrence} 
-                                                    color="info" 
-                                                    variant="outlined"
-                                                    sx={{ fontSize: '1.1rem', py: 2, textTransform: 'capitalize' }}
-                                                />
-                                            )}
-                                        </Box>
-
-                                        <Typography variant="h6" color="text.secondary" sx={{ 
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            display: '-webkit-box',
-                                            WebkitLineClamp: 3,
-                                            WebkitBoxOrient: 'vertical',
+                {/* Bounties List */}
+                <Stack spacing={2} sx={{ flexGrow: 1, pb: 4 }}>
+                    <AnimatePresence>
+                        {bounties.map((bounty, index) => (
+                            <MotionCard 
+                                key={bounty._id}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.05 }}
+                                layout
+                                sx={{ 
+                                    borderRadius: 4,
+                                    overflow: 'visible',
+                                    boxShadow: theme.shadows[2],
+                                    bgcolor: 'background.paper'
+                                }}
+                            >
+                                <CardActionArea onClick={() => handleCardClick(bounty)} sx={{ p: 2 }}>
+                                    <Stack direction="row" spacing={2} alignItems="center">
+                                        {/* Icon Avatar */}
+                                        <Avatar sx={{ 
+                                            bgcolor: bounty.rewardType === 'hours' ? 'primary.light' : 'success.light',
+                                            color: bounty.rewardType === 'hours' ? 'primary.main' : 'success.main',
+                                            width: 56, height: 56
                                         }}>
-                                            {bounty.description}
-                                        </Typography>
-                                        
-                                        <Box sx={{ mt: 'auto', pt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-                                            <Typography variant="button" color="primary">
-                                                Tap to Claim &rarr;
+                                            {bounty.rewardType === 'hours' ? <AccessTimeIcon fontSize="large" /> : <MonetizationOnIcon fontSize="large" />}
+                                        </Avatar>
+
+                                        {/* Content */}
+                                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                                            <Typography variant="h6" noWrap sx={{ fontWeight: 'bold' }}>
+                                                {bounty.title}
                                             </Typography>
+                                            <Typography variant="body2" color="text.secondary" noWrap>
+                                                {bounty.description}
+                                            </Typography>
+                                            <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                                                <Chip 
+                                                    size="small" 
+                                                    label={bounty.rewardType === 'hours' ? `${bounty.rewardValue} Hrs` : bounty.rewardValue} 
+                                                    color={bounty.rewardType === 'hours' ? 'primary' : 'success'}
+                                                    variant="outlined"
+                                                />
+                                                {bounty.stakeValue > 0 && (
+                                                    <Chip 
+                                                        size="small" 
+                                                        icon={<StarIcon sx={{ fontSize: '1rem !important' }} />}
+                                                        label={`+${bounty.stakeValue}`} 
+                                                        color="warning" 
+                                                        variant="outlined"
+                                                    />
+                                                )}
+                                            </Stack>
                                         </Box>
-                                    </CardContent>
+
+                                        <ChevronRightIcon color="action" />
+                                    </Stack>
                                 </CardActionArea>
-                            </Card>
-                        </MotionGrid>
-                    ))}
-                </AnimatePresence>
-                
-                {bounties.length === 0 && (
-                    <Box sx={{ width: '100%', textAlign: 'center', mt: 10 }}>
-                        <Typography variant="h4" color="text.secondary">
-                            No active bounties at the moment.
-                        </Typography>
-                    </Box>
-                )}
-            </Grid>
+                            </MotionCard>
+                        ))}
+                    </AnimatePresence>
+                    
+                    {bounties.length === 0 && (
+                        <Box sx={{ textAlign: 'center', mt: 8, opacity: 0.6 }}>
+                            <Typography variant="h6">All caught up!</Typography>
+                            <Typography variant="body2">No active bounties right now.</Typography>
+                        </Box>
+                    )}
+                </Stack>
+            </Container>
 
             {/* Detail Modal */}
             <Dialog 
                 open={!!selectedBounty} 
                 onClose={handleClose}
-                maxWidth="md"
-                fullWidth
+                fullScreen
+                TransitionComponent={motion.div} // Simple transition
                 PaperProps={{
-                    sx: {
-                        borderRadius: 4,
-                        border: `2px solid ${theme.palette.primary.main}`,
-                        bgcolor: 'background.paper',
-                        backgroundImage: 'none'
-                    }
+                    sx: { bgcolor: 'background.default' }
                 }}
             >
                 {selectedBounty && (
-                    <DialogContent sx={{ p: 6, textAlign: 'center' }}>
-                        <IconButton 
-                            onClick={handleClose}
-                            sx={{ position: 'absolute', right: 16, top: 16 }}
-                        >
-                            <CloseIcon fontSize="large" />
-                        </IconButton>
+                    <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                            <IconButton onClick={handleClose} size="large" sx={{ bgcolor: 'action.hover' }}>
+                                <CloseIcon />
+                            </IconButton>
+                        </Box>
 
-                        <Typography variant="h3" gutterBottom sx={{ fontWeight: 'bold', mb: 4 }}>
-                            {selectedBounty.title}
-                        </Typography>
+                        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 1 }}>
+                                {selectedBounty.title}
+                            </Typography>
+                            
+                            <Stack direction="row" spacing={1} sx={{ mb: 4, justifyContent: 'center' }}>
+                                <Chip 
+                                    icon={selectedBounty.rewardType === 'hours' ? <AccessTimeIcon /> : <MonetizationOnIcon />} 
+                                    label={selectedBounty.rewardType === 'hours' ? `${selectedBounty.rewardValue} Hours` : selectedBounty.rewardValue} 
+                                    color={selectedBounty.rewardType === 'hours' ? 'primary' : 'success'}
+                                />
+                                {selectedBounty.recurrence && selectedBounty.recurrence !== 'none' && (
+                                    <Chip icon={<LoopIcon />} label={selectedBounty.recurrence} variant="outlined" />
+                                )}
+                            </Stack>
 
-                        <Grid container spacing={4}>
-                            <Grid item xs={12} md={8} sx={{ textAlign: 'left' }}>
-                                <Box sx={{ display: 'flex', gap: 2, mb: 4, flexWrap: 'wrap' }}>
-                                    {selectedBounty.rewardType === 'hours' ? (
-                                        <Chip 
-                                            icon={<AccessTimeIcon />} 
-                                            label={`${selectedBounty.rewardValue} Hours`} 
-                                            color="success" 
-                                            variant="filled"
-                                            sx={{ fontSize: '1.2rem', py: 3, px: 1 }}
-                                        />
-                                    ) : (
-                                        <Chip 
-                                            icon={<MonetizationOnIcon />} 
-                                            label={selectedBounty.rewardValue} 
-                                            color="success" 
-                                            variant="filled"
-                                            sx={{ fontSize: '1.2rem', py: 3, px: 1 }}
-                                        />
-                                    )}
-                                    
-                                    {selectedBounty.stakeValue > 0 && (
-                                        <Chip 
-                                            icon={<StarIcon />} 
-                                            label={`+${selectedBounty.stakeValue} Stake`} 
-                                            color="warning" 
-                                            variant="filled"
-                                            sx={{ fontSize: '1.2rem', py: 3, px: 1 }}
-                                        />
-                                    )}
+                            <Box sx={{ 
+                                p: 3, 
+                                bgcolor: 'white', 
+                                borderRadius: 4,
+                                boxShadow: theme.shadows[4],
+                                mb: 4
+                            }}>
+                                <QRCode
+                                    value={`${baseUrl}/dashboard/bounties?highlight=${selectedBounty.bountyID}`}
+                                    size={200}
+                                />
+                            </Box>
 
-                                    {selectedBounty.recurrence && selectedBounty.recurrence !== 'none' && (
-                                        <Chip 
-                                            icon={<LoopIcon />} 
-                                            label={selectedBounty.recurrence} 
-                                            color="info" 
-                                            variant="filled"
-                                            sx={{ fontSize: '1.2rem', py: 3, px: 1, textTransform: 'capitalize' }}
-                                        />
-                                    )}
-                                </Box>
-                                <Typography variant="h5" paragraph>
-                                    {selectedBounty.description}
-                                </Typography>
-                                <Typography variant="h6" color="text.secondary" sx={{ mt: 4 }}>
-                                    Requirements:
-                                </Typography>
-                                <Typography variant="body1" paragraph>
-                                    • Must be an active member<br/>
-                                    • Must have relevant safety training<br/>
-                                    • Completion verified by staff
-                                </Typography>
-                            </Grid>
-                            <Grid item xs={12} md={4} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                                <Box sx={{ 
-                                    p: 2, 
-                                    bgcolor: 'white', 
-                                    borderRadius: 2,
-                                    boxShadow: '0 0 20px rgba(255,255,255,0.2)'
-                                }}>
-                                    <img 
-                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`${baseUrl}/dashboard/bounties?highlight=${selectedBounty.bountyID}`)}&bgcolor=ffffff&color=000000`} 
-                                        alt="Scan to claim" 
-                                        style={{ width: 200, height: 200 }} 
-                                    />
-                                </Box>
-                                <Typography variant="h5" sx={{ mt: 3, fontWeight: 'bold', color: 'primary.main' }}>
-                                    SCAN TO CLAIM
-                                </Typography>
-                                <Typography variant="body1" color="text.secondary">
-                                    Open camera & scan
-                                </Typography>
-                            </Grid>
-                        </Grid>
-                    </DialogContent>
+                            <Typography variant="h6" color="primary" gutterBottom sx={{ fontWeight: 'bold' }}>
+                                SCAN TO CLAIM
+                            </Typography>
+
+                            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 400, mx: 'auto', mb: 4 }}>
+                                {selectedBounty.description}
+                            </Typography>
+                        </Box>
+                    </Box>
                 )}
             </Dialog>
         </Box>
