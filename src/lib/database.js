@@ -16,21 +16,17 @@ class Database {
 
     async connect() {
         if (this._instance) {
-            console.log("🔄 Closing existing MongoDB connection...");
-            await this.client.close();
-            this._instance = null;
+            return this._instance;
         }
     
-        if (!this._instance) {
-            try {
-                await this.client.connect();
-                console.log("✅ MongoDB Connected");
-                console.log("Using Database:", process.env.MONGODB_NAME || 'FabLab-Local');
-                this._instance = this.client.db(process.env.MONGODB_NAME || 'FabLab-Local');
-            } catch (error) {
-                console.error("❌ MongoDB Connection Error:", error);
-                throw new Error("Failed to connect to MongoDB");
-            }
+        try {
+            await this.client.connect();
+            console.log("✅ MongoDB Connected");
+            console.log("Using Database:", process.env.MONGODB_NAME || 'FabLab-Local');
+            this._instance = this.client.db(process.env.MONGODB_NAME || 'FabLab-Local');
+        } catch (error) {
+            console.error("❌ MongoDB Connection Error:", error);
+            throw new Error("Failed to connect to MongoDB");
         }
         return this._instance;
     }

@@ -25,14 +25,6 @@ const menuItems = [
         href: '#', // Placeholder
         color: 'secondary.main',
         disabled: true
-    },
-    {
-        title: 'Member Directory',
-        description: 'Connect with the community',
-        icon: <PeopleIcon sx={{ fontSize: 60, color: 'info.main' }} />,
-        href: '#', // Placeholder
-        color: 'info.main',
-        disabled: true
     }
 ];
 
@@ -56,12 +48,17 @@ export default function BoardDashboard() {
             >
                 <Box sx={{ textAlign: 'center', mb: 8 }}>
                     <img src="/logos/darkLogo.png" alt="FabLab Logo" style={{ height: 120, marginBottom: 20 }} />
-                    <Typography variant="h2" sx={{ fontWeight: 'bold', letterSpacing: 2 }}>
-                        THE LAB
-                    </Typography>
                     <Typography variant="h5" color="text.secondary" sx={{ mt: 2 }}>
                         Community Dashboard
                     </Typography>
+                    
+                <QRCode 
+                    value={`${process.env.NEXT_PUBLIC_URL}/dashboard/checkin`}
+                    size={150}
+                />
+                <Typography variant="subtitle1" sx={{ mt: 1, fontWeight: 'bold', color: 'black' }}>
+                    Scan to Check In
+                </Typography>
                 </Box>
             </motion.div>
 
@@ -106,25 +103,6 @@ export default function BoardDashboard() {
                 ))}
             </Grid>
 
-            {/* Check-in QR Code */}
-            <Box sx={{ 
-                position: 'absolute', 
-                bottom: 40, 
-                right: 40, 
-                bgcolor: 'white', 
-                p: 2, 
-                borderRadius: 2,
-                boxShadow: theme.shadows[8],
-                textAlign: 'center'
-            }}>
-                <QRCode 
-                    value={`${process.env.NEXT_PUBLIC_URL}/dashboard/checkin`}
-                    size={150}
-                />
-                <Typography variant="subtitle1" sx={{ mt: 1, fontWeight: 'bold', color: 'black' }}>
-                    Scan to Check In
-                </Typography>
-            </Box>
         </Box>
     );
 }

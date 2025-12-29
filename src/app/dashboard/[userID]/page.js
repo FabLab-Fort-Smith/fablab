@@ -36,6 +36,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import LoadingTerminal from "@/app/components/LoadingTerminal";
 import WaysToEarnStake from "@/app/components/dashboard/WaysToEarnStake";
+import { UnlockButton, UnlockAndCheckInButton } from "@/app/components/dashboard/LabControls";
 
 const DashboardPage = ({ params }) => {
   const { data: session, status } = useSession();
@@ -277,8 +278,10 @@ const DashboardPage = ({ params }) => {
             : `linear-gradient(45deg, ${theme.palette.grey[800]}, ${theme.palette.grey[900]})`,
           color: 'white',
           display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' },
           justifyContent: 'space-between',
-          alignItems: 'center'
+          alignItems: { xs: 'stretch', md: 'center' },
+          gap: 2
         }}
       >
         <Box>
@@ -289,22 +292,35 @@ const DashboardPage = ({ params }) => {
             {isCheckedIn ? "Don't forget to check out when you leave." : "Ready to make something awesome?"}
           </Typography>
         </Box>
-        <Button 
-          variant="contained" 
-          color={isCheckedIn ? "error" : "success"}
-          onClick={handleCheckInToggle}
-          disabled={checkInLoading}
-          startIcon={checkInLoading ? <CircularProgress size={20} color="inherit" /> : <CheckInIcon />}
-          sx={{ 
-            backgroundColor: isCheckedIn ? 'white' : theme.palette.success.light,
-            color: isCheckedIn ? theme.palette.error.main : theme.palette.success.contrastText,
-            '&:hover': {
-              backgroundColor: isCheckedIn ? '#f5f5f5' : theme.palette.success.main,
-            }
-          }}
-        >
-          {isCheckedIn ? "Check Out" : "Check In"}
-        </Button>
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2, width: { xs: '100%', md: 'auto' } }}>
+            {isCheckedIn ? (
+                <Button 
+                    variant="contained" 
+                    color="error"
+                    onClick={handleCheckInToggle}
+                    disabled={checkInLoading}
+                    startIcon={checkInLoading ? <CircularProgress size={20} color="inherit" /> : <CheckInIcon />}
+                    sx={{ 
+                        backgroundColor: 'white',
+                        color: theme.palette.error.main,
+                        '&:hover': { backgroundColor: '#f5f5f5' },
+                        whiteSpace: 'nowrap',
+                        flex: 1,
+                        py: 1.5
+                    }}
+                >
+                    Check Out
+                </Button>
+            ) : (
+                <UnlockAndCheckInButton 
+                    onCheckIn={handleCheckInToggle} 
+                    checkInLoading={checkInLoading} 
+                    sx={{ flex: 1, py: 1.5 }}
+                />
+            )}
+
+            <UnlockButton sx={{ flex: 1, py: 1.5 }} />
+        </Box>
       </Card>
 
       {/* Membership Progress */}
