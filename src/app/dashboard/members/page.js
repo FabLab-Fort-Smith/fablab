@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     Box, Typography, Paper, Chip, IconButton, Tooltip, 
     Card, CardContent, Grid, Avatar, useTheme, useMediaQuery, 
-    Container, TextField, InputAdornment, Stack, Button 
+    Container, TextField, InputAdornment, Stack, Button, Pagination 
 } from '@mui/material';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 import EditIcon from '@mui/icons-material/Edit';
@@ -26,6 +26,11 @@ export default function MembersPage() {
     const [selectedUser, setSelectedUser] = useState(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [paginationModel, setPaginationModel] = useState({
+        page: 0,
+        pageSize: 10,
+    });
+    const [rowCount, setRowCount] = useState(0);
 
     useEffect(() => {
         if (status === 'unauthenticated') {
@@ -34,17 +39,19 @@ export default function MembersPage() {
             if (session.user.role !== 'admin') {
                 router.push('/dashboard'); // Redirect non-admins
             } else {
-                fetchUsers();
+                fetchUsers(paginationModel.page + 1, paginationModel.pageSize);
             }
         }
-    }, [status, session, router]);
+    }, [status, session, router, paginationModel]);
 
-    const fetchUsers = async () => {
+    const fetchUsers = async (page = 1, limit = 10) => {
+        setLoading(true);
         try {
-            const response = await fetch('/api/v1/users');
+            const response = await fetch(`/api/v1/users?page=${page}&limit=${limit}`);
             if (response.ok) {
                 const data = await response.json();
                 setUsers(data.users || []);
+                setRowCount(data.total || 0);
             }
         } catch (error) {
             console.error("Failed to fetch users", error);
@@ -76,6 +83,7 @@ export default function MembersPage() {
     );
 
     const columns = [
+        { field: 'firstName', headerName: 'First Name', flex: 1 },
         { field: 'lastName', headerName: 'Last Name', flex: 1 },
         { field: 'email', headerName: 'Email', flex: 1.5 },
         { 
@@ -243,6 +251,14 @@ export default function MembersPage() {
                             );
                         })}
                     </Stack>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+                        <Pagination 
+                            count={Math.ceil(rowCount / paginationModel.pageSize)} 
+                            page={paginationModel.page + 1} 
+                            onChange={(e, value) => setPaginationModel(prev => ({ ...prev, page: value - 1 }))} 
+                            color="primary" 
+                        />
+                    </Box>
                 </Box>
             ) : (
                 <Paper sx={{ height: 'calc(100vh - 200px)', width: '100%' }}>
@@ -257,6 +273,12 @@ export default function MembersPage() {
                             },
                         }}
                         disableRowSelectionOnClick
+                        paginationMode="server"
+                        rowCount={rowCount}
+                        paginationModel={paginationModel}
+                        onPaginationModelChange={setPaginationModel}
+                        loading={loading}
+                        pageSizeOptions={[10, 25, 50, 100]}
                     />
                 </Paper>
             )}

@@ -50,7 +50,7 @@ const RegisterPage = () => {
 
       if (res.ok) {
         // Redirect to verify-email page after registration
-        window.location.href = "/auth/verify-email?registered=true";
+        window.location.href = `/auth/verify-email?registered=true&email=${encodeURIComponent(form.email)}`;
       } else {
         const errorData = await res.json();
         setError(errorData.message || "Registration failed.");

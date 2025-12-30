@@ -117,6 +117,49 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
         setNewLog({ hours: '', description: '', date: new Date().toISOString().split('T')[0] });
     };
 
+    const handleVerifyEmail = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/v1/users?userID=${user.userID}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'verified' })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setFormData(prev => ({ ...prev, status: 'verified' }));
+                if (onUpdate) onUpdate(data.user);
+            } else {
+                console.error("Failed to verify email");
+            }
+        } catch (error) {
+            console.error("Error verifying email:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResendVerification = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch('/api/auth/resend-verification', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: user.email })
+            });
+            if (res.ok) {
+                alert("Verification email sent!");
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to send email");
+            }
+        } catch (error) {
+            console.error("Error sending verification email:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleDeleteLog = (logId) => {
         setFormData(prev => ({
             ...prev,
@@ -747,6 +790,27 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                     <MenuItem value="suspended">Suspended</MenuItem>
                                 </Select>
                             </FormControl>
+                        </Box>
+
+                        <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                            <Typography variant="subtitle2" gutterBottom>Email Verification</Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                                <Chip 
+                                    label={formData.status === 'verified' ? "Verified" : "Unverified"} 
+                                    color={formData.status === 'verified' ? "success" : "warning"} 
+                                    variant="outlined"
+                                />
+                                {formData.status !== 'verified' && (
+                                    <>
+                                        <Button variant="outlined" size="small" onClick={handleVerifyEmail} disabled={loading}>
+                                            Manually Verify
+                                        </Button>
+                                        <Button variant="outlined" size="small" onClick={handleResendVerification} disabled={loading}>
+                                            Resend Email
+                                        </Button>
+                                    </>
+                                )}
+                            </Box>
                         </Box>
 
                         <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
