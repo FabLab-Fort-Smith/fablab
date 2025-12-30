@@ -28,7 +28,7 @@ export default function MembersPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [paginationModel, setPaginationModel] = useState({
         page: 0,
-        pageSize: 10,
+        pageSize: 25,
     });
     const [rowCount, setRowCount] = useState(0);
 
