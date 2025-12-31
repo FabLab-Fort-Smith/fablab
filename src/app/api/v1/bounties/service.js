@@ -27,27 +27,30 @@ export default class BountyService {
         // Better to check here.
         
         if (additionalStake > 0) {
-            const creator = await UserModel.getUserByQuery({ userID: data.creatorID });
-            if (creator && creator.role !== 'admin') {
-                if ((creator.stake || 0) < additionalStake) {
-                    throw new Error(`Insufficient stake. You have ${creator.stake || 0}, but tried to offer ${additionalStake} additional stake.`);
-                }
-                
-                // Deduct stake
-                await UserModel.updateUser(
-                    { userID: data.creatorID }, 
-                    { 
-                        stake: (creator.stake || 0) - additionalStake,
-                        $push: {
-                            stakeHistory: {
-                                amount: -additionalStake,
-                                reason: `Bounty Creation Cost: ${data.title}`,
-                                timestamp: new Date()
-                            }
+            const creator = await UserModel.getUserByID(data.creatorID);
+            
+            if (!creator) {
+                throw new Error("Creator not found.");
+            }
+
+            if ((creator.stake || 0) < additionalStake) {
+                throw new Error(`Insufficient stake. You have ${creator.stake || 0}, but tried to offer ${additionalStake} additional stake.`);
+            }
+            
+            // Deduct stake
+            await UserModel.updateUser(
+                { userID: data.creatorID }, 
+                { 
+                    stake: (creator.stake || 0) - additionalStake,
+                    $push: {
+                        stakeHistory: {
+                            amount: -additionalStake,
+                            reason: `Bounty Creation Cost: ${data.title}`,
+                            timestamp: new Date()
                         }
                     }
-                );
-            }
+                }
+            );
         }
 
         const bounty = new Bounty(
