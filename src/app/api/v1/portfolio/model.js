@@ -58,6 +58,7 @@ export default class PortfolioModel {
             {
                 $project: {
                     id: { $ifNull: ["$id", { $toString: "$_id" }] },
+                    userID: 1,
                     title: 1,
                     description: 1,
                     imageUrls: 1,
