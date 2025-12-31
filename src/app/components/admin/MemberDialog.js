@@ -435,7 +435,7 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                 </Box>
 
                 <TabPanel value={tabValue} index={0}>
-                    <Typography variant="h6" gutterBottom>Membership Progress</Typography>
+                    <Typography variant="h6" gutterBottom>Co-op Membership Progress</Typography>
                     <Stepper activeStep={activeStep} orientation="vertical">
                         <Step expanded>
                             <StepLabel>Account Created</StepLabel>
@@ -788,6 +788,18 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                     <MenuItem value="probation">Probation</MenuItem>
                                     <MenuItem value="active">Active Member</MenuItem>
                                     <MenuItem value="suspended">Suspended</MenuItem>
+                                </Select>
+                            </FormControl>
+
+                            <FormControl fullWidth>
+                                <InputLabel>Membership Type</InputLabel>
+                                <Select
+                                    value={formData.membership.type || 'community'}
+                                    label="Membership Type"
+                                    onChange={(e) => handleMembershipChange('type', e.target.value)}
+                                >
+                                    <MenuItem value="community">Community</MenuItem>
+                                    <MenuItem value="co-op">Co-op</MenuItem>
                                 </Select>
                             </FormControl>
                         </Box>

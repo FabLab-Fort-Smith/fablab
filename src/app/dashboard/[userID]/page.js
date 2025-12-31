@@ -16,8 +16,12 @@ import {
   Alert,
   IconButton,
   Paper,
-  CircularProgress
+  CircularProgress,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
 } from "@mui/material";
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { 
     Person as PersonIcon, 
     CardMembership as MembershipIcon, 
@@ -36,7 +40,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import LoadingTerminal from "@/app/components/LoadingTerminal";
 import WaysToEarnStake from "@/app/components/dashboard/WaysToEarnStake";
-import { UnlockButton, UnlockAndCheckInButton } from "@/app/components/dashboard/LabControls";
+import { UnlockButton, UnlockAndCheckInButton, CheckInButton } from "@/app/components/dashboard/LabControls";
 
 const DashboardPage = ({ params }) => {
   const { data: session, status } = useSession();
@@ -312,23 +316,36 @@ const DashboardPage = ({ params }) => {
                     Check Out
                 </Button>
             ) : (
-                <UnlockAndCheckInButton 
-                    onCheckIn={handleCheckInToggle} 
-                    checkInLoading={checkInLoading} 
-                    sx={{ flex: 1, py: 1.5 }}
-                />
+                userData?.membership?.type === 'community' ? (
+                    <CheckInButton 
+                        onCheckIn={handleCheckInToggle} 
+                        checkInLoading={checkInLoading} 
+                        sx={{ flex: 1, py: 1.5 }}
+                    />
+                ) : (
+                    <>
+                        <UnlockAndCheckInButton 
+                            onCheckIn={handleCheckInToggle} 
+                            checkInLoading={checkInLoading} 
+                            sx={{ flex: 1, py: 1.5 }}
+                        />
+                        <UnlockButton sx={{ flex: 1, py: 1.5 }} />
+                    </>
+                )
             )}
-
-            <UnlockButton sx={{ flex: 1, py: 1.5 }} />
         </Box>
       </Card>
 
       {/* Membership Progress */}
       {showProgress && (
-      <Card variant="outlined" sx={{ mb: 3, p: { xs: 1, md: 2 }, backgroundColor: theme.palette.background.paper, border: `1px solid ${theme.palette.primary.main}` }}>
-          <Typography variant="h6" gutterBottom color="primary">Membership Progress</Typography>
-          <Stepper 
-            activeStep={activeStep} 
+      <Card variant="outlined" sx={{ mb: 3, p: 0, backgroundColor: theme.palette.background.paper, border: `1px solid ${theme.palette.primary.main}` }}>
+          <Accordion defaultExpanded={false} sx={{ boxShadow: 'none', backgroundColor: 'transparent' }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon color="primary" />}>
+                <Typography variant="h6" color="primary">Co-op Membership Progress</Typography>
+            </AccordionSummary>
+            <AccordionDetails sx={{ p: { xs: 1, md: 2 }, pt: 0 }}>
+                <Stepper 
+                    activeStep={activeStep} 
             alternativeLabel={false} 
             orientation="vertical"
             sx={{
@@ -428,6 +445,8 @@ const DashboardPage = ({ params }) => {
                   </Alert>
               </Box>
           )}
+            </AccordionDetails>
+          </Accordion>
       </Card>
       )}
 

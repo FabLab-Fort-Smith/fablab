@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, TextField, Grid, Switch, FormControlLabel, Typography, useTheme, Paper, FormControl, FormLabel, FormGroup, Checkbox, Chip, Autocomplete, Tooltip, Link, Avatar } from '@mui/material';
+import { Box, TextField, Grid, Switch, FormControlLabel, Typography, useTheme, Paper, FormControl, FormLabel, FormGroup, Checkbox, Chip, Autocomplete, Tooltip, Link, Avatar, Alert, Button } from '@mui/material';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import TwitterIcon from '@mui/icons-material/Twitter';
@@ -7,7 +7,7 @@ import LanguageIcon from '@mui/icons-material/Language';
 import InstagramIcon from '@mui/icons-material/Instagram';
 import Constants from '@/lib/constants';
 
-const PublicProfileTab = ({ user, onEdit }) => {
+const PublicProfileTab = ({ user, onEdit, setActiveTab }) => {
     const theme = useTheme();
     const [skillInput, setSkillInput] = useState('');
     const [dbBadges, setDbBadges] = useState([]);
@@ -68,36 +68,53 @@ const PublicProfileTab = ({ user, onEdit }) => {
         "Music", "Art", "Gardening", "DIY", "Robotics", "Cosplay", "Board Games"
     ];
 
+    if (!user?.membership?.onboardingComplete) {
+        return (
+             <Box sx={{ padding: { xs: 2, md: 3 }, backgroundColor: theme.palette.background.paper, color: theme.palette.text.primary }}>
+                <Alert 
+                    severity="info"
+                    action={
+                        <Button color="inherit" size="small" href={`/dashboard/${user.userID}/onboarding`}>
+                            Go to Questionnaire
+                        </Button>
+                    }
+                >
+                    <strong>Onboarding Required:</strong> You must complete the onboarding questionnaire before you can set up your public profile.
+                </Alert>
+            </Box>
+        );
+    }
+
+    const isProfileComplete = user.bio && user.image;
+
     return (
         <Box sx={{ padding: { xs: 2, md: 3 }, backgroundColor: theme.palette.background.paper, color: theme.palette.text.primary }}>
             <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main }}>
-                Public Profile Settings
+                {isProfileComplete ? "Public Profile Settings" : "Complete Your Public Profile"}
             </Typography>
             <Typography variant="body2" paragraph sx={{ color: theme.palette.text.secondary }}>
-                Manage what information is visible to other members.
+                {isProfileComplete ? "Manage what information is visible to other members." : "Tell the community about yourself to get started!"}
             </Typography>
 
-            <FormControlLabel
-                control={
-                    <Switch
-                        checked={user.isPublic !== false} // Default to true if undefined
-                        onChange={(e) => onEdit("isPublic", e.target.checked)}
-                        sx={{
-                            '& .MuiSwitch-switchBase.Mui-checked': {
-                                color: theme.palette.primary.main,
-                            },
-                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                                backgroundColor: theme.palette.primary.main,
-                            },
-                        }}
-                    />
-                }
-                label={user.isPublic !== false ? "Profile is Public" : "Profile is Private"}
-                sx={{ mb: 1, color: theme.palette.text.primary }}
-            />
-            <Typography variant="caption" display="block" sx={{ mb: 3, color: theme.palette.text.secondary }}>
-                Profiles are public by default. You can toggle this off to keep your profile private.
-            </Typography>
+            {!isProfileComplete && (
+                <Box sx={{ mb: 4 }}>
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                        Please complete the questionnaire below to set up your public profile.
+                    </Alert>
+                    {!user.image && (
+                        <Alert 
+                            severity="warning"
+                            action={
+                                <Button color="inherit" size="small" onClick={() => setActiveTab && setActiveTab(0)}>
+                                    Go to User Details
+                                </Button>
+                            }
+                        >
+                            <strong>Profile Picture Required:</strong> Please go to the "User Details" tab to upload a profile picture.
+                        </Alert>
+                    )}
+                </Box>
+            )}
 
             {user.isPublic !== false && user.username && (
                 <Box sx={{ mb: 3, p: 2, bgcolor: 'rgba(0,255,0,0.05)', borderRadius: 1, border: '1px solid rgba(0,255,0,0.2)' }}>
@@ -110,33 +127,59 @@ const PublicProfileTab = ({ user, onEdit }) => {
                 </Box>
             )}
 
-            {/* Badges Section */}
-            <Paper sx={{ p: 2, mb: 3, bgcolor: 'rgba(0,0,0,0.02)' }}>
-                <Typography variant="subtitle1" gutterBottom>Earned Badges</Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {user.badges && user.badges.length > 0 ? (
-                        user.badges.map((badgeId) => {
-                            const badge = getBadgeDetails(badgeId);
-                            if (!badge) return null;
-                            return (
-                                <Tooltip key={badgeId} title={badge.description}>
-                                    <Chip 
-                                        avatar={badge.imageUrl ? <Avatar src={badge.imageUrl} alt={badge.name} /> : null}
-                                        label={badge.imageUrl ? badge.name : `${badge.icon || ''} ${badge.name}`} 
-                                        variant="outlined" 
-                                        color="primary"
-                                        sx={{ fontWeight: 'bold' }}
-                                    />
-                                </Tooltip>
-                            );
-                        })
-                    ) : (
-                        <Typography variant="body2" color="text.secondary">
-                            No badges earned yet. Complete bounties and volunteer hours to earn them!
-                        </Typography>
-                    )}
-                </Box>
-            </Paper>
+            {isProfileComplete && (
+                <>
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={user.isPublic !== false} // Default to true if undefined
+                                onChange={(e) => onEdit("isPublic", e.target.checked)}
+                                sx={{
+                                    '& .MuiSwitch-switchBase.Mui-checked': {
+                                        color: theme.palette.primary.main,
+                                    },
+                                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                                        backgroundColor: theme.palette.primary.main,
+                                    },
+                                }}
+                            />
+                        }
+                        label={user.isPublic !== false ? "Profile is Public" : "Profile is Private"}
+                        sx={{ mb: 1, color: theme.palette.text.primary }}
+                    />
+                    <Typography variant="caption" display="block" sx={{ mb: 3, color: theme.palette.text.secondary }}>
+                        Profiles are public by default. You can toggle this off to keep your profile private.
+                    </Typography>
+
+                    {/* Badges Section */}
+                    <Paper sx={{ p: 2, mb: 3, bgcolor: 'rgba(0,0,0,0.02)' }}>
+                        <Typography variant="subtitle1" gutterBottom>Earned Badges</Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                            {user.badges && user.badges.length > 0 ? (
+                                user.badges.map((badgeId) => {
+                                    const badge = getBadgeDetails(badgeId);
+                                    if (!badge) return null;
+                                    return (
+                                        <Tooltip key={badgeId} title={badge.description}>
+                                            <Chip 
+                                                avatar={badge.imageUrl ? <Avatar src={badge.imageUrl} alt={badge.name} /> : null}
+                                                label={badge.imageUrl ? badge.name : `${badge.icon || ''} ${badge.name}`} 
+                                                variant="outlined" 
+                                                color="primary"
+                                                sx={{ fontWeight: 'bold' }}
+                                            />
+                                        </Tooltip>
+                                    );
+                                })
+                            ) : (
+                                <Typography variant="body2" color="text.secondary">
+                                    No badges earned yet. Complete bounties and volunteer hours to earn them!
+                                </Typography>
+                            )}
+                        </Box>
+                    </Paper>
+                </>
+            )}
 
             <Grid container spacing={3}>
                 <Grid item xs={12}>

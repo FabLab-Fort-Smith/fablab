@@ -203,6 +203,7 @@ export default function TerminalPage() {
   const [capturedFlags, setCapturedFlags] = useState([]);
   const [terminalUser, setTerminalUser] = useState('guest');
   const [awaitingPassword, setAwaitingPassword] = useState(null);
+  const [userMembership, setUserMembership] = useState(null);
   const bottomRef = useRef(null);
   
   const theme = useTheme();
@@ -224,6 +225,24 @@ export default function TerminalPage() {
     if (session?.user?.username) {
         setTerminalUser(prev => prev === 'guest' ? session.user.username : prev);
     }
+  }, [session]);
+
+  // Fetch user membership
+  useEffect(() => {
+      const fetchMembership = async () => {
+          if (session?.user?.userID) {
+              try {
+                  const res = await fetch(`/api/v1/users?userID=${session.user.userID}`);
+                  if (res.ok) {
+                      const data = await res.json();
+                      setUserMembership(data.user?.membership);
+                  }
+              } catch (e) {
+                  console.error("Failed to fetch membership", e);
+              }
+          }
+      };
+      fetchMembership();
   }, [session]);
 
   // Fetch user state on load
@@ -1020,6 +1039,77 @@ export default function TerminalPage() {
     }
 
     switch (lowerCommand) {
+      case 'checkin':
+      case '/checkin':
+          if (!userMembership) {
+              newHistory.push("Error: Could not verify membership status.");
+              break;
+          }
+          
+          const canCheckIn = userMembership.status === 'active' || 
+                             userMembership.status === 'probation' || 
+                             userMembership.type === 'community' ||
+                             session?.user?.role === 'admin';
+
+          if (!canCheckIn) {
+              newHistory.push("Access Denied: Active membership required.");
+              break;
+          }
+
+          newHistory.push("Initiating check-in sequence...");
+          try {
+              const res = await fetch('/api/v1/checkin', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userID: session.user.userID, action: 'checkin' })
+              });
+              if (res.ok) {
+                  newHistory.push("Check-in successful. Welcome to the Lab.");
+              } else {
+                  const data = await res.json();
+                  newHistory.push(`Check-in failed: ${data.error || 'Unknown error'}`);
+              }
+          } catch (e) {
+              newHistory.push("Network error during check-in.");
+          }
+          break;
+
+      case 'unlock':
+      case '/unlock':
+          if (!userMembership) {
+              newHistory.push("Error: Could not verify membership status.");
+              break;
+          }
+
+          const canUnlock = (userMembership.status === 'active' || 
+                             userMembership.status === 'probation') && 
+                             userMembership.type !== 'community';
+          
+          const isAdmin = session?.user?.role === 'admin';
+
+          if (!canUnlock && !isAdmin) {
+              if (userMembership.type === 'community') {
+                  newHistory.push("Access Denied: Community members do not have door access.");
+              } else {
+                  newHistory.push("Access Denied: Active Co-op membership required.");
+              }
+              break;
+          }
+
+          newHistory.push("Transmitting unlock signal to door controller...");
+          try {
+              const res = await fetch('/api/v1/access/unlock', { method: 'POST' });
+              if (res.ok) {
+                  newHistory.push("Door unlocked. Welcome.");
+              } else {
+                  const data = await res.json();
+                  newHistory.push(`Unlock failed: ${data.error || 'Unknown error'}`);
+              }
+          } catch (e) {
+              newHistory.push("Network error during unlock.");
+          }
+          break;
+
       case 'help':
         if (args[1]) {
             const cmd = args[1].toLowerCase();
@@ -1104,7 +1194,9 @@ export default function TerminalPage() {
           "  submit <flag> - Submit a flag for rewards",
           "  mission  - Show current mission status",
           "  pwd      - Print working directory",
-          "  ledger   - Show stake transaction history"
+          "  ledger   - Show stake transaction history",
+          "  checkin  - Check in to the Lab",
+          "  unlock   - Unlock the Lab door (Co-op only)"
         ];
         if (missionLevel >= 2) {
           helpText.push("  decrypt <file> <key> - Decrypt a file");

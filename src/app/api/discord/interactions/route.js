@@ -309,8 +309,8 @@ export async function POST(request) {
                     return NextResponse.json({ type: 4, data: { content: "🔒 Wi-Fi access is reserved for active members.", flags: 64 } });
                 }
 
-                const wifiSSID = process.env.WIFI_SSID || "FabLab_Member";
-                const wifiPass = process.env.WIFI_PASSWORD || "AskStaffIfMissing";
+                const wifiSSID = process.env.WIFI_SSID || "FabLab-core";
+                const wifiPass = process.env.WIFI_PASSWORD || "FabLabFS";
 
                 return NextResponse.json({
                     type: 4,
@@ -335,10 +335,19 @@ export async function POST(request) {
                 const { default: UserModel } = await import('@/app/api/v1/users/model');
                 const { default: TransactionService } = await import('@/app/api/v1/transactions/service');
 
-                // 1. Verify Admin
+                // 1. Verify Admin / Staff Role
                 const adminUser = await UserModel.getUserByQuery({ discordId: senderDiscordId });
-                if (!adminUser || adminUser.role !== 'admin') {
-                    return NextResponse.json({ type: 4, data: { content: "❌ Unauthorized. Only admins can award stake.", flags: 64 } });
+                const memberRoles = interaction.member?.roles || [];
+                const STAFF_ROLE_ID = "1029463455675207690";
+                const hasStaffRole = memberRoles.includes(STAFF_ROLE_ID);
+
+                if (!adminUser) {
+                    return NextResponse.json({ type: 4, data: { content: "❌ Unauthorized. Please link your account first.", flags: 64 } });
+                }
+
+                // Enforce Staff Role ID specifically
+                if (!hasStaffRole) {
+                    return NextResponse.json({ type: 4, data: { content: "❌ Unauthorized. You need the Staff role to use this command.", flags: 64 } });
                 }
 
                 // 2. Find Receiver
@@ -360,6 +369,82 @@ export async function POST(request) {
             } catch (error) {
                 console.error("Award Error:", error);
                 return NextResponse.json({ type: 4, data: { content: `❌ Failed to award stake: ${error.message}`, flags: 64 } });
+            }
+        }
+
+        if (name === 'help') {
+            const helpMessage = `
+**🤖 FabLab Bot Commands**
+
+**/checkin** - Check in or out of the lab
+**/profile** - View your FabLab profile
+**/balance** - Check your Stake balance
+**/badges** - View your earned badges
+**/leaderboard** - See the top Stake holders
+**/tip [user] [amount]** - Send Stake to another user
+**/wifi** - Get the lab's Wi-Fi credentials (Members only)
+**/enroll [email]** - Create a FabLab account
+**/ping** - Check if the bot is online
+
+**Staff Commands:**
+**/award [user] [amount] [reason]** - Award Stake to a user
+            `;
+
+            return NextResponse.json({
+                type: 4,
+                data: {
+                    content: helpMessage,
+                    flags: 64 // Ephemeral
+                }
+            });
+        }
+
+        if (name === 'enroll') {
+            const senderDiscordId = interaction.member ? interaction.member.user.id : interaction.user.id;
+            const senderUser = interaction.member ? interaction.member.user : interaction.user;
+            const options = interaction.data.options;
+            const email = options.find(o => o.name === 'email').value;
+
+            try {
+                const { default: UserModel } = await import('@/app/api/v1/users/model');
+                const { default: AuthService } = await import('@/app/api/auth/[...nextauth]/service');
+
+                // 1. Check if user already exists
+                const existingUser = await UserModel.getUserByQuery({ discordId: senderDiscordId });
+                if (existingUser) {
+                    return NextResponse.json({ type: 4, data: { content: "❌ You are already enrolled!", flags: 64 } });
+                }
+
+                // 2. Check if email is already in use (AuthService handles this, but good to catch early or let it throw)
+                // We'll let AuthService handle the email check and catch the error.
+
+                // 3. Create User
+                const avatarUrl = senderUser.avatar 
+                    ? `https://cdn.discordapp.com/avatars/${senderDiscordId}/${senderUser.avatar}.png` 
+                    : '';
+
+                const newUser = await AuthService.register({
+                    firstName: senderUser.username,
+                    lastName: '',
+                    username: senderUser.username,
+                    email: email,
+                    provider: 'discord',
+                    discordId: senderDiscordId,
+                    discordHandle: senderUser.username,
+                    status: "verified",
+                    image: avatarUrl
+                });
+
+                return NextResponse.json({
+                    type: 4,
+                    data: {
+                        content: `✅ **Welcome to the Lab, ${senderUser.username}!**\nYour account has been created with email: \`${email}\`.\nYou can now log in to the web app using Discord.`
+                    }
+                });
+
+            } catch (error) {
+                console.error("Enroll Error:", error);
+                return NextResponse.json({ type: 4, data: { content: `❌ Enrollment failed: ${error.message}`, flags: 64 } });
             }
         }
     }

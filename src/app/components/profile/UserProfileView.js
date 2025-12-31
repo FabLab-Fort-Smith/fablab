@@ -184,9 +184,20 @@ export default function UserProfileView({ user, isPublicView = false }) {
 
                         {/* Desktop Bio */}
                         <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-                            <Typography variant="subtitle1" fontWeight="bold">
-                                {user.firstName} {user.lastName}
-                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                <Typography variant="subtitle1" fontWeight="bold">
+                                    {user.firstName} {user.lastName}
+                                </Typography>
+                                {user.membership?.type && (
+                                    <Chip 
+                                        label={user.membership.type === 'co-op' ? "Co-op Member" : "Community Member"} 
+                                        color={user.membership.type === 'co-op' ? "primary" : "default"} 
+                                        size="small" 
+                                        variant="outlined"
+                                        sx={{ height: 20, fontSize: '0.7rem' }}
+                                    />
+                                )}
+                            </Box>
                             {user.bio && (
                                 <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mb: 1 }}>
                                     {user.bio}
@@ -203,9 +214,20 @@ export default function UserProfileView({ user, isPublicView = false }) {
 
                 {/* Mobile Bio Section */}
                 <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 2 }}>
-                    <Typography variant="subtitle1" fontWeight="bold">
-                        {user.firstName} {user.lastName}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <Typography variant="subtitle1" fontWeight="bold">
+                            {user.firstName} {user.lastName}
+                        </Typography>
+                        {user.membership?.type && (
+                            <Chip 
+                                label={user.membership.type === 'co-op' ? "Co-op Member" : "Community Member"} 
+                                color={user.membership.type === 'co-op' ? "primary" : "default"} 
+                                size="small" 
+                                variant="outlined"
+                                sx={{ height: 20, fontSize: '0.7rem' }}
+                            />
+                        )}
+                    </Box>
                     {user.boardPosition && (
                         <Typography variant="subtitle2" color="primary" sx={{ mb: 1, fontWeight: 'bold' }}>
                             {user.boardPosition}

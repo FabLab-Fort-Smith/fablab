@@ -21,6 +21,14 @@ export async function POST(request) {
         const isWaived = user.membership?.isWaived === true;
         const isSubscriptionActive = user.membership?.subscriptionStatus === 'ACTIVE' || isWaived;
         const isMembershipActive = ['active', 'probation', 'founder'].includes(user.membership?.status); 
+        const isCommunity = user.membership?.type === 'community';
+
+        if (isCommunity && !isAdmin) {
+             return NextResponse.json({ 
+                error: 'Access Denied: Community members do not have door access.',
+                details: { membershipType: 'community' }
+            }, { status: 403 });
+        }
         
         // Calculate Previous Month Hours
         const now = new Date();

@@ -53,7 +53,7 @@ const UserHeader = ({ onSave, hasChanges, activeTab, setActiveTab, user }) => {
                 <Tab label="Membership" />
                 <Tab 
                     label="Public Profile" 
-                    disabled={!user?.membership?.status || (user.membership.status !== 'active' && user.membership.status !== 'probation' && user.role !== 'admin')}
+                    disabled={user?.membership?.status === 'suspended'}
                 />
                 <Tab label="Settings" />
             </Tabs>

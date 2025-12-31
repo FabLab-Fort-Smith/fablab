@@ -94,7 +94,7 @@ export default function BountiesPage() {
                     const userRes = await fetch(`/api/v1/users?userID=${session.user.userID}`);
                     if (userRes.ok) {
                         const userData = await userRes.json();
-                        setUserMembership(userData.membership);
+                        setUserMembership(userData.user?.membership);
                     }
                 } catch (e) {
                     console.error("Failed to fetch user membership", e);
@@ -128,9 +128,13 @@ export default function BountiesPage() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    // Check if user has access (Admin OR Active/Probation Membership)
+    // Check if user has access (Admin OR Active/Probation Membership OR Community Member)
     const hasAccess = session?.user?.role === 'admin' || 
-                      (userMembership && (userMembership.status === 'active' || userMembership.status === 'probation'));
+                      (userMembership && (
+                          userMembership.status === 'active' || 
+                          userMembership.status === 'probation' || 
+                          userMembership.type === 'community'
+                      ));
 
     if (loading) return <LinearProgress />;
 

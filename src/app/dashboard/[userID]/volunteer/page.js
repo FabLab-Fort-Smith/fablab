@@ -48,7 +48,11 @@ export default function VolunteerPage() {
 
     // Check Access
     const hasAccess = session?.user?.role === 'admin' || 
-                      (user.membership && (user.membership.status === 'active' || user.membership.status === 'probation'));
+                      (user.membership && (
+                          user.membership.status === 'active' || 
+                          user.membership.status === 'probation' ||
+                          user.membership.type === 'community'
+                      ));
 
     if (!hasAccess) {
         return (

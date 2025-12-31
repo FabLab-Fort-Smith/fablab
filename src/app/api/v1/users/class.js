@@ -68,6 +68,7 @@ export default class User {
 
         // ✅ Membership Tracking
         this.membership = {
+            type: 'community', // 'community', 'co-op'
             status: 'registered', // registered, applicant, contacted, onboarding, probation, active, suspended
             applicationDate: null,
             contacted: false,

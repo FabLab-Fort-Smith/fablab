@@ -51,8 +51,9 @@ export default function MembersDirectory() {
                     const memberStatus = userData.user?.membership?.status;
                     const isWaived = userData.user?.membership?.isWaived;
                     const subscriptionStatus = userData.user?.membership?.subscriptionStatus;
+                    const memberType = userData.user?.membership?.type;
                     
-                    if (memberStatus === 'active' || memberStatus === 'probation' || isWaived || subscriptionStatus === 'ACTIVE' || session.user.role === 'admin') {
+                    if (memberStatus === 'active' || memberStatus === 'probation' || isWaived || subscriptionStatus === 'ACTIVE' || memberType === 'community' || session.user.role === 'admin') {
                         setHasAccess(true);
                         await fetchMembers(1);
                     } else {
@@ -285,14 +286,23 @@ export default function MembersDirectory() {
                                         {user.username || `${user.firstName} ${user.lastName}`}
                                     </Typography>
                                     
-                                    {user.role === 'admin' && (
+                                    <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap', mb: 2, mt: 1 }}>
+                                        {user.role === 'admin' && (
+                                            <Chip 
+                                                label={user.boardPosition || "Admin"} 
+                                                color="secondary" 
+                                                size="small" 
+                                                sx={{ fontWeight: 'bold' }} 
+                                            />
+                                        )}
                                         <Chip 
-                                            label={user.boardPosition || "Admin"} 
-                                            color="secondary" 
+                                            label={user.membership?.type === 'co-op' ? "Co-op Member" : "Community Member"} 
+                                            color={user.membership?.type === 'co-op' ? "primary" : "default"} 
                                             size="small" 
-                                            sx={{ mt: 1, mb: 2, fontWeight: 'bold' }} 
+                                            variant="outlined"
+                                            sx={{ fontWeight: 'bold' }} 
                                         />
-                                    )}
+                                    </Box>
                                     
                                     <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 0.5 }}>
                                         {(user.interests || []).slice(0, 3).map((interest) => (

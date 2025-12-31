@@ -184,7 +184,7 @@ const ViewUserPage = () => {
             {/* Public Profile Tab */}
             {activeTab === 2 && (
                 <Box sx={{ mt: 3 }}>
-                  <PublicProfileTab user={updatedUser} onEdit={handleEditChange} />
+                  <PublicProfileTab user={updatedUser} onEdit={handleEditChange} setActiveTab={setActiveTab} />
                 </Box>
             )}
             {/* Settings Tab */}

@@ -96,3 +96,18 @@ export function UnlockAndCheckInButton({ onCheckIn, checkInLoading, sx }) {
         </>
     );
 }
+
+export function CheckInButton({ onCheckIn, checkInLoading, sx }) {
+    return (
+        <Button
+            variant="contained"
+            color="secondary"
+            startIcon={checkInLoading ? <CircularProgress size={20} color="inherit"/> : <LoginIcon/>}
+            onClick={onCheckIn}
+            disabled={checkInLoading}
+            sx={{ fontWeight: 'bold', boxShadow: 3, whiteSpace: 'nowrap', minWidth: '140px', ...sx }}
+        >
+            {checkInLoading ? 'Checking In...' : 'Check In'}
+        </Button>
+    );
+}
