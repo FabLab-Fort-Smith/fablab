@@ -404,7 +404,20 @@ export async function POST(request) {
             return NextResponse.json({
                 type: 4,
                 data: {
-                    content: `👋 **Welcome to the Lab!**\n\nClick the link below to securely enroll with your Discord account:\n${authUrl}\n\nThis will automatically link your account and log you in.`,
+                    content: `👋 **Welcome to the Lab!**\n\nClick the button below to securely enroll with your Discord account. This will automatically link your account and log you in.`,
+                    components: [
+                        {
+                            type: 1, // Action Row
+                            components: [
+                                {
+                                    type: 2, // Button
+                                    style: 5, // Link Button
+                                    label: "Enroll with Discord",
+                                    url: authUrl
+                                }
+                            ]
+                        }
+                    ],
                     flags: 64 // Ephemeral
                 }
             });
