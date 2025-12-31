@@ -95,10 +95,24 @@ export async function POST(request) {
                         }
                     });
                 } else {
+                    const authUrl = `${process.env.NEXT_PUBLIC_URL}/auth/discord`;
                     return NextResponse.json({
                         type: 4,
                         data: {
-                            content: `✅ **${sender.username}** sent **${amount} Stake** to <@${receiverDiscordId}>!\n⚠️ The receiver hasn't linked their Discord yet. The stake is held in escrow until they join.`
+                            content: `✅ **${sender.username}** sent **${amount} Stake** to <@${receiverDiscordId}>!\n\n⚠️ <@${receiverDiscordId}>, you haven't linked your Discord account yet! The stake is held in escrow.\n\n**Click the button below to enroll and claim your Stake!** 👇`,
+                            components: [
+                                {
+                                    type: 1,
+                                    components: [
+                                        {
+                                            type: 2,
+                                            style: 5,
+                                            label: "Enroll & Claim Stake",
+                                            url: authUrl
+                                        }
+                                    ]
+                                }
+                            ]
                         }
                     });
                 }
