@@ -34,12 +34,14 @@ import {
     EmojiEvents as BadgeIcon,
     Collections as ShowcaseIcon,
     LocationOn as CheckInIcon,
-    Lightbulb as IdeaIcon
+    Lightbulb as IdeaIcon,
+    Campaign as AnnouncementIcon
 } from "@mui/icons-material";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import LoadingTerminal from "@/app/components/LoadingTerminal";
 import WaysToEarnStake from "@/app/components/dashboard/WaysToEarnStake";
+import Announcements from "@/app/components/dashboard/Announcements";
 import { UnlockButton, UnlockAndCheckInButton, CheckInButton } from "@/app/components/dashboard/LabControls";
 
 const DashboardPage = ({ params }) => {
@@ -230,11 +232,23 @@ const DashboardPage = ({ params }) => {
           action: () => window.open("/api/v1/discord/invite", "_blank"),
           desc: 'Get help'
       },
+      { 
+          title: 'Announcements', 
+          icon: <AnnouncementIcon fontSize="large" />, 
+          path: `/dashboard/announcements`,
+          desc: 'View all'
+      },
       ...(session?.user?.role === 'admin' ? [{
           title: 'Bounty Ideas',
           icon: <IdeaIcon fontSize="large" />,
           path: '/dashboard/admin/bounty-ideas',
           desc: 'Manage ideas'
+      },
+      {
+          title: 'Manage News',
+          icon: <AnnouncementIcon fontSize="large" />,
+          path: '/dashboard/admin/announcements',
+          desc: 'Post updates'
       }] : [])
   ];
 
@@ -250,6 +264,8 @@ const DashboardPage = ({ params }) => {
         minHeight: "100vh",
       }}
     >
+      <Announcements />
+
       {/* Header Section */}
       <Box
         sx={{

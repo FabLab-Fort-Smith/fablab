@@ -58,6 +58,7 @@ const Constants = {
     },
     DISCORD_SHOWCASE_CHANNEL_ID: '1454353592755687575',
     DISCORD_HACK_THE_LAB_CHANNEL_ID: '1454697627315863735', // TODO: Update with actual channel ID
+    DISCORD_ANNOUNCEMENTS_CHANNEL_ID: '945554100739801098',
     MISSIONS: {
         1: {
             name: "Initial Access",

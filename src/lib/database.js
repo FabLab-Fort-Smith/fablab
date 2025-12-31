@@ -48,6 +48,11 @@ class Database {
         return this._instance.collection("plans");
     }
 
+    async dbAnnouncements() {
+        await this.connect();
+        return this._instance.collection("announcements");
+    }
+
     async dbNotifications() {
         await this.connect();
         return this._instance.collection("notifications");

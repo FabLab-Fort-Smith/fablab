@@ -20,6 +20,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import EmailIcon from '@mui/icons-material/Email';
 import TerminalIcon from '@mui/icons-material/Terminal';
+import CampaignIcon from '@mui/icons-material/Campaign';
 
 const getUserNavigation = (userID) => [
     {
@@ -41,6 +42,11 @@ const getUserNavigation = (userID) => [
         segment: 'dashboard/feed',
         title: 'The Lab Feed',
         icon: <CollectionsIcon />,
+    },
+    {
+        segment: 'dashboard/announcements',
+        title: 'Announcements',
+        icon: <CampaignIcon />,
     },
     {
         segment: 'dashboard/leaderboard',
@@ -126,6 +132,11 @@ const ADMIN_NAVIGATION = [
         segment: 'dashboard/admin/contact',
         title: 'Contact Submissions',
         icon: <EmailIcon />
+    },
+    {
+        segment: 'dashboard/admin/announcements',
+        title: 'Manage News',
+        icon: <CampaignIcon />
     }
 ];
 
