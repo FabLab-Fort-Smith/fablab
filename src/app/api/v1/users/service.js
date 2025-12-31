@@ -277,6 +277,12 @@ export default class UserService {
                     
                     // Check for probation eligibility (Waived or Active Subscription)
                     const isMember = mergedMembership.isWaived || (mergedMembership.sponsorshipExpiresAt && new Date(mergedMembership.sponsorshipExpiresAt) > new Date());
+                    
+                    // ✅ Force Co-op type if waived
+                    if (mergedMembership.isWaived) {
+                        mergedMembership.type = 'co-op';
+                    }
+
                     if (mergedMembership.onboardingComplete && isMember) newStatus = 'probation';
 
                     if (mergedMembership.accessKey?.issued) newStatus = 'active';

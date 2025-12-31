@@ -21,7 +21,9 @@ export async function POST(request) {
         const isWaived = user.membership?.isWaived === true;
         const isSubscriptionActive = user.membership?.subscriptionStatus === 'ACTIVE' || isWaived;
         const isMembershipActive = ['active', 'probation', 'founder'].includes(user.membership?.status); 
-        const isCommunity = user.membership?.type === 'community';
+        
+        // Waived members are effectively Co-op members
+        const isCommunity = user.membership?.type === 'community' && !isWaived;
 
         if (isCommunity && !isAdmin) {
              return NextResponse.json({ 

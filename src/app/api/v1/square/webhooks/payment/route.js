@@ -65,6 +65,7 @@ export async function POST(request) {
                         console.log(`🔄 Personal Subscription Renewal for ${user.userID}`);
                         await UserService.updateUser(user.userID, {
                             "membership.status": "active",
+                            "membership.type": "co-op", // ✅ Ensure they are co-op
                             "membership.subscriptionStatus": "ACTIVE",
                             "membership.lastPaymentDate": new Date().toISOString(),
                             // Ensure key is valid if they were suspended
@@ -123,6 +124,7 @@ export async function POST(request) {
                     "membership.subscriptionStatus": isRecurringSponsorship ? "SPONSORED_RECURRING" : "SPONSORED",
                     "membership.lastPaymentDate": new Date().toISOString(),
                     "membership.status": "active", // Ensure they are active
+                    "membership.type": "co-op", // ✅ Ensure they are co-op
                     "membership.accessKey.issued": true // Re-enable key if it was disabled
                 };
                 
@@ -161,6 +163,7 @@ export async function POST(request) {
                 
                 await UserService.updateUser(user.userID, {
                     "membership.status": "suspended",
+                    "membership.type": "community", // ✅ Revert to community
                     "membership.subscriptionStatus": status,
                     "membership.accessKey.issued": false, // Deactivate Key
                     "membership.accessKey.revokedReason": `Subscription ${status}`

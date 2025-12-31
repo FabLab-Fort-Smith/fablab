@@ -52,11 +52,15 @@ export default class SubscriptionService {
       // Encrypt the customer email to match the stored value.
       const encryptedEmail = AuthService.encryptEmail(customer.emailAddress);
 
+      // Determine membership type based on subscription status
+      const membershipType = subscriptionStatus === 'ACTIVE' ? 'co-op' : 'community';
+
       // Update the lab user with the Square customer_id using the encrypted email as query.
       const updateData = { 
         squareID: customer_id,
         "membership.squareSubscriptionId": subscription.id,
         "membership.subscriptionStatus": subscriptionStatus,
+        "membership.type": membershipType, // ✅ Update membership type
         "membership.lastPaymentDate": new Date().toISOString()
       };
 
@@ -125,11 +129,15 @@ export default class SubscriptionService {
           targetUserID = user.userID;
       }
 
+      // Determine membership type based on subscription status
+      const membershipType = activeSubscription.status === 'ACTIVE' ? 'co-op' : 'community';
+
       // Update the user
       const updateData = {
         squareID: squareID, // Ensure squareID is set
         "membership.squareSubscriptionId": activeSubscription.id,
         "membership.subscriptionStatus": activeSubscription.status,
+        "membership.type": membershipType, // ✅ Update membership type
         "membership.lastPaymentDate": new Date().toISOString(), // Approximate
       };
       

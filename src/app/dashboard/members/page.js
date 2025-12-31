@@ -31,6 +31,7 @@ export default function MembersPage() {
         pageSize: 25,
     });
     const [rowCount, setRowCount] = useState(0);
+    const [syncing, setSyncing] = useState(false);
 
     useEffect(() => {
         if (status === 'unauthenticated') {
@@ -57,6 +58,27 @@ export default function MembersPage() {
             console.error("Failed to fetch users", error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSyncMemberships = async () => {
+        if (!confirm("This will recalculate 'Community' vs 'Co-op' status for ALL users based on their subscription/waiver status. Continue?")) return;
+        
+        setSyncing(true);
+        try {
+            const res = await fetch('/api/admin/migrate-memberships', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) {
+                alert(`Migration Complete! Updated ${data.updatedCount} users.`);
+                fetchUsers(paginationModel.page + 1, paginationModel.pageSize); // Refresh list
+            } else {
+                alert(`Error: ${data.error}`);
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Failed to sync memberships.");
+        } finally {
+            setSyncing(false);
         }
     };
 
@@ -167,14 +189,23 @@ export default function MembersPage() {
                         Manage community members and roles
                     </Typography>
                 </Box>
-                <Button 
-                    variant="outlined" 
-                    startIcon={<AccessTimeIcon />}
-                    onClick={() => router.push('/dashboard/checkin-log')}
-                    sx={{ display: { xs: 'none', sm: 'flex' } }}
-                >
-                    Check-In Log
-                </Button>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Button 
+                        variant="outlined" 
+                        onClick={handleSyncMemberships}
+                        disabled={syncing}
+                    >
+                        {syncing ? 'Syncing...' : 'Sync Types'}
+                    </Button>
+                    <Button 
+                        variant="outlined" 
+                        startIcon={<AccessTimeIcon />}
+                        onClick={() => router.push('/dashboard/checkin-log')}
+                        sx={{ display: { xs: 'none', sm: 'flex' } }}
+                    >
+                        Check-In Log
+                    </Button>
+                </Box>
             </Box>
 
             {isMobile ? (
