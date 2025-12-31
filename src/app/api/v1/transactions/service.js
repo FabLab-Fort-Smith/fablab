@@ -108,38 +108,62 @@ export default class TransactionService {
      * @param {number} amount - Amount to award
      * @param {string} reason - Reason for award
      */
-    static awardStake = async (adminId, receiverId, amount, reason) => {
+    static awardStake = async (adminId, receiverId, amount, reason, receiverDiscordId = null) => {
         try {
-            const receiver = await UserModel.getUserByID(receiverId);
-            if (!receiver) throw new Error("Receiver not found");
+            let receiver = null;
+            if (receiverId) {
+                receiver = await UserModel.getUserByID(receiverId);
+            } else if (receiverDiscordId) {
+                receiver = await UserModel.getUserByQuery({ discordId: receiverDiscordId });
+            }
 
-            // Add stake to receiver
-            await UserModel.updateUser({ userID: receiverId }, { 
-                $inc: { stake: amount },
-                $push: { 
-                    stakeHistory: {
-                        amount,
-                        reason,
-                        timestamp: new Date(),
-                        type: 'award',
-                        senderId: adminId
+            if (receiver) {
+                // Add stake to receiver
+                await UserModel.updateUser({ userID: receiver.userID }, { 
+                    $inc: { stake: amount },
+                    $push: { 
+                        stakeHistory: {
+                            amount,
+                            reason,
+                            timestamp: new Date(),
+                            type: 'award',
+                            senderId: adminId
+                        }
                     }
-                }
-            });
+                });
 
-            // Record Transaction
-            await TransactionModel.createTransaction({
-                senderId: adminId,
-                receiverId: receiverId,
-                amount,
-                type: 'award',
-                status: 'completed',
-                metadata: {
-                    reason
-                }
-            });
+                // Record Transaction
+                await TransactionModel.createTransaction({
+                    senderId: adminId,
+                    receiverId: receiver.userID,
+                    amount,
+                    type: 'award',
+                    status: 'completed',
+                    metadata: {
+                        reason
+                    }
+                });
 
-            return { status: 'completed', receiver };
+                return { status: 'completed', receiver };
+            } else {
+                // Receiver not found (Escrow)
+                if (!receiverDiscordId) throw new Error("Receiver not identified");
+
+                // Record Pending Transaction
+                await TransactionModel.createTransaction({
+                    senderId: adminId,
+                    receiverId: null,
+                    amount,
+                    type: 'award',
+                    status: 'pending',
+                    metadata: {
+                        reason,
+                        receiverDiscordId
+                    }
+                });
+
+                return { status: 'pending', receiver: null };
+            }
         } catch (error) {
             console.error("Error awarding stake:", error);
             throw error;

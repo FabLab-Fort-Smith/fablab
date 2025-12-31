@@ -364,21 +364,41 @@ export async function POST(request) {
                     return NextResponse.json({ type: 4, data: { content: "❌ Unauthorized. You need the Staff role to use this command.", flags: 64 } });
                 }
 
-                // 2. Find Receiver
+                // 2. Find Receiver (Optional check here, service handles logic)
                 const receiver = await UserModel.getUserByQuery({ discordId: receiverDiscordId });
-                if (!receiver) {
-                    return NextResponse.json({ type: 4, data: { content: "❌ Receiver has not linked their Discord account to FabLab.", flags: 64 } });
-                }
-
+                
                 // 3. Award Stake
-                await TransactionService.awardStake(adminUser.userID, receiver.userID, amount, reason);
+                const result = await TransactionService.awardStake(adminUser.userID, receiver ? receiver.userID : null, amount, reason, receiverDiscordId);
 
-                return NextResponse.json({
-                    type: 4,
-                    data: {
-                        content: `🎉 **${adminUser.firstName}** awarded **${amount} Stake** to <@${receiverDiscordId}>!\n📝 **Reason:** ${reason}`
-                    }
-                });
+                if (result.status === 'completed') {
+                    return NextResponse.json({
+                        type: 4,
+                        data: {
+                            content: `🎉 **${adminUser.firstName}** awarded **${amount} Stake** to <@${receiverDiscordId}>!\n📝 **Reason:** ${reason}`
+                        }
+                    });
+                } else {
+                    const authUrl = `${process.env.NEXT_PUBLIC_URL}/auth/discord`;
+                    return NextResponse.json({
+                        type: 4,
+                        data: {
+                            content: `🎉 **${adminUser.firstName}** awarded **${amount} Stake** to <@${receiverDiscordId}>!\n📝 **Reason:** ${reason}\n\n⚠️ <@${receiverDiscordId}>, you haven't linked your Discord account yet! The stake is held in escrow.\n\n**Click the button below to enroll and claim your Stake!** 👇`,
+                            components: [
+                                {
+                                    type: 1,
+                                    components: [
+                                        {
+                                            type: 2,
+                                            style: 5,
+                                            label: "Enroll & Claim Stake",
+                                            url: authUrl
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    });
+                }
 
             } catch (error) {
                 console.error("Award Error:", error);
