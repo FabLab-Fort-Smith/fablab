@@ -7,6 +7,7 @@ import EventIcon from '@mui/icons-material/Event';
 import Image from 'next/image';
 import Link from 'next/link';
 import QRCode from "react-qr-code";
+// chore force deploy
 
 const MotionCard = motion(Card);
 
