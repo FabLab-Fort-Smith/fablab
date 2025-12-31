@@ -19,6 +19,11 @@ const commands = [
         type: 1, // CHAT_INPUT
     },
     {
+        name: 'help',
+        description: 'Show available commands',
+        type: 1,
+    },
+    {
         name: 'tip',
         description: 'Tip stake to another user',
         type: 1,
