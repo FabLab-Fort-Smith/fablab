@@ -19,27 +19,27 @@ export async function POST(request) {
         // Check Good Standing
         const isAdmin = user.role === 'admin';
         const isWaived = user.membership?.isWaived === true;
-               const isSubscriptionActive = user.membership?.subscriptionStatus === 'ACTIVE' || isWaived;
+        const isSubscriptionActive = user.membership?.subscriptionStatus === 'ACTIVE' || isWaived;
         const isMembershipActive = ['active', 'probation', 'founder'].includes(user.membership?.status); 
-        // Calculate volunteer hours in the last 30 days
-        const thirtyDaysAgo = new Date(now);
-        thirtyDaysAgo.setDate(now.getDate() - 30);
+        
+        // Calculate Previous Month Hours
+        const now = new Date();
+        const previousMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const previousMonth = previousMonthDate.getMonth();
+        const previousYear = previousMonthDate.getFullYear();
+
         const volunteerLogs = user.membership?.volunteerLog || [];
         const volunteerHours = volunteerLogs.reduce((total, log) => {
             if (!log.date) return total;
             const logDate = new Date(log.date);
-
-            // Check if log is within the last 30 days
-            if (logDate >= thirtyDaysAgo && logDate <= now) {
+            if (logDate.getMonth() === previousMonth && logDate.getFullYear() === previousYear) {
                 return total + (parseFloat(log.hours) || 0);
             }
             return total;
         }, 0);
 
         const hasVolunteerHours = volunteerHours >= Constants.REQUIRED_VOLUNTEER_HOURS;
-        // Check if user is exempt (e.g. Admin or Founder badge)
-        // For now, we enforce rules as requested.
-        // Note: If user is new (joined this month), they won't have previous month hours.
+
         // Check if user is exempt (e.g. Admin or Founder badge)
         // For now, we enforce rules as requested.
         // Note: If user is new (joined this month), they won't have previous month hours.
