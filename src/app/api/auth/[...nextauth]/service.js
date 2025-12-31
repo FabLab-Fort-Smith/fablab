@@ -27,10 +27,15 @@ export default class AuthService {
     // New deterministic decryption for emails
     static decryptEmail(encryptedEmail) {
         if (!encryptedEmail) return '';
-        const key = Buffer.from(ENCRYPTION_KEY);
-        const iv = Buffer.alloc(IV_LENGTH, 0);
-        const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-        return decipher.update(encryptedEmail, 'hex', 'utf8') + decipher.final('utf8');
+        try {
+            const key = Buffer.from(ENCRYPTION_KEY);
+            const iv = Buffer.alloc(IV_LENGTH, 0);
+            const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+            return decipher.update(encryptedEmail, 'hex', 'utf8') + decipher.final('utf8');
+        } catch (error) {
+            // If decryption fails, assume it's already decrypted or invalid, return as is
+            return encryptedEmail;
+        }
     }
 
     // New deterministic encryption for phone numbers
@@ -45,10 +50,15 @@ export default class AuthService {
     // New deterministic decryption for phone numbers
     static decryptPhone(encryptedPhone) {
         if (!encryptedPhone) return '';
-        const key = Buffer.from(ENCRYPTION_KEY);
-        const iv = Buffer.alloc(IV_LENGTH, 0);
-        const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-        return decipher.update(encryptedPhone, 'hex', 'utf8') + decipher.final('utf8');
+        try {
+            const key = Buffer.from(ENCRYPTION_KEY);
+            const iv = Buffer.alloc(IV_LENGTH, 0);
+            const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+            return decipher.update(encryptedPhone, 'hex', 'utf8') + decipher.final('utf8');
+        } catch (error) {
+            // If decryption fails, assume it's already decrypted or invalid, return as is
+            return encryptedPhone;
+        }
     }
 
     /**

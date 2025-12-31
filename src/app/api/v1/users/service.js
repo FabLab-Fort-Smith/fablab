@@ -2,6 +2,7 @@
 
 import User from "./class";
 import UserModel from "./model";
+import BadgeModel from "../badges/model";
 import Constants from "@/lib/constants";
 import AuthService from '../../auth/[...nextauth]/service.js';
 import DiscordService from "@/lib/discord";
