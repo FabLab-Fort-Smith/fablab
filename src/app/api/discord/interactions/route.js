@@ -400,11 +400,11 @@ export async function POST(request) {
         }
 
         if (name === 'enroll') {
-            const authUrl = `${process.env.NEXT_PUBLIC_URL}/auth/signin`;
+            const authUrl = `${process.env.NEXT_PUBLIC_URL}/auth/discord`;
             return NextResponse.json({
                 type: 4,
                 data: {
-                    content: `👋 **Welcome to the Lab!**\n\nTo enroll or link your account, please sign in via our website:\n${authUrl}\n\nThis will securely authorize us to access your email and create your account.`,
+                    content: `👋 **Welcome to the Lab!**\n\nClick the link below to securely enroll with your Discord account:\n${authUrl}\n\nThis will automatically link your account and log you in.`,
                     flags: 64 // Ephemeral
                 }
             });
