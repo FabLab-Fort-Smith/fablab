@@ -378,6 +378,7 @@ export async function POST(request) {
 
 **/checkin** - Check in or out of the lab
 **/profile** - View your FabLab profile
+**/checkin** - Toggle your check-in status at the Lab
 **/balance** - Check your Stake balance
 **/badges** - View your earned badges
 **/leaderboard** - See the top Stake holders
