@@ -4,7 +4,7 @@ import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand } fr
 // Initialize S3 Client (Server-Side Only)
 const s3Client = new S3Client({
     region: process.env.S3_REGION || 'us-east-1',
-    endpoint: process.env.S3_ENDPOINT || 'http://23.94.251.158:9000',
+    endpoint: process.env.S3_ENDPOINT || 'https://s3.crittercodes.dev',
     forcePathStyle: true,
     credentials: {
         accessKeyId: process.env.S3_ACCESS_KEY || 'admin',
@@ -36,7 +36,7 @@ export async function POST(req) {
 
         console.log("DEBUG: S3 Env Vars:", {
             bucket: bucketName,
-            endpoint: process.env.S3_ENDPOINT || 'http://23.94.251.158:9000',
+            endpoint: process.env.S3_ENDPOINT || 'https://s3.crittercodes.dev',
             region: process.env.S3_REGION || 'us-east-1'
         });
 
@@ -68,7 +68,7 @@ export async function POST(req) {
         // If using MinIO locally, it might be http://localhost:9000/bucket/key
         // If using AWS, it might be https://bucket.s3.region.amazonaws.com/key
         // We'll use the endpoint + bucket + key logic for MinIO compatibility
-        const endpoint = process.env.S3_ENDPOINT || 'http://23.94.251.158:9000';
+        const endpoint = process.env.S3_ENDPOINT || 'https://s3.crittercodes.dev';
         const publicUrl = `${endpoint}/${bucketName}/${fileKey}`;
 
         return NextResponse.json({ url: publicUrl });
