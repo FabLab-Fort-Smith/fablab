@@ -69,6 +69,11 @@ const commands = [
         type: 1,
     },
     {
+        name: 'enroll',
+        description: 'Enroll in the FabLab (Link Account)',
+        type: 1,
+    },
+    {
         name: 'award',
         description: 'Award Stake to a user (Admin Only)',
         type: 1,

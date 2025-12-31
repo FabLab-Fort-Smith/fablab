@@ -383,7 +383,7 @@ export async function POST(request) {
 **/leaderboard** - See the top Stake holders
 **/tip [user] [amount]** - Send Stake to another user
 **/wifi** - Get the lab's Wi-Fi credentials (Members only)
-**/enroll [email]** - Create a FabLab account
+**/enroll** - Create a FabLab account (Link via Web)
 **/ping** - Check if the bot is online
 
 **Staff Commands:**
@@ -400,52 +400,14 @@ export async function POST(request) {
         }
 
         if (name === 'enroll') {
-            const senderDiscordId = interaction.member ? interaction.member.user.id : interaction.user.id;
-            const senderUser = interaction.member ? interaction.member.user : interaction.user;
-            const options = interaction.data.options;
-            const email = options.find(o => o.name === 'email').value;
-
-            try {
-                const { default: UserModel } = await import('@/app/api/v1/users/model');
-                const { default: AuthService } = await import('@/app/api/auth/[...nextauth]/service');
-
-                // 1. Check if user already exists
-                const existingUser = await UserModel.getUserByQuery({ discordId: senderDiscordId });
-                if (existingUser) {
-                    return NextResponse.json({ type: 4, data: { content: "❌ You are already enrolled!", flags: 64 } });
+            const authUrl = `${process.env.NEXT_PUBLIC_URL}/auth/signin`;
+            return NextResponse.json({
+                type: 4,
+                data: {
+                    content: `👋 **Welcome to the Lab!**\n\nTo enroll or link your account, please sign in via our website:\n${authUrl}\n\nThis will securely authorize us to access your email and create your account.`,
+                    flags: 64 // Ephemeral
                 }
-
-                // 2. Check if email is already in use (AuthService handles this, but good to catch early or let it throw)
-                // We'll let AuthService handle the email check and catch the error.
-
-                // 3. Create User
-                const avatarUrl = senderUser.avatar 
-                    ? `https://cdn.discordapp.com/avatars/${senderDiscordId}/${senderUser.avatar}.png` 
-                    : '';
-
-                const newUser = await AuthService.register({
-                    firstName: senderUser.username,
-                    lastName: '',
-                    username: senderUser.username,
-                    email: email,
-                    provider: 'discord',
-                    discordId: senderDiscordId,
-                    discordHandle: senderUser.username,
-                    status: "verified",
-                    image: avatarUrl
-                });
-
-                return NextResponse.json({
-                    type: 4,
-                    data: {
-                        content: `✅ **Welcome to the Lab, ${senderUser.username}!**\nYour account has been created with email: \`${email}\`.\nYou can now log in to the web app using Discord.`
-                    }
-                });
-
-            } catch (error) {
-                console.error("Enroll Error:", error);
-                return NextResponse.json({ type: 4, data: { content: `❌ Enrollment failed: ${error.message}`, flags: 64 } });
-            }
+            });
         }
     }
 
