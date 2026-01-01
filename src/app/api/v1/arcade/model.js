@@ -77,4 +77,13 @@ export default class ArcadeModel {
         );
         return result.modifiedCount > 0;
     }
+
+    static async updateJackpot(jackpotID, updateData) {
+        const collection = await this.getJackpotCollection();
+        const result = await collection.updateOne(
+            { _id: jackpotID },
+            { $set: updateData }
+        );
+        return result.modifiedCount > 0;
+    }
 }

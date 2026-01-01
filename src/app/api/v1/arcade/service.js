@@ -8,7 +8,75 @@ export default class ArcadeService {
     static MAX_REBATE = 1.0; // Max stake earned back per run
     static REBATE_THRESHOLD = 500; // Score needed for max rebate
 
+    static async checkAndCycleJackpot() {
+        const jackpot = await ArcadeModel.getCurrentJackpot();
+        // If no jackpot exists, startGame will create one.
+        // If jackpot exists, check if it's expired.
+        if (jackpot && new Date() > new Date(jackpot.endDate)) {
+            console.log("🎰 Jackpot expired! Processing winner...");
+
+            // 1. Find Winner
+            const topScores = await ArcadeModel.getTopScores('infinite_loop', 1, jackpot.startDate);
+            
+            if (topScores.length > 0) {
+                const winnerSession = topScores[0];
+                const winnerID = winnerSession.userID;
+                const prize = jackpot.currentAmount;
+
+                console.log(`🏆 Winner found: ${winnerID}, Prize: ${prize}`);
+
+                // 2. Award Prize
+                await UserModel.updateUser({ userID: winnerID }, {
+                    $inc: { stake: prize },
+                    $push: {
+                        stakeHistory: {
+                            amount: prize,
+                            reason: `Weekly Jackpot Winner!`,
+                            timestamp: new Date(),
+                            type: 'jackpot_win'
+                        }
+                    }
+                });
+
+                // 3. Transfer Badge
+                // Remove 'top-runner' badge from all users
+                await UserModel.removeBadgeFromAll('top-runner');
+
+                // Add 'top-runner' badge to the new winner
+                const badge = {
+                    id: 'top-runner',
+                    name: 'Top Runner',
+                    description: 'Awarded to the weekly Arcade Jackpot winner.',
+                    icon: '👑',
+                    awardedAt: new Date()
+                };
+
+                await UserModel.updateUser({ userID: winnerID }, {
+                    $push: { badges: badge }
+                });
+
+                // 4. Close Jackpot
+                await ArcadeModel.updateJackpot(jackpot._id, {
+                    status: 'closed',
+                    winnerID: winnerID,
+                    closedAt: new Date()
+                });
+
+            } else {
+                console.log("No winner found for jackpot.");
+                // Close anyway
+                await ArcadeModel.updateJackpot(jackpot._id, {
+                    status: 'closed',
+                    closedAt: new Date()
+                });
+            }
+        }
+    }
+
     static async startGame(userID, gameType = 'infinite_loop') {
+        // 0. Check for Jackpot Cycle
+        await this.checkAndCycleJackpot();
+
         // 1. Validate User & Stake
         const user = await UserModel.getUserByID(userID);
         if (!user) throw new Error("User not found");
@@ -141,7 +209,8 @@ export default class ArcadeService {
             return {
                 ...s,
                 username: user ? user.username : 'Unknown',
-                avatar: user ? user.image : null
+                avatar: user ? user.image : null,
+                badges: user ? user.badges : []
             };
         }));
 

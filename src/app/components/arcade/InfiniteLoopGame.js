@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Box, Button, Typography, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Avatar, Grid } from '@mui/material';
+import { Box, Button, Typography, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Avatar, Grid, Tooltip } from '@mui/material';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
@@ -846,6 +846,11 @@ const InfiniteLoopGame = ({ user, onGameEnd, jackpot }) => {
                                         <TableCell sx={{ color: '#fff', fontFamily: 'Roboto Mono', borderBottom: '1px solid #222', display: 'flex', alignItems: 'center', gap: 2 }}>
                                             <Avatar src={row.avatar} sx={{ width: 30, height: 30 }} />
                                             {row.username}
+                                            {row.badges && row.badges.some(b => b.id === 'top-runner') && (
+                                                <Tooltip title="Top Runner">
+                                                    <span style={{ fontSize: '1.2rem', cursor: 'help' }}>👑</span>
+                                                </Tooltip>
+                                            )}
                                         </TableCell>
                                         <TableCell align="right" sx={{ color: '#00ff00', fontFamily: 'Roboto Mono', borderBottom: '1px solid #222' }}>
                                             {row.score} MB

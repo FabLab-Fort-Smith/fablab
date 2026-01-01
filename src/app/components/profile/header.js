@@ -82,6 +82,24 @@ const UserHeader = ({ onSave, hasChanges, activeTab, setActiveTab, user }) => {
                                 sx={{ ml: 1 }}
                             />
                         </Tooltip>
+
+                        {user.badges && user.badges.some(b => b.id === 'top-runner') && (
+                            <Tooltip title="Top Runner: Weekly Arcade Champion">
+                                <Chip 
+                                    icon={<span style={{ fontSize: '1.2rem' }}>👑</span>} 
+                                    label="Top Runner" 
+                                    color="secondary" 
+                                    variant="filled" 
+                                    sx={{ 
+                                        ml: 1, 
+                                        backgroundColor: '#FFD700', // Gold
+                                        color: '#000',
+                                        fontWeight: 'bold',
+                                        '& .MuiChip-icon': { color: 'inherit' }
+                                    }}
+                                />
+                            </Tooltip>
+                        )}
                     </>
                 )}
 

@@ -290,4 +290,19 @@ export default class UserModel {
             console.error("Error getting top volunteer hours:", error);
             return [];
         }
-    }}
+    }
+
+    static async removeBadgeFromAll(badgeID) {
+        try {
+            const dbUsers = await db.dbUsers();
+            const result = await dbUsers.updateMany(
+                { "badges.id": badgeID },
+                { $pull: { badges: { id: badgeID } } }
+            );
+            return result.modifiedCount;
+        } catch (error) {
+            console.error("Error removing badge from all users:", error);
+            return 0;
+        }
+    }
+}
