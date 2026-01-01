@@ -35,60 +35,81 @@ const getUserNavigation = (userID) => [
         icon: <BuildIcon />,
     },
     {
-        segment: 'dashboard/terminal',
-        title: 'HackTheLab',
-        icon: <TerminalIcon />,
-    },
-    {
-        segment: 'dashboard/arcade',
-        title: 'The Glitch Arcade',
-        icon: <SportsEsportsIcon />,
-    },
-    {
-        segment: 'dashboard/feed',
-        title: 'The Lab Feed',
-        icon: <CollectionsIcon />,
-    },
-    {
-        segment: 'dashboard/announcements',
-        title: 'Announcements',
-        icon: <CampaignIcon />,
-    },
-    {
-        segment: 'dashboard/leaderboard',
-        title: 'Leaderboard',
-        icon: <EmojiEventsIcon />,
-    },
-    {
         segment: `dashboard/${userID}/volunteer`,
         title: 'Volunteer Log',
         icon: <VolunteerActivismIcon />,
     },
     {
-        segment: 'dashboard/bounties',
-        title: 'Bounties',
-        icon: <AssignmentIcon />,
-    },
-    {
-        segment: 'dashboard/bugs',
-        title: 'Bug Tracker',
-        icon: <BuildIcon />,
-    },
-    {
-        segment: 'dashboard/badges',
-        title: 'Badge Directory',
-        icon: <EmojiEventsIcon />,
-    },
-    {
-        segment: 'dashboard/directory',
-        title: 'Member Directory',
+        segment: 'dashboard/community',
+        title: 'Community',
         icon: <PeopleIcon />,
+        children: [
+            {
+                segment: 'feed',
+                title: 'The Lab Feed',
+                icon: <CollectionsIcon />,
+            },
+            {
+                segment: 'announcements',
+                title: 'Announcements',
+                icon: <CampaignIcon />,
+            },
+            {
+                segment: 'directory',
+                title: 'Member Directory',
+                icon: <PeopleIcon />,
+            },
+            {
+                segment: 'code-of-conduct',
+                title: 'Code of Conduct',
+                icon: <MenuBookIcon />,
+            },
+        ]
     },
     {
-        segment: 'dashboard/code-of-conduct',
-        title: 'Code of Conduct',
-        icon: <MenuBookIcon />,
+        segment: 'dashboard/activities',
+        title: 'Activities',
+        icon: <SportsEsportsIcon />,
+        children: [
+            {
+                segment: 'arcade',
+                title: 'The Glitch Arcade',
+                icon: <SportsEsportsIcon />,
+            },
+            {
+                segment: 'terminal',
+                title: 'HackTheLab',
+                icon: <TerminalIcon />,
+            },
+            {
+                segment: 'bounties',
+                title: 'Bounties',
+                icon: <AssignmentIcon />,
+            },
+            {
+                segment: 'leaderboard',
+                title: 'Leaderboard',
+                icon: <EmojiEventsIcon />,
+            },
+        ]
     },
+    {
+        segment: 'dashboard/resources',
+        title: 'Resources',
+        icon: <LightbulbIcon />,
+        children: [
+            {
+                segment: 'badges',
+                title: 'Badge Directory',
+                icon: <EmojiEventsIcon />,
+            },
+            {
+                segment: 'bugs',
+                title: 'Bug Tracker',
+                icon: <BuildIcon />,
+            },
+        ]
+    }
 ];
 
 const ADMIN_NAVIGATION = [
@@ -100,49 +121,56 @@ const ADMIN_NAVIGATION = [
         title: 'Admin Tools'
     },
     {
-        segment: 'dashboard/analytics',
-        title: 'Analytics',
-        icon: <BarChartIcon />
-    },
-    {
-        segment: 'dashboard/members',
-        title: 'Members',
-        icon: <PeopleIcon />
-    },
-    {
-        segment: 'dashboard/onboarding-reviews',
-        title: 'Onboarding Reviews',
-        icon: <RateReviewIcon />
-    },
-    {
-        segment: 'dashboard/volunteers',
-        title: 'Volunteers',
-        icon: <VolunteerActivismIcon />
-    },
-    {
-        segment: 'dashboard/checkin-log',
-        title: 'Check-in Log',
-        icon: <HistoryIcon />
-    },
-    {
-        segment: 'dashboard/admin/bounty-ideas',
-        title: 'Bounty Ideas',
-        icon: <LightbulbIcon />
-    },
-    {
-        segment: 'dashboard/admin/badges',
-        title: 'Badge Management',
-        icon: <EmojiEventsIcon />
-    },
-    {
-        segment: 'dashboard/admin/contact',
-        title: 'Contact Submissions',
-        icon: <EmailIcon />
-    },
-    {
-        segment: 'dashboard/admin/announcements',
-        title: 'Manage News',
-        icon: <CampaignIcon />
+        segment: 'dashboard/admin',
+        title: 'Admin Panel',
+        icon: <BuildIcon />,
+        children: [
+            {
+                segment: 'analytics',
+                title: 'Analytics',
+                icon: <BarChartIcon />
+            },
+            {
+                segment: 'members',
+                title: 'Members',
+                icon: <PeopleIcon />
+            },
+            {
+                segment: 'volunteers',
+                title: 'Volunteers',
+                icon: <VolunteerActivismIcon />
+            },
+            {
+                segment: 'checkin-log',
+                title: 'Check-in Log',
+                icon: <HistoryIcon />
+            },
+            {
+                segment: 'onboarding-reviews',
+                title: 'Onboarding Reviews',
+                icon: <RateReviewIcon />
+            },
+            {
+                segment: 'bounty-ideas',
+                title: 'Bounty Ideas',
+                icon: <LightbulbIcon />
+            },
+            {
+                segment: 'badges',
+                title: 'Badge Management',
+                icon: <EmojiEventsIcon />
+            },
+            {
+                segment: 'contact',
+                title: 'Contact Submissions',
+                icon: <EmailIcon />
+            },
+            {
+                segment: 'announcements',
+                title: 'Manage News',
+                icon: <CampaignIcon />
+            }
+        ]
     }
 ];
 

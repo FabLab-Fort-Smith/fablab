@@ -11,7 +11,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import PersonIcon from '@mui/icons-material/Person';
 import EmailIcon from '@mui/icons-material/Email';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import MemberDialog from '../../components/admin/MemberDialog';
+import MemberDialog from '../../../components/admin/MemberDialog';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 

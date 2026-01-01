@@ -13,8 +13,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import EmailIcon from '@mui/icons-material/Email';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
-import ReviewDialog from '../../components/admin/ReviewDialog';
-import NudgeConfirmDialog from '../../components/admin/NudgeConfirmDialog';
+import ReviewDialog from '../../../components/admin/ReviewDialog';
+import NudgeConfirmDialog from '../../../components/admin/NudgeConfirmDialog';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 

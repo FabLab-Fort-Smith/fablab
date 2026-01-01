@@ -15,7 +15,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import MemberDialog from '../../components/admin/MemberDialog';
+import MemberDialog from '../../../components/admin/MemberDialog';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 
