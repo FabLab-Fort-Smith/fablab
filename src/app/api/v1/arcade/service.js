@@ -4,8 +4,9 @@ import { ObjectId } from "mongodb";
 
 export default class ArcadeService {
     static GAME_COST = 5;
-    static BURN_AMOUNT = 2.5;
-    static JACKPOT_AMOUNT = 2.5;
+    static JACKPOT_AMOUNT = 3.5; // Increased from 2.5 (70% allocation)
+    static MAX_REBATE = 1.0; // Max stake earned back per run
+    static REBATE_THRESHOLD = 500; // Score needed for max rebate
 
     static async startGame(userID, gameType = 'infinite_loop') {
         // 1. Validate User & Stake
@@ -81,15 +82,33 @@ export default class ArcadeService {
         if (!session) throw new Error("Session not found");
         if (session.status !== 'active') throw new Error("Session already completed");
 
-        // TODO: Add anti-cheat validation here (e.g. check time elapsed vs score)
+        // Calculate Rebate (Performance Reward)
+        // Cap at MAX_REBATE (1.0)
+        const rebate = Math.min(this.MAX_REBATE, (score / this.REBATE_THRESHOLD) * this.MAX_REBATE);
+        const roundedRebate = Math.floor(rebate * 100) / 100; // Round to 2 decimals
+
+        if (roundedRebate > 0) {
+            await UserModel.updateUser({ userID: session.userID }, {
+                $inc: { stake: roundedRebate },
+                $push: {
+                    stakeHistory: {
+                        amount: roundedRebate,
+                        reason: `Arcade Rebate: ${score} pts`,
+                        timestamp: new Date(),
+                        type: 'arcade_rebate'
+                    }
+                }
+            });
+        }
 
         await ArcadeModel.updateSession(sessionID, {
             status: 'completed',
             score: parseInt(score),
+            rebate: roundedRebate,
             endedAt: new Date()
         });
 
-        return { success: true };
+        return { success: true, rebate: roundedRebate };
     }
 
     static async getJackpot() {

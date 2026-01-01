@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Box, Button, Typography, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Avatar } from '@mui/material';
+import { Box, Button, Typography, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Avatar, Grid } from '@mui/material';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 
 const GAME_WIDTH = 1200;
 const GAME_HEIGHT = 600;
@@ -13,12 +14,13 @@ const INITIAL_SPEED = 8; // Increased for larger scale
 const InfiniteLoopGame = ({ user, onGameEnd, jackpot }) => {
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
-    const [gameState, setGameState] = useState('MENU'); // MENU, PLAYING, GAMEOVER, LOADING, LEADERBOARD
+    const [gameState, setGameState] = useState('MENU'); // MENU, PLAYING, GAMEOVER, LOADING, LEADERBOARD, INFO
     const [score, setScore] = useState(0);
     const [sessionID, setSessionID] = useState(null);
     const [error, setError] = useState(null);
     const [leaderboardData, setLeaderboardData] = useState([]);
     const [leaderboardType, setLeaderboardType] = useState('weekly'); // 'weekly' or 'all_time'
+    const [lastRebate, setLastRebate] = useState(0);
 
     // Game State Refs
     const playerRef = useRef({
@@ -584,11 +586,17 @@ const InfiniteLoopGame = ({ user, onGameEnd, jackpot }) => {
     const gameOver = async () => {
         setGameState('GAMEOVER');
         try {
-            await fetch('/api/v1/arcade/submit', {
+            const res = await fetch('/api/v1/arcade/submit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sessionID, score: Math.floor(scoreRef.current) })
             });
+            const data = await res.json();
+            if (data.rebate) {
+                setLastRebate(data.rebate);
+            } else {
+                setLastRebate(0);
+            }
             if (onGameEnd) onGameEnd();
         } catch (error) {
             console.error("Failed to submit score", error);
@@ -638,7 +646,7 @@ const InfiniteLoopGame = ({ user, onGameEnd, jackpot }) => {
                         Cost: 5 Stake | Prize: Weekly Jackpot ({jackpot} STAKE)
                     </Typography>
                     {error && <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>}
-                    <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                    <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
                         <Button 
                             variant="contained" 
                             color="success" 
@@ -659,6 +667,122 @@ const InfiniteLoopGame = ({ user, onGameEnd, jackpot }) => {
                             sx={{ fontFamily: 'Roboto Mono', fontSize: '1.2rem', px: 4, py: 1 }}
                         >
                             LEADERBOARD
+                        </Button>
+                        <Button 
+                            variant="outlined" 
+                            color="info" 
+                            size="large"
+                            onClick={() => setGameState('INFO')}
+                            sx={{ fontFamily: 'Roboto Mono', fontSize: '1.2rem', px: 2, py: 1, minWidth: 'auto' }}
+                        >
+                            <HelpOutlineIcon />
+                        </Button>
+                    </Box>
+                </Box>
+            )}
+
+            {gameState === 'INFO' && (
+                <Box sx={{ 
+                    position: 'absolute', 
+                    top: '50%', 
+                    left: '50%', 
+                    transform: 'translate(-50%, -50%)', 
+                    zIndex: 5,
+                    p: 4, 
+                    border: '1px solid #333', 
+                    borderRadius: 2, 
+                    background: 'rgba(17, 17, 17, 0.95)',
+                    backdropFilter: 'blur(5px)',
+                    width: '80%',
+                    maxWidth: '900px',
+                    maxHeight: '80vh',
+                    overflowY: 'auto',
+                    textAlign: 'left'
+                }}>
+                    <Typography variant="h4" sx={{ color: '#00ff00', fontFamily: 'Roboto Mono', mb: 4, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                        <HelpOutlineIcon fontSize="large" /> SYSTEM MANUAL
+                    </Typography>
+
+                    <Grid container spacing={4}>
+                        <Grid item xs={12} md={6}>
+                            <Typography variant="h6" sx={{ color: '#fff', fontFamily: 'Roboto Mono', mb: 2, borderBottom: '1px solid #333', pb: 1 }}>
+                                // ECONOMICS
+                            </Typography>
+                            <Box sx={{ mb: 3 }}>
+                                <Typography sx={{ color: '#aaa', fontFamily: 'Roboto Mono', mb: 1 }}>
+                                    <span style={{ color: '#fff' }}>ENTRY COST:</span> 5 STAKE
+                                </Typography>
+                                <Typography sx={{ color: '#aaa', fontFamily: 'Roboto Mono', mb: 1 }}>
+                                    <span style={{ color: '#ffd700' }}>JACKPOT:</span> 3.5 STAKE (70%) is added to the weekly prize pool.
+                                </Typography>
+                                <Typography sx={{ color: '#aaa', fontFamily: 'Roboto Mono', mb: 1 }}>
+                                    <span style={{ color: '#00ff00' }}>REBATE:</span> Earn up to 1.0 STAKE back based on your score.
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: '#666', fontFamily: 'Roboto Mono', display: 'block', mt: 1 }}>
+                                    * Score 500+ points to earn the maximum rebate.
+                                </Typography>
+                            </Box>
+
+                            <Typography variant="h6" sx={{ color: '#fff', fontFamily: 'Roboto Mono', mb: 2, borderBottom: '1px solid #333', pb: 1 }}>
+                                // CONTROLS
+                            </Typography>
+                            <Box sx={{ mb: 3 }}>
+                                <Typography sx={{ color: '#aaa', fontFamily: 'Roboto Mono', mb: 1 }}>
+                                    <span style={{ color: '#fff' }}>JUMP:</span> Spacebar / Arrow Up
+                                </Typography>
+                                <Typography sx={{ color: '#aaa', fontFamily: 'Roboto Mono', mb: 1 }}>
+                                    <span style={{ color: '#fff' }}>DUCK/SLIDE:</span> Arrow Down
+                                </Typography>
+                            </Box>
+                        </Grid>
+
+                        <Grid item xs={12} md={6}>
+                            <Typography variant="h6" sx={{ color: '#fff', fontFamily: 'Roboto Mono', mb: 2, borderBottom: '1px solid #333', pb: 1 }}>
+                                // OBJECTS
+                            </Typography>
+                            
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                                <Box sx={{ width: 30, height: 30, background: '#00ffff', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#000', fontWeight: 'bold' }}>DATA</Box>
+                                <Box>
+                                    <Typography sx={{ color: '#fff', fontFamily: 'Roboto Mono' }}>DATA SHARD</Typography>
+                                    <Typography variant="caption" sx={{ color: '#aaa', fontFamily: 'Roboto Mono' }}>+50 Points. Collect these!</Typography>
+                                </Box>
+                            </Box>
+
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                                <Box sx={{ width: 30, height: 30, background: '#ffd700', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#000', fontWeight: 'bold' }}>KEY</Box>
+                                <Box>
+                                    <Typography sx={{ color: '#fff', fontFamily: 'Roboto Mono' }}>ENCRYPTION KEY</Typography>
+                                    <Typography variant="caption" sx={{ color: '#aaa', fontFamily: 'Roboto Mono' }}>Grants temporary invincibility.</Typography>
+                                </Box>
+                            </Box>
+
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                                <Box sx={{ width: 30, height: 30, border: '2px solid #ff0000', background: 'rgba(255,0,0,0.2)' }} />
+                                <Box>
+                                    <Typography sx={{ color: '#ff5555', fontFamily: 'Roboto Mono' }}>FIREWALL</Typography>
+                                    <Typography variant="caption" sx={{ color: '#aaa', fontFamily: 'Roboto Mono' }}>Jump over it.</Typography>
+                                </Box>
+                            </Box>
+
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                                <Box sx={{ width: 30, height: 30, borderRadius: '50%', border: '2px dashed #ff0055' }} />
+                                <Box>
+                                    <Typography sx={{ color: '#ff0055', fontFamily: 'Roboto Mono' }}>VIRUS</Typography>
+                                    <Typography variant="caption" sx={{ color: '#aaa', fontFamily: 'Roboto Mono' }}>Duck under it.</Typography>
+                                </Box>
+                            </Box>
+                        </Grid>
+                    </Grid>
+
+                    <Box sx={{ textAlign: 'center', mt: 4 }}>
+                        <Button 
+                            variant="outlined" 
+                            color="success" 
+                            onClick={() => setGameState('MENU')}
+                            sx={{ fontFamily: 'Roboto Mono' }}
+                        >
+                            CLOSE MANUAL
                         </Button>
                     </Box>
                 </Box>
@@ -782,6 +906,11 @@ const InfiniteLoopGame = ({ user, onGameEnd, jackpot }) => {
                     <Typography variant="h6" sx={{ color: '#fff', mb: 2 }}>
                         Data Uploaded: {Math.floor(score)} MB
                     </Typography>
+                    {lastRebate > 0 && (
+                        <Typography variant="subtitle1" sx={{ color: '#00ff00', mb: 2, fontFamily: 'Roboto Mono' }}>
+                            PERFORMANCE REBATE: +{lastRebate} STAKE
+                        </Typography>
+                    )}
                     <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
                         <Button 
                             variant="contained" 
