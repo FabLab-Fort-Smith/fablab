@@ -97,8 +97,24 @@ export default class ArcadeService {
         return jackpot || { currentAmount: 0 };
     }
 
-    static async getLeaderboard(game = 'infinite_loop') {
-        const scores = await ArcadeModel.getTopScores(game, 10);
+    static async getLeaderboard(game = 'infinite_loop', type = 'all_time') {
+        let startDate = null;
+
+        if (type === 'weekly') {
+            const jackpot = await ArcadeModel.getCurrentJackpot();
+            if (jackpot) {
+                startDate = jackpot.startDate;
+            } else {
+                // Fallback to start of week if no jackpot found
+                const now = new Date();
+                const day = now.getDay() || 7; // Get current day number, converting Sun. to 7
+                if (day !== 1) now.setHours(-24 * (day - 1)); 
+                now.setHours(0, 0, 0, 0);
+                startDate = now;
+            }
+        }
+
+        const scores = await ArcadeModel.getTopScores(game, 10, startDate);
         
         // Enrich with user data
         const enrichedScores = await Promise.all(scores.map(async (s) => {

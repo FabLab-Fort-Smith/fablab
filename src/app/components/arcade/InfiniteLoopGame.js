@@ -1,24 +1,29 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Box, Button, Typography, CircularProgress } from '@mui/material';
+import { Box, Button, Typography, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Avatar } from '@mui/material';
+import FullscreenIcon from '@mui/icons-material/Fullscreen';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 
-const GAME_WIDTH = 800;
-const GAME_HEIGHT = 400;
+const GAME_WIDTH = 1200;
+const GAME_HEIGHT = 600;
 const GRAVITY = 0.6;
-const JUMP_FORCE = -12;
+const JUMP_FORCE = -15; // Increased for larger scale
 const SPEED_INCREMENT = 0.0005;
-const INITIAL_SPEED = 6;
+const INITIAL_SPEED = 8; // Increased for larger scale
 
-const InfiniteLoopGame = ({ user, onGameEnd }) => {
+const InfiniteLoopGame = ({ user, onGameEnd, jackpot }) => {
     const canvasRef = useRef(null);
-    const [gameState, setGameState] = useState('MENU'); // MENU, PLAYING, GAMEOVER, LOADING
+    const containerRef = useRef(null);
+    const [gameState, setGameState] = useState('MENU'); // MENU, PLAYING, GAMEOVER, LOADING, LEADERBOARD
     const [score, setScore] = useState(0);
     const [sessionID, setSessionID] = useState(null);
     const [error, setError] = useState(null);
+    const [leaderboardData, setLeaderboardData] = useState([]);
+    const [leaderboardType, setLeaderboardType] = useState('weekly'); // 'weekly' or 'all_time'
 
     // Game State Refs
     const playerRef = useRef({
-        x: 50,
-        y: 270,
+        x: 100,
+        y: 450,
         width: 80,
         height: 80,
         dy: 0,
@@ -42,7 +47,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
     const imagesRef = useRef({
         runnerRun: null,
         runnerJump: null,
-        runnerSlide: null,
+        runnerDuck: null, // Renamed from runnerSlide to force update
         virus: null,
         firewall: null,
         shield: null,
@@ -54,17 +59,21 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         if (typeof window !== 'undefined') {
             const loadImg = (src) => {
                 const img = new Image();
-                img.src = src;
+                // Add timestamp to bust cache
+                img.src = `${src}?v=${Date.now()}`;
                 return img;
             };
 
-            imagesRef.current.runnerRun = loadImg('/runner/sprite-run.png');
-            imagesRef.current.runnerJump = loadImg('/runner/sprite-jump.png');
-            imagesRef.current.runnerSlide = loadImg('/runner/sprite-slide.png');
-            imagesRef.current.virus = loadImg('/runner/thVirus.png');
-            imagesRef.current.firewall = loadImg('/runner/firewall.png');
-            imagesRef.current.shield = loadImg('/runner/shieldOrb.png');
-            imagesRef.current.chip = loadImg('/runner/2xPointsChip.png');
+            // Force reset to ensure clean state
+            imagesRef.current = {
+                runnerRun: loadImg('/runner/sprite-run.png'),
+                runnerJump: loadImg('/runner/sprite-jump.png'),
+                runnerDuck: loadImg('/runner/sprite-slide.png'),
+                virus: loadImg('/runner/thVirus.png'),
+                firewall: loadImg('/runner/firewall.png'),
+                shield: loadImg('/runner/shieldOrb.png'),
+                chip: loadImg('/runner/2xPointsChip.png')
+            };
         }
     }, []);
 
@@ -96,10 +105,38 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         }
     };
 
+    const fetchLeaderboard = async (type = leaderboardType) => {
+        try {
+            const res = await fetch(`/api/v1/arcade/leaderboard?game=infinite_loop&type=${type}`);
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                setLeaderboardData(data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch leaderboard", error);
+        }
+    };
+
+    useEffect(() => {
+        if (gameState === 'LEADERBOARD') {
+            fetchLeaderboard(leaderboardType);
+        }
+    }, [leaderboardType, gameState]);
+
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            containerRef.current?.requestFullscreen().catch(err => {
+                console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else {
+            document.exitFullscreen();
+        }
+    };
+
     const resetGame = () => {
         playerRef.current = { 
-            x: 50, 
-            y: 270, 
+            x: 100, 
+            y: 450, 
             width: 80, 
             height: 80, 
             dy: 0, 
@@ -133,7 +170,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             obstacle = {
                 type: 'VIRUS',
                 x: GAME_WIDTH,
-                y: 240,
+                y: 440, // Adjusted for new height
                 width: w,
                 height: h,
                 passed: false,
@@ -151,7 +188,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             obstacle = {
                 type: 'FIREWALL',
                 x: GAME_WIDTH,
-                y: 320, // Ground is 350, height 30
+                y: 520, // Ground is 550, height 30
                 width: w,
                 height: h,
                 passed: false,
@@ -165,8 +202,8 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         const type = Math.random() > 0.5 ? 'DATA_PACKET' : 'ENCRYPTION_KEY';
         const imgs = imagesRef.current;
         
-        let w = 50;
-        const h = 50;
+        let w = 30;
+        const h = 30;
         
         if (type === 'DATA_PACKET' && imgs.chip && imgs.chip.complete && imgs.chip.naturalHeight !== 0) {
             w = h * (imgs.chip.naturalWidth / imgs.chip.naturalHeight);
@@ -177,7 +214,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         const powerup = {
             type,
             x: GAME_WIDTH,
-            y: 200 + Math.random() * 100,
+            y: 300 + Math.random() * 150, // Adjusted for new height
             width: w,
             height: h,
             active: true
@@ -204,7 +241,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         // Update Player Width based on sprite aspect ratio
         let currentSprite;
         if (player.ducking) {
-            currentSprite = imgs.runnerSlide;
+            currentSprite = imgs.runnerDuck;
         } else {
             currentSprite = player.grounded ? imgs.runnerRun : imgs.runnerJump;
         }
@@ -222,7 +259,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         player.y += player.dy;
 
         // Ground Collision
-        const groundLevel = 350;
+        const groundLevel = 550;
         if (player.y + player.height >= groundLevel) {
             player.y = groundLevel - player.height;
             player.dy = 0;
@@ -340,8 +377,8 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         ctx.strokeStyle = '#00ff00';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(0, 350);
-        ctx.lineTo(GAME_WIDTH, 350);
+        ctx.moveTo(0, 550);
+        ctx.lineTo(GAME_WIDTH, 550);
         ctx.stroke();
         ctx.shadowBlur = 0;
 
@@ -354,7 +391,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
         let playerImg;
         if (player.ducking) {
-            playerImg = imgs.runnerSlide;
+            playerImg = imgs.runnerDuck;
         } else {
             playerImg = player.grounded ? imgs.runnerRun : imgs.runnerJump;
         }
@@ -448,20 +485,26 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         // HUD
         // Background Bar
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(0, 0, GAME_WIDTH, 50);
+        ctx.fillRect(0, 0, GAME_WIDTH, 60);
         ctx.strokeStyle = '#333';
         ctx.beginPath();
-        ctx.moveTo(0, 50);
-        ctx.lineTo(GAME_WIDTH, 50);
+        ctx.moveTo(0, 60);
+        ctx.lineTo(GAME_WIDTH, 60);
         ctx.stroke();
 
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 20px Roboto Mono';
-        ctx.fillText(`DATA: ${Math.floor(scoreRef.current)} MB`, 20, 32);
+        ctx.font = 'bold 24px Roboto Mono';
+        ctx.fillText(`DATA: ${Math.floor(scoreRef.current)} MB`, 20, 40);
         
+        // Jackpot Display
+        ctx.fillStyle = '#00ff00';
+        ctx.textAlign = 'center';
+        ctx.fillText(`JACKPOT: ${jackpot} STAKE`, GAME_WIDTH / 2, 32);
+        ctx.textAlign = 'left';
+
         if (player.invincible) {
             ctx.fillStyle = '#00ffff';
-            ctx.fillText(`SHIELD ACTIVE`, GAME_WIDTH - 180, 32);
+            ctx.fillText(`SHIELD ACTIVE`, GAME_WIDTH - 220, 40);
         }
     };
 
@@ -553,9 +596,36 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
     };
 
     return (
-        <Box sx={{ textAlign: 'center', mt: 4 }}>
+        <Box ref={containerRef} sx={{ textAlign: 'center', position: 'relative', width: '100%', height: '100%', background: '#000' }}>
+            {/* Fullscreen Toggle */}
+            <Button 
+                onClick={toggleFullscreen}
+                sx={{ 
+                    position: 'absolute', 
+                    top: 10, 
+                    right: 10, 
+                    zIndex: 10, 
+                    color: '#00ff00',
+                    minWidth: 'auto',
+                    p: 1
+                }}
+            >
+                <FullscreenIcon />
+            </Button>
+
             {gameState === 'MENU' && (
-                <Box sx={{ p: 4, border: '1px solid #333', borderRadius: 2, background: '#111' }}>
+                <Box sx={{ 
+                    position: 'absolute', 
+                    top: '50%', 
+                    left: '50%', 
+                    transform: 'translate(-50%, -50%)', 
+                    zIndex: 5,
+                    p: 4, 
+                    border: '1px solid #333', 
+                    borderRadius: 2, 
+                    background: 'rgba(17, 17, 17, 0.9)',
+                    backdropFilter: 'blur(5px)'
+                }}>
                     <Typography variant="h4" sx={{ color: '#00ff00', fontFamily: 'Roboto Mono', mb: 2, textShadow: '0 0 10px #00ff00' }}>
                         SYSTEM BREACH PROTOCOL
                     </Typography>
@@ -565,23 +635,118 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
                         Avoid <b>FIREWALLS</b> and <b>VIRUSES</b>.
                     </Typography>
                     <Typography sx={{ color: '#aaa', mb: 4 }}>
-                        Cost: 5 Stake | Prize: Weekly Jackpot
+                        Cost: 5 Stake | Prize: Weekly Jackpot ({jackpot} STAKE)
                     </Typography>
                     {error && <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>}
+                    <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                        <Button 
+                            variant="contained" 
+                            color="success" 
+                            size="large"
+                            onClick={startGame}
+                            sx={{ fontFamily: 'Roboto Mono', fontSize: '1.2rem', px: 4, py: 1 }}
+                        >
+                            INITIATE RUN (5 STAKE)
+                        </Button>
+                        <Button 
+                            variant="outlined" 
+                            color="success" 
+                            size="large"
+                            onClick={() => {
+                                fetchLeaderboard();
+                                setGameState('LEADERBOARD');
+                            }}
+                            sx={{ fontFamily: 'Roboto Mono', fontSize: '1.2rem', px: 4, py: 1 }}
+                        >
+                            LEADERBOARD
+                        </Button>
+                    </Box>
+                </Box>
+            )}
+
+            {gameState === 'LEADERBOARD' && (
+                <Box sx={{ 
+                    position: 'absolute', 
+                    top: '50%', 
+                    left: '50%', 
+                    transform: 'translate(-50%, -50%)', 
+                    zIndex: 5,
+                    p: 4, 
+                    border: '1px solid #333', 
+                    borderRadius: 2, 
+                    background: 'rgba(17, 17, 17, 0.95)',
+                    backdropFilter: 'blur(5px)',
+                    width: '80%',
+                    maxWidth: '800px',
+                    maxHeight: '80vh',
+                    overflowY: 'auto'
+                }}>
+                    <Typography variant="h4" sx={{ color: '#00ff00', fontFamily: 'Roboto Mono', mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                        <EmojiEventsIcon fontSize="large" /> TOP HACKERS
+                    </Typography>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mb: 4 }}>
+                        <Button 
+                            variant={leaderboardType === 'weekly' ? 'contained' : 'outlined'} 
+                            color="success"
+                            onClick={() => setLeaderboardType('weekly')}
+                            sx={{ fontFamily: 'Roboto Mono' }}
+                        >
+                            WEEKLY JACKPOT
+                        </Button>
+                        <Button 
+                            variant={leaderboardType === 'all_time' ? 'contained' : 'outlined'} 
+                            color="success"
+                            onClick={() => setLeaderboardType('all_time')}
+                            sx={{ fontFamily: 'Roboto Mono' }}
+                        >
+                            ALL TIME
+                        </Button>
+                    </Box>
+                    
+                    <TableContainer component={Paper} sx={{ background: 'transparent', boxShadow: 'none' }}>
+                        <Table>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell sx={{ color: '#00ff00', fontFamily: 'Roboto Mono', borderBottom: '1px solid #333' }}>RANK</TableCell>
+                                    <TableCell sx={{ color: '#00ff00', fontFamily: 'Roboto Mono', borderBottom: '1px solid #333' }}>USER</TableCell>
+                                    <TableCell align="right" sx={{ color: '#00ff00', fontFamily: 'Roboto Mono', borderBottom: '1px solid #333' }}>SCORE</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {leaderboardData.map((row, index) => (
+                                    <TableRow key={index} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                                        <TableCell component="th" scope="row" sx={{ color: '#fff', fontFamily: 'Roboto Mono', borderBottom: '1px solid #222' }}>
+                                            {index + 1}
+                                        </TableCell>
+                                        <TableCell sx={{ color: '#fff', fontFamily: 'Roboto Mono', borderBottom: '1px solid #222', display: 'flex', alignItems: 'center', gap: 2 }}>
+                                            <Avatar src={row.avatar} sx={{ width: 30, height: 30 }} />
+                                            {row.username}
+                                        </TableCell>
+                                        <TableCell align="right" sx={{ color: '#00ff00', fontFamily: 'Roboto Mono', borderBottom: '1px solid #222' }}>
+                                            {row.score} MB
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+
                     <Button 
-                        variant="contained" 
+                        variant="outlined" 
                         color="success" 
-                        size="large"
-                        onClick={startGame}
-                        sx={{ fontFamily: 'Roboto Mono', fontSize: '1.2rem', px: 4, py: 1 }}
+                        onClick={() => setGameState('MENU')}
+                        sx={{ fontFamily: 'Roboto Mono', mt: 4 }}
                     >
-                        INITIATE RUN (5 STAKE)
+                        BACK TO MENU
                     </Button>
                 </Box>
             )}
 
             {gameState === 'LOADING' && (
-                <CircularProgress color="success" />
+                <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
+                    <CircularProgress color="success" />
+                </Box>
             )}
 
             <canvas
@@ -589,17 +754,28 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
                 width={GAME_WIDTH}
                 height={GAME_HEIGHT}
                 style={{ 
-                    display: gameState === 'PLAYING' || gameState === 'GAMEOVER' ? 'block' : 'none',
+                    display: 'block',
                     margin: '0 auto',
-                    border: '4px solid #333',
-                    borderRadius: '4px',
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
                     background: '#000',
-                    boxShadow: '0 0 20px rgba(0, 255, 0, 0.2)'
                 }}
             />
 
             {gameState === 'GAMEOVER' && (
-                <Box sx={{ mt: 2 }}>
+                <Box sx={{ 
+                    position: 'absolute', 
+                    top: '50%', 
+                    left: '50%', 
+                    transform: 'translate(-50%, -50%)', 
+                    zIndex: 5,
+                    p: 4, 
+                    border: '1px solid #333', 
+                    borderRadius: 2, 
+                    background: 'rgba(17, 17, 17, 0.9)',
+                    backdropFilter: 'blur(5px)'
+                }}>
                     <Typography variant="h5" color="error" sx={{ fontFamily: 'Roboto Mono', mb: 2, textShadow: '0 0 10px red' }}>
                         CONNECTION TERMINATED
                     </Typography>
@@ -618,17 +794,36 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
                         <Button 
                             variant="outlined" 
                             color="success"
+                            onClick={() => {
+                                fetchLeaderboard();
+                                setGameState('LEADERBOARD');
+                            }}
+                            sx={{ fontFamily: 'Roboto Mono' }}
+                        >
+                            LEADERBOARD
+                        </Button>
+                        <Button 
+                            variant="outlined" 
+                            color="success"
                             onClick={() => setGameState('MENU')}
                             sx={{ fontFamily: 'Roboto Mono' }}
                         >
-                            RETURN TO ROOT
+                            MENU
                         </Button>
                     </Box>
                 </Box>
             )}
             
             {gameState === 'PLAYING' && (
-                <Typography variant="caption" sx={{ color: '#666', mt: 1, display: 'block', fontFamily: 'Roboto Mono' }}>
+                <Typography variant="caption" sx={{ 
+                    position: 'absolute', 
+                    bottom: 10, 
+                    left: '50%', 
+                    transform: 'translateX(-50%)', 
+                    color: '#666', 
+                    fontFamily: 'Roboto Mono',
+                    pointerEvents: 'none'
+                }}>
                     [SPACE/UP] Jump | [DOWN] Duck
                 </Typography>
             )}

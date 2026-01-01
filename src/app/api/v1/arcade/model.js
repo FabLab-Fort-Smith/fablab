@@ -37,12 +37,18 @@ export default class ArcadeModel {
         return result.modifiedCount > 0;
     }
 
-    static async getTopScores(game, limit = 10) {
+    static async getTopScores(game, limit = 10, startDate = null) {
         const collection = await this.getSessionsCollection();
-        return await collection.find({ 
+        const query = { 
             game, 
             status: 'completed' 
-        })
+        };
+
+        if (startDate) {
+            query.startedAt = { $gte: startDate };
+        }
+
+        return await collection.find(query)
         .sort({ score: -1 })
         .limit(limit)
         .toArray();
