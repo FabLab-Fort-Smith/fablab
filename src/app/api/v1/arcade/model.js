@@ -54,6 +54,20 @@ export default class ArcadeModel {
         .toArray();
     }
 
+    static async getUserHighScore(userID, game) {
+        const collection = await this.getSessionsCollection();
+        const result = await collection.find({ 
+            userID, 
+            game, 
+            status: 'completed' 
+        })
+        .sort({ score: -1 })
+        .limit(1)
+        .toArray();
+        
+        return result.length > 0 ? result[0].score : 0;
+    }
+
     // --- Jackpot ---
 
     static async getCurrentJackpot() {

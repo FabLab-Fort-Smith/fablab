@@ -719,10 +719,10 @@ const InfiniteLoopGame = ({ user, onGameEnd, jackpot }) => {
                                     <span style={{ color: '#00ff00' }}>GROWTH:</span> Once the base jackpot is funded, 3.5 STAKE (70%) from every run is added to the pot.
                                 </Typography>
                                 <Typography sx={{ color: '#aaa', fontFamily: 'Roboto Mono', mb: 1 }}>
-                                    <span style={{ color: '#00ff00' }}>REBATE:</span> Earn up to 1.0 STAKE back based on your score.
+                                    <span style={{ color: '#00ff00' }}>REBATE:</span> Earn 1.0 STAKE back if you beat your personal high score!
                                 </Typography>
                                 <Typography variant="caption" sx={{ color: '#666', fontFamily: 'Roboto Mono', display: 'block', mt: 1 }}>
-                                    * Score 500+ points to earn the maximum rebate.
+                                    * Push your limits to earn rewards.
                                 </Typography>
                             </Box>
 

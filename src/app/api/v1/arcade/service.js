@@ -198,9 +198,13 @@ export default class ArcadeService {
         if (session.status !== 'active') throw new Error("Session already completed");
 
         // Calculate Rebate (Performance Reward)
-        // Cap at MAX_REBATE (1.0)
-        const rebate = Math.min(this.MAX_REBATE, (score / this.REBATE_THRESHOLD) * this.MAX_REBATE);
-        const roundedRebate = Math.floor(rebate * 100) / 100; // Round to 2 decimals
+        // Logic: Beat your personal high score to get MAX_REBATE (1.0)
+        const previousHighScore = await ArcadeModel.getUserHighScore(session.userID, session.game);
+        let roundedRebate = 0;
+
+        if (score > previousHighScore) {
+            roundedRebate = this.MAX_REBATE;
+        }
 
         if (roundedRebate > 0) {
             await UserModel.updateUser({ userID: session.userID }, {
@@ -208,7 +212,7 @@ export default class ArcadeService {
                 $push: {
                     stakeHistory: {
                         amount: roundedRebate,
-                        reason: `Arcade Rebate: ${score} pts`,
+                        reason: `Arcade Rebate (New High Score!): ${score} pts`,
                         timestamp: new Date(),
                         type: 'arcade_rebate'
                     }
