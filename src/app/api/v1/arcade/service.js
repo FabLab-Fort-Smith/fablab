@@ -104,19 +104,15 @@ export default class ArcadeService {
         }
     }
 
-    static async startGame(userID, gameType = 'infinite_loop') {
-        // 0. Check for Jackpot Cycle
+    static async _getOrCreateActiveJackpot() {
+        // 1. Check for Jackpot Cycle (close expired ones)
         await this.checkAndCycleJackpot();
 
-        // 1. Validate User & Stake
-        const user = await UserModel.getUserByID(userID);
-        if (!user) throw new Error("User not found");
-        if (user.stake < this.GAME_COST) throw new Error("Insufficient Stake");
-
-        // 2. Get or Create Active Jackpot
+        // 2. Get Active Jackpot
         let jackpot = await ArcadeModel.getCurrentJackpot();
+
+        // 3. Create if missing
         if (!jackpot) {
-            // Create new weekly jackpot
             const now = new Date();
             // Calculate next Sunday midnight
             const nextSunday = new Date();
@@ -138,6 +134,17 @@ export default class ArcadeService {
                 jackpot = await ArcadeModel.getCurrentJackpot();
             }
         }
+        return jackpot;
+    }
+
+    static async startGame(userID, gameType = 'infinite_loop') {
+        // 1. Validate User & Stake
+        const user = await UserModel.getUserByID(userID);
+        if (!user) throw new Error("User not found");
+        if (user.stake < this.GAME_COST) throw new Error("Insufficient Stake");
+
+        // 2. Get or Create Active Jackpot
+        const jackpot = await this._getOrCreateActiveJackpot();
 
         // 3. Deduct Stake (Burn & Jackpot)
         // We deduct the full cost from the user. 
@@ -231,7 +238,7 @@ export default class ArcadeService {
     }
 
     static async getJackpot() {
-        const jackpot = await ArcadeModel.getCurrentJackpot();
+        const jackpot = await this._getOrCreateActiveJackpot();
         return jackpot || { currentAmount: 0 };
     }
 
