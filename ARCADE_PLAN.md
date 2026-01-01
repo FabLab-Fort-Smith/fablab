@@ -1,13 +1,20 @@
 # Arcade Game Plan: "The Glitch Arcade"
 
-## Economic Model: "Burn & Earn"
+## Economic Model: "Base Jackpot & High Score Rebate"
 - **Entry Fee:** 5 Stake per game.
-- **The Split:**
-    - **50% Burn (2.5 Stake):** Removed from circulation immediately (deflationary).
-    - **50% Jackpot (2.5 Stake):** Added to the "Weekly Prize Pool".
+- **Base Jackpot:** The House guarantees a minimum Jackpot of **100 Stake** every week.
+- **The Split (Dynamic):**
+    - **Funding Phase:** Until the Base Jackpot (100 Stake) is covered by entry fees, **100% of the Entry Fee** goes to the House.
+    - **Growth Phase:** Once funded, every play adds **3.5 Stake** to the Jackpot and **1.5 Stake** is Burned (deflationary).
+- **Rebate System:**
+    - If a player beats their **Personal High Score** for the game, they receive an instant **1.0 Stake Rebate**.
 - **Prizes:**
     - The Jackpot accumulates throughout the week.
-    - At the end of the week (Sunday Midnight), the Jackpot is distributed to the Top 3 players on the Leaderboard (e.g., 60% / 30% / 10%).
+    - At the end of the week (Sunday Midnight), the **Entire Jackpot** is awarded to the **#1 Top Runner** on the Leaderboard.
+    - **Winner Takes All.**
+- **Badges & Roles:**
+    - The winner receives the **"Top Runner" Badge** (transferred from the previous winner).
+    - The winner receives the **"Top Runner" Discord Role** (synced automatically).
 
 ## Game Concept: "Infinite Loop" (Endless Runner)
 You are a rogue data packet sprinting through the fiber optic network. The goal is to travel as far as possible without crashing.
@@ -42,7 +49,7 @@ You are a rogue data packet sprinting through the fiber optic network. The goal 
   "status": "active|completed",
   "score": 0,
   "stakePaid": 5,
-  "jackpotContribution": 2.5,
+  "jackpotContribution": 3.5,
   "startedAt": "2025-12-31T...",
   "endedAt": "..."
 }
@@ -53,6 +60,7 @@ You are a rogue data packet sprinting through the fiber optic network. The goal 
 {
   "_id": "week_2025_52",
   "currentAmount": 500,
+  "isFunded": true,
   "status": "open|distributed",
   "startDate": "...",
   "endDate": "..."
@@ -62,11 +70,12 @@ You are a rogue data packet sprinting through the fiber optic network. The goal 
 ### 2. API Endpoints
 - `POST /api/v1/arcade/start`:
     - Deducts 5 Stake.
-    - **Burns 2.5 Stake.**
-    - **Adds 2.5 Stake to `arcade_jackpot`.**
+    - Checks Funding Status.
+    - Allocates to House or Jackpot/Burn accordingly.
     - Returns `sessionID` and `currentJackpot`.
 - `POST /api/v1/arcade/submit`:
     - Validates score.
+    - Checks for Personal High Score -> Issues Rebate.
     - Updates Leaderboard.
 - `GET /api/v1/arcade/jackpot`:
     - Returns current pot size and time remaining.
@@ -76,13 +85,7 @@ You are a rogue data packet sprinting through the fiber optic network. The goal 
 - **Components:**
     - `JackpotDisplay`: Big animated counter showing the current prize pool.
     - `GameCanvas`: React + HTML5 Canvas for "Infinite Loop".
-    - `Leaderboard`: Shows Top 3 (who are in the money) and user's rank.
-
-## Implementation Steps
-1.  **Backend:** Implement `ArcadeService` with the split-pot logic.
-2.  **Database:** Create the Jackpot tracking mechanism.
-3.  **Frontend:** Build the `InfiniteLoopGame` engine (Canvas API).
-4.  **UI:** Design the Arcade Lobby with the "High Stakes" aesthetic.
+    - `Leaderboard`: Shows Top Runners.
 
 ## Future Games
 - **Stack Overflow:** Tetris clone.
