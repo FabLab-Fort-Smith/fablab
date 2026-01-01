@@ -508,8 +508,8 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
         if (e.code === 'ArrowDown' && !player.ducking) {
             player.ducking = true;
-            player.height = 40;
-            player.y += 40; // Push down instantly
+            player.height = 50;
+            player.y += 30; // Push down (80 - 50 = 30)
         }
     };
 
@@ -524,7 +524,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
         if (e.code === 'ArrowDown' && player.ducking) {
             player.ducking = false;
-            player.y -= 40; // Pop up
+            player.y -= 30; // Pop up
             player.height = 80;
         }
     };
