@@ -45,8 +45,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         virus: null,
         firewall: null,
         shield: null,
-        chip: null,
-        frame: null
+        chip: null
     });
 
     // Load Images
@@ -64,7 +63,6 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             imagesRef.current.firewall = loadImg('/runner/firewall.png');
             imagesRef.current.shield = loadImg('/runner/shieldOrb.png');
             imagesRef.current.chip = loadImg('/runner/2xPointsChip.png');
-            imagesRef.current.frame = loadImg('/runner/terminalFrame.png');
         }
     }, []);
 
@@ -402,17 +400,12 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
         // HUD
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 20px Roboto Mono';
-        ctx.fillText(`DATA UPLOADED: ${Math.floor(scoreRef.current)} MB`, 40, 80);
+        ctx.font = 'bold 24px Roboto Mono';
+        ctx.fillText(`DATA UPLOADED: ${Math.floor(scoreRef.current)} MB`, 20, 40);
         
         if (player.invincible) {
             ctx.fillStyle = '#00ffff';
-            ctx.fillText(`ENCRYPTION ACTIVE`, 40, 110);
-        }
-
-        // Terminal Frame (Overlay)
-        if (imgs.frame && imgs.frame.complete && imgs.frame.naturalWidth !== 0) {
-            ctx.drawImage(imgs.frame, 0, 0, GAME_WIDTH, GAME_HEIGHT);
+            ctx.fillText(`ENCRYPTION ACTIVE`, 20, 70);
         }
     };
 
