@@ -425,6 +425,10 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
     const handleKeyDown = (e) => {
         if (gameState !== 'PLAYING') return;
+
+        if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) {
+            e.preventDefault();
+        }
         
         const player = playerRef.current;
 
@@ -442,6 +446,11 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
     const handleKeyUp = (e) => {
         if (gameState !== 'PLAYING') return;
+
+        if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) {
+            e.preventDefault();
+        }
+
         const player = playerRef.current;
 
         if (e.code === 'ArrowDown' && player.ducking) {
