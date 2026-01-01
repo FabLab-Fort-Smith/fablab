@@ -1,5 +1,6 @@
 import ArcadeModel from "./model";
 import UserModel from "../users/model";
+import PortfolioModel from "../portfolio/model";
 import DiscordService from "@/lib/discord";
 import Constants from "@/lib/constants";
 import { ObjectId } from "mongodb";
@@ -64,9 +65,24 @@ export default class ArcadeService {
                     $push: { badges: badge }
                 });
 
-                if (winner && winner.discordId) {
-                    await DiscordService.addRole(winner.discordId, Constants.TOP_RUNNER_ROLE_ID);
-                    await DiscordService.sendHackTheLabNotification(`👑 **New Arcade Champion!**\nCongratulations to **${winner.username}** for winning the Weekly Jackpot of **${prize} Stake**! They are now the **Top Runner**!`);
+                if (winner) {
+                    // Discord Notification
+                    if (winner.discordId) {
+                        await DiscordService.addRole(winner.discordId, Constants.TOP_RUNNER_ROLE_ID);
+                    }
+                    // Post to Feed (Discord)
+                    await DiscordService.sendChannelMessage(Constants.DISCORD_FEED_CHANNEL_ID, `👑 **New Arcade Champion!**\nCongratulations to **${winner.username}** for winning the Weekly Jackpot of **${prize} Stake**! They are now the **Top Runner**!`);
+
+                    // Post to Feed (App - Portfolio)
+                    await PortfolioModel.createItem({
+                        userID: winnerID,
+                        title: "🏆 Weekly Arcade Champion!",
+                        description: `I just won the Weekly Arcade Jackpot of ${prize} Stake! Can you beat my score?`,
+                        imageUrls: winner.image ? [winner.image] : [],
+                        createdAt: new Date(),
+                        likes: [],
+                        comments: []
+                    });
                 }
 
                 // 4. Close Jackpot
