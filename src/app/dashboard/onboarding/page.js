@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Container, Typography, Box, TextField, Button, Paper, 
     Stepper, Step, StepLabel, StepContent, Alert, Autocomplete, Chip 
@@ -11,7 +11,7 @@ const steps = [
     {
         label: 'Personal Information',
         description: 'Tell us a bit about yourself.',
-        fields: ['bio', 'interests']
+        fields: ['firstName', 'lastName', 'bio', 'interests']
     },
     {
         label: 'Membership Questions',
@@ -41,6 +41,17 @@ export default function OnboardingPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
+    useEffect(() => {
+        if (session?.user) {
+            setFormData(prev => ({
+                ...prev,
+                firstName: session.user.firstName || '',
+                lastName: session.user.lastName || '',
+                bio: session.user.bio || ''
+            }));
+        }
+    }, [session]);
+
     const handleNext = () => {
         setActiveStep((prev) => prev + 1);
     };
@@ -64,6 +75,8 @@ export default function OnboardingPage() {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    firstName: formData.firstName,
+                    lastName: formData.lastName,
                     questions: {
                         reason: formData.reason,
                         interests: formData.interests,
