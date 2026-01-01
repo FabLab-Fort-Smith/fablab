@@ -246,6 +246,8 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    firstName: formData.firstName,
+                    lastName: formData.lastName,
                     membership: formData.membership,
                     role: formData.role,
                     boardPosition: formData.boardPosition,
@@ -460,6 +462,11 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                         ? `Submitted on ${new Date(formData.membership.applicationDate).toLocaleDateString()}`
                                         : "Mark Application as Submitted"}
                                 />
+                                {!formData.membership.applicationDate && (
+                                    <Typography variant="caption" color="text.secondary" display="block">
+                                        Check this to manually force the user into the "Onboarding Reviews" queue.
+                                    </Typography>
+                                )}
                             </StepContent>
                         </Step>
 
