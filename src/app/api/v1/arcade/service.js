@@ -71,7 +71,7 @@ export default class ArcadeService {
                         await DiscordService.addRole(winner.discordId, Constants.TOP_RUNNER_ROLE_ID);
                     }
                     // Post to Feed (Discord)
-                    await DiscordService.sendChannelMessage(Constants.DISCORD_FEED_CHANNEL_ID, `👑 **New Arcade Champion!**\nCongratulations to **${winner.username}** for winning the Weekly Jackpot of **${prize} Stake**! They are now the **Top Runner**!`);
+                    await DiscordService.sendChannelMessage(Constants.DISCORD_SHOWCASE_CHANNEL_ID, `👑 **New Arcade Champion!**\nCongratulations to **${winner.username}** for winning the Weekly Jackpot of **${prize} Stake**! They are now the **Top Runner**!`);
 
                     // Post to Feed (App - Portfolio)
                     await PortfolioModel.createItem({
@@ -84,21 +84,6 @@ export default class ArcadeService {
                         comments: []
                     });
                 }
-
-                // 4. Close Jackpot
-                await ArcadeModel.updateJackpot(jackpot._id, {
-                    status: 'closed',
-                    winnerID: winnerID,
-                    closedAt: new Date()
-                });
-
-            } else {
-                    awardedAt: new Date()
-                };
-
-                await UserModel.updateUser({ userID: winnerID }, {
-                    $push: { badges: badge }
-                });
 
                 // 4. Close Jackpot
                 await ArcadeModel.updateJackpot(jackpot._id, {
