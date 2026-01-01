@@ -18,16 +18,15 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
     // Game State Refs
     const playerRef = useRef({
         x: 50,
-        y: 300,
-        width: 40,
-        height: 40,
+        y: 290,
+        width: 60,
+        height: 60,
         dy: 0,
         grounded: true,
         ducking: false,
         color: '#00ff00',
         invincible: false,
-        multiplier: 1,
-        trail: []
+        multiplier: 1
     });
     
     const obstaclesRef = useRef([]);
@@ -98,16 +97,15 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
     const resetGame = () => {
         playerRef.current = { 
             x: 50, 
-            y: 300, 
-            width: 40, 
-            height: 40, 
+            y: 290, 
+            width: 60, 
+            height: 60, 
             dy: 0, 
             grounded: true, 
             ducking: false, 
             color: '#00ff00',
             invincible: false,
-            multiplier: 1,
-            trail: []
+            multiplier: 1
         };
         obstaclesRef.current = [];
         powerupsRef.current = [];
@@ -190,12 +188,6 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             player.grounded = true;
         } else {
             player.grounded = false;
-        }
-
-        // Player Trail
-        if (gameState === 'PLAYING') {
-            player.trail.push({ x: player.x, y: player.y, alpha: 0.5 });
-            if (player.trail.length > 5) player.trail.shift();
         }
 
         // Spawning
@@ -312,12 +304,6 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         ctx.lineTo(GAME_WIDTH, 350);
         ctx.stroke();
         ctx.shadowBlur = 0;
-
-        // Player Trail
-        playerRef.current.trail.forEach((pos, i) => {
-            ctx.fillStyle = `rgba(0, 255, 0, ${i * 0.1})`;
-            ctx.fillRect(pos.x, pos.y, playerRef.current.width, playerRef.current.height);
-        });
 
         // Player
         const player = playerRef.current;
@@ -477,8 +463,8 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
         if (e.code === 'ArrowDown' && !player.ducking) {
             player.ducking = true;
-            player.height = 20;
-            player.y += 20; // Push down instantly
+            player.height = 30;
+            player.y += 30; // Push down instantly
         }
     };
 
@@ -493,8 +479,8 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
         if (e.code === 'ArrowDown' && player.ducking) {
             player.ducking = false;
-            player.y -= 20; // Pop up
-            player.height = 40;
+            player.y -= 30; // Pop up
+            player.height = 60;
         }
     };
 
