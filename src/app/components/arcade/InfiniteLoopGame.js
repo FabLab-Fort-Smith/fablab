@@ -143,7 +143,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         } else {
             // "Firewall" (Jump over)
             let w = 60;
-            const h = 80;
+            const h = 60;
             if (imgs.firewall && imgs.firewall.complete && imgs.firewall.naturalHeight !== 0) {
                 w = h * (imgs.firewall.naturalWidth / imgs.firewall.naturalHeight);
             }
@@ -151,7 +151,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             obstacle = {
                 type: 'FIREWALL',
                 x: GAME_WIDTH,
-                y: 270, // Ground is 350, height 80
+                y: 290, // Ground is 350, height 60
                 width: w,
                 height: h,
                 passed: false,
@@ -446,13 +446,22 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         });
 
         // HUD
+        // Background Bar
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, GAME_WIDTH, 50);
+        ctx.strokeStyle = '#333';
+        ctx.beginPath();
+        ctx.moveTo(0, 50);
+        ctx.lineTo(GAME_WIDTH, 50);
+        ctx.stroke();
+
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 24px Roboto Mono';
-        ctx.fillText(`DATA UPLOADED: ${Math.floor(scoreRef.current)} MB`, 20, 40);
+        ctx.font = 'bold 20px Roboto Mono';
+        ctx.fillText(`DATA: ${Math.floor(scoreRef.current)} MB`, 20, 32);
         
         if (player.invincible) {
             ctx.fillStyle = '#00ffff';
-            ctx.fillText(`ENCRYPTION ACTIVE`, 20, 70);
+            ctx.fillText(`SHIELD ACTIVE`, GAME_WIDTH - 180, 32);
         }
     };
 
