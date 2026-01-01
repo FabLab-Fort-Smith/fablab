@@ -10,6 +10,7 @@ export default class ArcadeService {
     static JACKPOT_AMOUNT = 3.5; // Increased from 2.5 (70% allocation)
     static MAX_REBATE = 1.0; // Max stake earned back per run
     static REBATE_THRESHOLD = 500; // Score needed for max rebate
+    static BASE_JACKPOT = 100; // Guaranteed starting jackpot
 
     static async checkAndCycleJackpot() {
         const jackpot = await ArcadeModel.getCurrentJackpot();
@@ -124,7 +125,8 @@ export default class ArcadeService {
 
             jackpot = {
                 _id: `week_${now.getFullYear()}_${getWeekNumber(now)}`,
-                currentAmount: 0,
+                currentAmount: this.BASE_JACKPOT, // Start with Base Jackpot
+                fundedAmount: 0, // Track how much of the base has been paid back
                 status: 'open',
                 startDate: now,
                 endDate: nextSunday
@@ -139,8 +141,6 @@ export default class ArcadeService {
 
         // 3. Deduct Stake (Burn & Jackpot)
         // We deduct the full cost from the user. 
-        // The burn happens implicitly by not tracking it anywhere else.
-        // The jackpot portion is tracked in the jackpot collection.
         await UserModel.updateUser({ userID }, {
             $inc: { stake: -this.GAME_COST },
             $push: {
@@ -153,8 +153,25 @@ export default class ArcadeService {
             }
         });
 
-        // 4. Add to Jackpot
-        await ArcadeModel.addToJackpot(jackpot._id, this.JACKPOT_AMOUNT);
+        // 4. Handle Jackpot Funding Logic
+        // If the base jackpot hasn't been fully funded (paid back) yet,
+        // we burn the entire entry fee towards the funding goal.
+        // Once funded, we switch to the standard growth model (3.5 to jackpot, 1.5 burn).
+        
+        let jackpotContribution = 0;
+        const currentFunded = jackpot.fundedAmount || 0;
+
+        if (currentFunded < this.BASE_JACKPOT) {
+            // Phase 1: Payback Mode
+            // Burn the full 5 Stake towards the funding goal
+            await ArcadeModel.fundJackpot(jackpot._id, this.GAME_COST);
+            jackpotContribution = 0; // Jackpot doesn't grow yet
+        } else {
+            // Phase 2: Growth Mode
+            // Standard allocation: 3.5 to Jackpot, 1.5 Burn
+            await ArcadeModel.addToJackpot(jackpot._id, this.JACKPOT_AMOUNT);
+            jackpotContribution = this.JACKPOT_AMOUNT;
+        }
 
         // 5. Create Session
         const session = {
@@ -163,7 +180,7 @@ export default class ArcadeService {
             status: 'active',
             score: 0,
             stakePaid: this.GAME_COST,
-            jackpotContribution: this.JACKPOT_AMOUNT,
+            jackpotContribution: jackpotContribution,
             startedAt: new Date()
         };
 
@@ -171,7 +188,7 @@ export default class ArcadeService {
 
         return {
             sessionID: createdSession._id,
-            currentJackpot: jackpot.currentAmount + this.JACKPOT_AMOUNT
+            currentJackpot: jackpot.currentAmount + jackpotContribution
         };
     }
 
