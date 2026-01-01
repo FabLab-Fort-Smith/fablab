@@ -124,8 +124,8 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
         if (type > 0.7) {
             // "Virus" Drone (Duck under)
-            let w = 80;
-            const h = 80;
+            let w = 60;
+            const h = 60;
             if (imgs.virus && imgs.virus.complete && imgs.virus.naturalHeight !== 0) {
                 w = h * (imgs.virus.naturalWidth / imgs.virus.naturalHeight);
             }
@@ -133,7 +133,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             obstacle = {
                 type: 'VIRUS',
                 x: GAME_WIDTH,
-                y: 210,
+                y: 240,
                 width: w,
                 height: h,
                 passed: false,
@@ -142,8 +142,8 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             };
         } else {
             // "Firewall" (Jump over)
-            let w = 60;
-            const h = 40;
+            let w = 40;
+            const h = 30;
             if (imgs.firewall && imgs.firewall.complete && imgs.firewall.naturalHeight !== 0) {
                 w = h * (imgs.firewall.naturalWidth / imgs.firewall.naturalHeight);
             }
@@ -151,7 +151,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             obstacle = {
                 type: 'FIREWALL',
                 x: GAME_WIDTH,
-                y: 310, // Ground is 350, height 40
+                y: 320, // Ground is 350, height 30
                 width: w,
                 height: h,
                 passed: false,
