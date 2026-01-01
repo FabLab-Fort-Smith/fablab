@@ -39,6 +39,34 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
     const frameIdRef = useRef(null);
     const lastTimeRef = useRef(0);
 
+    // Image Assets Refs
+    const imagesRef = useRef({
+        runnerRun: null,
+        runnerJump: null,
+        virus: null,
+        firewall: null,
+        shield: null,
+        chip: null
+    });
+
+    // Load Images
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const loadImg = (src) => {
+                const img = new Image();
+                img.src = src;
+                return img;
+            };
+
+            imagesRef.current.runnerRun = loadImg('/runner/sprite-run.png');
+            imagesRef.current.runnerJump = loadImg('/runner/sprite-jump.png');
+            imagesRef.current.virus = loadImg('/runner/thVirus.png');
+            imagesRef.current.firewall = loadImg('/runner/firewall.png');
+            imagesRef.current.shield = loadImg('/runner/shieldOrb.png');
+            imagesRef.current.chip = loadImg('/runner/2xPointsChip.png');
+        }
+    }, []);
+
     // Initialize Matrix Rain
     useEffect(() => {
         const columns = Math.floor(GAME_WIDTH / 20);
@@ -293,60 +321,70 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
         // Player
         const player = playerRef.current;
-        ctx.fillStyle = player.color;
-        ctx.shadowBlur = player.invincible ? 20 : 10;
-        ctx.shadowColor = player.color;
-        ctx.fillRect(player.x, player.y, player.width, player.height);
+        const imgs = imagesRef.current;
         
-        // Player "Code" Texture
-        ctx.fillStyle = '#000';
-        ctx.font = '10px monospace';
-        ctx.fillText('USER', player.x + 5, player.y + 15);
-        ctx.fillText('ID:1', player.x + 5, player.y + 30);
+        ctx.shadowBlur = player.invincible ? 20 : 0;
+        ctx.shadowColor = player.color;
+
+        let playerImg = player.grounded ? imgs.runnerRun : imgs.runnerJump;
+        if (playerImg && playerImg.complete && playerImg.naturalWidth !== 0) {
+             ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
+        } else {
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+        }
+        
+        // Player "Code" Texture (Overlay)
+        if (!playerImg || !playerImg.complete) {
+            ctx.fillStyle = '#000';
+            ctx.font = '10px monospace';
+            ctx.fillText('USER', player.x + 5, player.y + 15);
+            ctx.fillText('ID:1', player.x + 5, player.y + 30);
+        }
         ctx.shadowBlur = 0;
 
         // Obstacles
         obstaclesRef.current.forEach(obs => {
-            if (obs.type === 'FIREWALL') {
-                // Firewall (Red Grid Wall)
-                ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
-                ctx.strokeStyle = '#ff0000';
-                ctx.lineWidth = 2;
-                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-                ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
-                
-                // Grid lines
-                ctx.beginPath();
-                ctx.moveTo(obs.x, obs.y + 10);
-                ctx.lineTo(obs.x + obs.width, obs.y + 10);
-                ctx.moveTo(obs.x, obs.y + 20);
-                ctx.lineTo(obs.x + obs.width, obs.y + 20);
-                ctx.moveTo(obs.x, obs.y + 30);
-                ctx.lineTo(obs.x + obs.width, obs.y + 30);
-                ctx.stroke();
-
-            } else if (obs.type === 'VIRUS') {
-                // Virus (Spiky Shape)
+            let obsImg = obs.type === 'VIRUS' ? imgs.virus : imgs.firewall;
+            
+            if (obsImg && obsImg.complete && obsImg.naturalWidth !== 0) {
                 ctx.save();
-                ctx.translate(obs.x + obs.width/2, obs.y + obs.height/2);
-                ctx.rotate(obs.rotation);
-                ctx.fillStyle = '#ff0055';
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = '#ff0055';
-                
-                ctx.beginPath();
-                const spikes = 8;
-                const outerRadius = 20;
-                const innerRadius = 10;
-                for (let i = 0; i < spikes; i++) {
-                    let angle = (i / spikes) * Math.PI * 2;
-                    ctx.lineTo(Math.cos(angle) * outerRadius, Math.sin(angle) * outerRadius);
-                    angle += Math.PI / spikes;
-                    ctx.lineTo(Math.cos(angle) * innerRadius, Math.sin(angle) * innerRadius);
+                if (obs.type === 'VIRUS') {
+                    // Rotate virus
+                    ctx.translate(obs.x + obs.width/2, obs.y + obs.height/2);
+                    ctx.rotate(obs.rotation);
+                    ctx.drawImage(obsImg, -obs.width/2, -obs.height/2, obs.width, obs.height);
+                } else {
+                    ctx.drawImage(obsImg, obs.x, obs.y, obs.width, obs.height);
                 }
-                ctx.closePath();
-                ctx.fill();
                 ctx.restore();
+            } else {
+                // Fallback drawing
+                if (obs.type === 'FIREWALL') {
+                    ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+                    ctx.strokeStyle = '#ff0000';
+                    ctx.lineWidth = 2;
+                    ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+                    ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+                } else if (obs.type === 'VIRUS') {
+                    ctx.save();
+                    ctx.translate(obs.x + obs.width/2, obs.y + obs.height/2);
+                    ctx.rotate(obs.rotation);
+                    ctx.fillStyle = '#ff0055';
+                    ctx.beginPath();
+                    const spikes = 8;
+                    const outerRadius = 20;
+                    const innerRadius = 10;
+                    for (let i = 0; i < spikes; i++) {
+                        let angle = (i / spikes) * Math.PI * 2;
+                        ctx.lineTo(Math.cos(angle) * outerRadius, Math.sin(angle) * outerRadius);
+                        angle += Math.PI / spikes;
+                        ctx.lineTo(Math.cos(angle) * innerRadius, Math.sin(angle) * innerRadius);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.restore();
+                }
             }
         });
 
@@ -354,27 +392,27 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         powerupsRef.current.forEach(p => {
             if (!p.active) return;
             
-            if (p.type === 'DATA_PACKET') {
-                // Blue Data Cube
-                ctx.fillStyle = '#00ffff';
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = '#00ffff';
-                ctx.fillRect(p.x, p.y, p.width, p.height);
-                ctx.fillStyle = '#fff';
-                ctx.font = '12px monospace';
-                ctx.fillText('DATA', p.x + 2, p.y + 15);
+            let pImg = p.type === 'ENCRYPTION_KEY' ? imgs.shield : imgs.chip;
+            
+            if (pImg && pImg.complete && pImg.naturalWidth !== 0) {
+                ctx.drawImage(pImg, p.x, p.y, p.width, p.height);
             } else {
-                // Yellow Key
-                ctx.fillStyle = '#ffd700';
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = '#ffd700';
-                ctx.beginPath();
-                ctx.arc(p.x + p.width/2, p.y + p.height/2, p.width/2, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = '#000';
-                ctx.fillText('KEY', p.x + 2, p.y + 15);
+                // Fallback
+                if (p.type === 'DATA_PACKET') {
+                    ctx.fillStyle = '#00ffff';
+                    ctx.fillRect(p.x, p.y, p.width, p.height);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '12px monospace';
+                    ctx.fillText('DATA', p.x + 2, p.y + 15);
+                } else {
+                    ctx.fillStyle = '#ffd700';
+                    ctx.beginPath();
+                    ctx.arc(p.x + p.width/2, p.y + p.height/2, p.width/2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#000';
+                    ctx.fillText('KEY', p.x + 2, p.y + 15);
+                }
             }
-            ctx.shadowBlur = 0;
         });
 
         // Particles
