@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Typography, Paper, List, ListItem, ListItemAvatar, Avatar, ListItemText, Divider } from '@mui/material';
+import Link from 'next/link';
+import { Box, Typography, Paper, List, ListItem, ListItemAvatar, Avatar, ListItemText, Divider, Button } from '@mui/material';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 
 const ArcadeLeaderboard = ({ refreshTrigger }) => {
@@ -30,7 +31,7 @@ const ArcadeLeaderboard = ({ refreshTrigger }) => {
                 <EmojiEventsIcon /> TOP HACKERS
             </Typography>
             <List>
-                {scores.map((score, index) => (
+                {scores.slice(0, 3).map((score, index) => (
                     <React.Fragment key={score._id}>
                         <ListItem alignItems="flex-start">
                             <ListItemAvatar>
@@ -49,7 +50,7 @@ const ArcadeLeaderboard = ({ refreshTrigger }) => {
                                 }
                             />
                         </ListItem>
-                        {index < scores.length - 1 && <Divider variant="inset" component="li" sx={{ borderColor: '#333' }} />}
+                        {index < Math.min(scores.length, 3) - 1 && <Divider variant="inset" component="li" sx={{ borderColor: '#333' }} />}
                     </React.Fragment>
                 ))}
                 {scores.length === 0 && (
@@ -58,6 +59,26 @@ const ArcadeLeaderboard = ({ refreshTrigger }) => {
                     </Typography>
                 )}
             </List>
+            <Box sx={{ mt: 2, textAlign: 'center' }}>
+                <Link href="/dashboard/activities/leaderboard" passHref>
+                    <Button 
+                        variant="outlined" 
+                        size="small"
+                        sx={{ 
+                            color: '#00ff00', 
+                            borderColor: '#00ff00', 
+                            fontFamily: 'Roboto Mono, monospace',
+                            '&:hover': {
+                                borderColor: '#fff',
+                                color: '#fff',
+                                backgroundColor: 'rgba(0, 255, 0, 0.1)'
+                            }
+                        }}
+                    >
+                        VIEW FULL LEADERBOARD
+                    </Button>
+                </Link>
+            </Box>
         </Paper>
     );
 };
