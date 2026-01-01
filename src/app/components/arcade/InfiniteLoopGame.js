@@ -143,7 +143,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         } else {
             // "Firewall" (Jump over)
             let w = 60;
-            const h = 60;
+            const h = 40;
             if (imgs.firewall && imgs.firewall.complete && imgs.firewall.naturalHeight !== 0) {
                 w = h * (imgs.firewall.naturalWidth / imgs.firewall.naturalHeight);
             }
@@ -151,7 +151,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             obstacle = {
                 type: 'FIREWALL',
                 x: GAME_WIDTH,
-                y: 290, // Ground is 350, height 60
+                y: 310, // Ground is 350, height 40
                 width: w,
                 height: h,
                 passed: false,
