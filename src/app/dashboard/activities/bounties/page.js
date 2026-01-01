@@ -23,6 +23,7 @@ import WhatshotIcon from '@mui/icons-material/Whatshot';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { uploadFileToS3 } from '@/utils/s3.util';
 
 export default function BountiesPage() {
     const { data: session } = useSession();
@@ -192,25 +193,17 @@ export default function BountiesPage() {
         if (!file) return;
 
         setUploading(true);
-        const formData = new FormData();
-        formData.append('file', file);
-
         try {
-            const res = await fetch('/api/upload', {
-                method: 'POST',
-                body: formData
-            });
-            
-            if (res.ok) {
-                const data = await res.json();
-                setNewBounty(prev => ({ ...prev, imageUrl: data.url }));
+            const url = await uploadFileToS3(file);
+            if (url) {
+                setNewBounty(prev => ({ ...prev, imageUrl: url }));
             } else {
-                console.error("Upload failed");
+                console.error("Upload failed: No URL returned");
                 alert("Failed to upload image");
             }
         } catch (error) {
             console.error("Error uploading image:", error);
-            alert("Error uploading image");
+            alert(`Error uploading image: ${error.message}`);
         } finally {
             setUploading(false);
         }
