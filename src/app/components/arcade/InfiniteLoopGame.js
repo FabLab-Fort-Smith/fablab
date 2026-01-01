@@ -18,9 +18,9 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
     // Game State Refs
     const playerRef = useRef({
         x: 50,
-        y: 290,
-        width: 60,
-        height: 60,
+        y: 270,
+        width: 80,
+        height: 80,
         dy: 0,
         grounded: true,
         ducking: false,
@@ -45,7 +45,8 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         virus: null,
         firewall: null,
         shield: null,
-        chip: null
+        chip: null,
+        frame: null
     });
 
     // Load Images
@@ -63,6 +64,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             imagesRef.current.firewall = loadImg('/runner/firewall.png');
             imagesRef.current.shield = loadImg('/runner/shieldOrb.png');
             imagesRef.current.chip = loadImg('/runner/2xPointsChip.png');
+            imagesRef.current.frame = loadImg('/runner/terminalFrame.png');
         }
     }, []);
 
@@ -97,9 +99,9 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
     const resetGame = () => {
         playerRef.current = { 
             x: 50, 
-            y: 290, 
-            width: 60, 
-            height: 60, 
+            y: 270, 
+            width: 80, 
+            height: 80, 
             dy: 0, 
             grounded: true, 
             ducking: false, 
@@ -124,9 +126,9 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             obstacle = {
                 type: 'VIRUS',
                 x: GAME_WIDTH,
-                y: 230,
-                width: 60,
-                height: 60,
+                y: 210,
+                width: 80,
+                height: 80,
                 passed: false,
                 color: '#ff0055',
                 rotation: 0
@@ -136,9 +138,9 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             obstacle = {
                 type: 'FIREWALL',
                 x: GAME_WIDTH,
-                y: 290, // Ground is 350, height 60
-                width: 40,
-                height: 60,
+                y: 270, // Ground is 350, height 80
+                width: 60,
+                height: 80,
                 passed: false,
                 color: '#ff3300'
             };
@@ -152,8 +154,8 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             type,
             x: GAME_WIDTH,
             y: 200 + Math.random() * 100,
-            width: 40,
-            height: 40,
+            width: 50,
+            height: 50,
             active: true
         };
         powerupsRef.current.push(powerup);
@@ -400,12 +402,17 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
         // HUD
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 24px Roboto Mono';
-        ctx.fillText(`DATA UPLOADED: ${Math.floor(scoreRef.current)} MB`, 20, 40);
+        ctx.font = 'bold 20px Roboto Mono';
+        ctx.fillText(`DATA UPLOADED: ${Math.floor(scoreRef.current)} MB`, 40, 80);
         
         if (player.invincible) {
             ctx.fillStyle = '#00ffff';
-            ctx.fillText(`ENCRYPTION ACTIVE`, 20, 70);
+            ctx.fillText(`ENCRYPTION ACTIVE`, 40, 110);
+        }
+
+        // Terminal Frame (Overlay)
+        if (imgs.frame && imgs.frame.complete && imgs.frame.naturalWidth !== 0) {
+            ctx.drawImage(imgs.frame, 0, 0, GAME_WIDTH, GAME_HEIGHT);
         }
     };
 
@@ -452,8 +459,8 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
         if (e.code === 'ArrowDown' && !player.ducking) {
             player.ducking = true;
-            player.height = 30;
-            player.y += 30; // Push down instantly
+            player.height = 40;
+            player.y += 40; // Push down instantly
         }
     };
 
@@ -468,8 +475,8 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
         if (e.code === 'ArrowDown' && player.ducking) {
             player.ducking = false;
-            player.y -= 30; // Pop up
-            player.height = 60;
+            player.y -= 40; // Pop up
+            player.height = 80;
         }
     };
 
