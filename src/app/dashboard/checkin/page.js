@@ -1,13 +1,14 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { 
-    Box, Typography, Button, Container, Paper, CircularProgress, Alert 
+    Box, Typography, Button, Container, Paper, CircularProgress, Alert, Divider 
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import { UnlockButton } from '@/app/components/dashboard/LabControls';
 
 export default function CheckInPage() {
     const { data: session, status } = useSession();
@@ -131,6 +132,10 @@ export default function CheckInPage() {
                         ? <CircularProgress size={24} color="inherit" /> 
                         : (isCheckedIn ? "Check Out" : "Check In Now")}
                 </Button>
+
+                <Divider sx={{ width: '100%', my: 1 }}>OR</Divider>
+
+                <UnlockButton sx={{ width: '100%', py: 1.5 }} />
             </Paper>
         </Container>
     );
