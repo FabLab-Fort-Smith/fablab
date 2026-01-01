@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { uploadFileToS3 } from '@/utils/s3.util';
+import { uploadToS3 } from '@/lib/s3';
+import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(req) {
     try {
@@ -10,7 +11,10 @@ export async function POST(req) {
             return NextResponse.json({ error: "No file provided" }, { status: 400 });
         }
 
-        const url = await uploadFileToS3(file);
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const fileName = `uploads/${uuidv4()}-${file.name.replace(/\s+/g, '_')}`;
+        
+        const url = await uploadToS3(buffer, fileName, file.type);
 
         return NextResponse.json({ url }, { status: 200 });
     } catch (error) {
