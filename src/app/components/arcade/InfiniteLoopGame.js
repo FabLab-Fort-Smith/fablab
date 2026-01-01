@@ -118,27 +118,40 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
     const spawnObstacle = () => {
         const type = Math.random();
         let obstacle;
+        const imgs = imagesRef.current;
 
         if (type > 0.7) {
             // "Virus" Drone (Duck under)
+            let w = 80;
+            const h = 80;
+            if (imgs.virus && imgs.virus.complete && imgs.virus.naturalHeight !== 0) {
+                w = h * (imgs.virus.naturalWidth / imgs.virus.naturalHeight);
+            }
+
             obstacle = {
                 type: 'VIRUS',
                 x: GAME_WIDTH,
                 y: 210,
-                width: 80,
-                height: 80,
+                width: w,
+                height: h,
                 passed: false,
                 color: '#ff0055',
                 rotation: 0
             };
         } else {
             // "Firewall" (Jump over)
+            let w = 60;
+            const h = 80;
+            if (imgs.firewall && imgs.firewall.complete && imgs.firewall.naturalHeight !== 0) {
+                w = h * (imgs.firewall.naturalWidth / imgs.firewall.naturalHeight);
+            }
+
             obstacle = {
                 type: 'FIREWALL',
                 x: GAME_WIDTH,
                 y: 270, // Ground is 350, height 80
-                width: 60,
-                height: 80,
+                width: w,
+                height: h,
                 passed: false,
                 color: '#ff3300'
             };
@@ -148,12 +161,23 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
     const spawnPowerup = () => {
         const type = Math.random() > 0.5 ? 'DATA_PACKET' : 'ENCRYPTION_KEY';
+        const imgs = imagesRef.current;
+        
+        let w = 50;
+        const h = 50;
+        
+        if (type === 'DATA_PACKET' && imgs.chip && imgs.chip.complete && imgs.chip.naturalHeight !== 0) {
+            w = h * (imgs.chip.naturalWidth / imgs.chip.naturalHeight);
+        } else if (type === 'ENCRYPTION_KEY' && imgs.shield && imgs.shield.complete && imgs.shield.naturalHeight !== 0) {
+            w = h * (imgs.shield.naturalWidth / imgs.shield.naturalHeight);
+        }
+
         const powerup = {
             type,
             x: GAME_WIDTH,
             y: 200 + Math.random() * 100,
-            width: 50,
-            height: 50,
+            width: w,
+            height: h,
             active: true
         };
         powerupsRef.current.push(powerup);
@@ -173,6 +197,15 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
     const update = (deltaTime) => {
         const player = playerRef.current;
+        const imgs = imagesRef.current;
+
+        // Update Player Width based on sprite aspect ratio
+        const currentSprite = player.grounded ? imgs.runnerRun : imgs.runnerJump;
+        if (currentSprite && currentSprite.complete && currentSprite.naturalHeight !== 0) {
+             const ratio = currentSprite.naturalWidth / currentSprite.naturalHeight;
+             // Base width on the "standing" height of 80 to avoid squashing when ducking
+             player.width = 80 * ratio;
+        }
         
         // Physics
         if (!player.grounded) {
