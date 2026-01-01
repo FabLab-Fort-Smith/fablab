@@ -21,8 +21,8 @@ const SettingsTab = ({ user }) => {
         showPhone: user.privacy?.showPhone ?? false
     });
     const [notificationSettings, setNotificationSettings] = useState({
-        email: user.notificationPreferences?.email ?? true,
-        discord: user.notificationPreferences?.discord ?? true
+        email: user.notificationPreferences?.email ?? false,
+        discord: user.notificationPreferences?.discord ?? false
     });
     const [snackbar, setSnackbar] = useState({
         open: false,

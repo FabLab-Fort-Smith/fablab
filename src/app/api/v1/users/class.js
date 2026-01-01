@@ -54,6 +54,12 @@ export default class User {
             showPhone: false
         };
 
+        // ✅ Notification Preferences
+        this.notificationPreferences = {
+            email: false,
+            discord: false
+        };
+
         // ✅ Public Profile Fields
         this.bio = bio || '';
         this.socials = {

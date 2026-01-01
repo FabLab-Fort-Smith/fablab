@@ -16,14 +16,14 @@ export default class NotificationService {
         // Send Discord DM if user has connected account and has opted in
         try {
             const user = await UserModel.getUserByID(userID);
-            // Check if user has discordId AND notificationPreferences.discord is not explicitly false (default true)
-            const shouldSendDiscord = user && user.discordId && (user.notificationPreferences?.discord !== false);
+            // Check if user has discordId AND notificationPreferences.discord is explicitly true (default false)
+            const shouldSendDiscord = user && user.discordId && (user.notificationPreferences?.discord === true);
             
             if (shouldSendDiscord) {
                 let discordContent = `**${title}**\n${message}`;
                 // Ensure link is absolute if provided
                 if (link) {
-                    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://thelab.critter.codes';
+                    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://fablabfortsmith.org';
                     const fullLink = link.startsWith('http') ? link : `${baseUrl}${link.startsWith('/') ? '' : '/'}${link}`;
                     discordContent += `\n${fullLink}`;
                 }
