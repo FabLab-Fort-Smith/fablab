@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Box, Typography, Paper, List, ListItem, ListItemAvatar, Avatar, ListItemText, Divider } from '@mui/material';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 
-const ArcadeLeaderboard = () => {
+const ArcadeLeaderboard = ({ refreshTrigger }) => {
     const [scores, setScores] = useState([]);
 
     useEffect(() => {
@@ -22,7 +22,7 @@ const ArcadeLeaderboard = () => {
         // Refresh every minute
         const interval = setInterval(fetchLeaderboard, 60000);
         return () => clearInterval(interval);
-    }, []);
+    }, [refreshTrigger]);
 
     return (
         <Paper sx={{ p: 2, background: 'rgba(0,0,0,0.5)', border: '1px solid #333' }}>

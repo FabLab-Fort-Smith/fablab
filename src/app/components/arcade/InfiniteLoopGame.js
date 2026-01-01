@@ -5,7 +5,8 @@ const GAME_WIDTH = 800;
 const GAME_HEIGHT = 400;
 const GRAVITY = 0.6;
 const JUMP_FORCE = -12;
-const SPEED_INCREMENT = 0.001;
+const SPEED_INCREMENT = 0.0005;
+const INITIAL_SPEED = 6;
 
 const InfiniteLoopGame = ({ user, onGameEnd }) => {
     const canvasRef = useRef(null);
@@ -14,23 +15,29 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
     const [sessionID, setSessionID] = useState(null);
     const [error, setError] = useState(null);
 
-    // Game State Refs (for loop access)
+    // Game State Refs
     const playerRef = useRef({
         x: 50,
         y: 300,
-        width: 30,
-        height: 50,
+        width: 40,
+        height: 40,
         dy: 0,
         grounded: true,
         ducking: false,
-        color: '#00ff00'
+        color: '#00ff00',
+        invincible: false,
+        multiplier: 1,
+        trail: []
     });
     
     const obstaclesRef = useRef([]);
-    const gameSpeedRef = useRef(5);
+    const powerupsRef = useRef([]);
+    const particlesRef = useRef([]);
+    const gameSpeedRef = useRef(INITIAL_SPEED);
     const scoreRef = useRef(0);
     const frameIdRef = useRef(null);
     const lastTimeRef = useRef(0);
+    const bgOffsetRef = useRef(0);
 
     const startGame = async () => {
         setGameState('LOADING');
@@ -55,28 +62,80 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
     };
 
     const resetGame = () => {
-        playerRef.current = { x: 50, y: 300, width: 30, height: 50, dy: 0, grounded: true, ducking: false, color: '#00ff00' };
+        playerRef.current = { 
+            x: 50, 
+            y: 300, 
+            width: 40, 
+            height: 40, 
+            dy: 0, 
+            grounded: true, 
+            ducking: false, 
+            color: '#00ff00',
+            invincible: false,
+            multiplier: 1,
+            trail: []
+        };
         obstaclesRef.current = [];
-        gameSpeedRef.current = 5;
+        powerupsRef.current = [];
+        particlesRef.current = [];
+        gameSpeedRef.current = INITIAL_SPEED;
         scoreRef.current = 0;
         setScore(0);
     };
 
     const spawnObstacle = () => {
-        const type = Math.random() > 0.5 ? 'WALL' : 'PIT'; // Simple types for now
-        // Actually let's do Wall (Jump) and Low Wall (Duck)
-        // PIT is hard to draw without a floor gap logic, let's stick to objects for now
-        // Type 0: High Wall (Jump over)
-        // Type 1: Low Ceiling (Duck under) - maybe later
-        
-        const obstacle = {
-            x: GAME_WIDTH,
-            y: 320, // Ground level is 350
-            width: 30,
-            height: 30,
-            passed: false
-        };
+        const type = Math.random();
+        let obstacle;
+
+        if (type > 0.7) {
+            // Flying Drone (Duck under)
+            obstacle = {
+                type: 'DRONE',
+                x: GAME_WIDTH,
+                y: 260,
+                width: 40,
+                height: 30,
+                passed: false,
+                color: '#ff0055'
+            };
+        } else {
+            // Firewall (Jump over)
+            obstacle = {
+                type: 'WALL',
+                x: GAME_WIDTH,
+                y: 310, // Ground is 350, height 40
+                width: 30,
+                height: 40,
+                passed: false,
+                color: '#ff3300'
+            };
+        }
         obstaclesRef.current.push(obstacle);
+    };
+
+    const spawnPowerup = () => {
+        const type = Math.random() > 0.5 ? 'SHIELD' : 'MULTIPLIER';
+        const powerup = {
+            type,
+            x: GAME_WIDTH,
+            y: 200 + Math.random() * 100,
+            width: 25,
+            height: 25,
+            active: true
+        };
+        powerupsRef.current.push(powerup);
+    };
+
+    const createParticles = (x, y, color, count = 10) => {
+        for (let i = 0; i < count; i++) {
+            particlesRef.current.push({
+                x, y,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 0.5) * 10,
+                life: 1.0,
+                color
+            });
+        }
     };
 
     const update = (deltaTime) => {
@@ -89,80 +148,199 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         player.y += player.dy;
 
         // Ground Collision
-        if (player.y + player.height >= 350) {
-            player.y = 350 - player.height;
+        const groundLevel = 350;
+        if (player.y + player.height >= groundLevel) {
+            player.y = groundLevel - player.height;
             player.dy = 0;
             player.grounded = true;
         } else {
             player.grounded = false;
         }
 
-        // Obstacles
-        if (Math.random() < 0.01 + (gameSpeedRef.current * 0.001)) {
-            if (obstaclesRef.current.length === 0 || obstaclesRef.current[obstaclesRef.current.length - 1].x < GAME_WIDTH - 300) {
+        // Player Trail
+        if (gameState === 'PLAYING') {
+            player.trail.push({ x: player.x, y: player.y, alpha: 0.5 });
+            if (player.trail.length > 5) player.trail.shift();
+        }
+
+        // Spawning
+        if (Math.random() < 0.015) {
+            if (obstaclesRef.current.length === 0 || obstaclesRef.current[obstaclesRef.current.length - 1].x < GAME_WIDTH - 250) {
                 spawnObstacle();
             }
         }
+        if (Math.random() < 0.002) {
+            spawnPowerup();
+        }
 
+        // Obstacles Logic
         obstaclesRef.current.forEach(obs => {
             obs.x -= gameSpeedRef.current;
             
-            // Collision Detection
+            // Collision
             if (
-                player.x < obs.x + obs.width &&
-                player.x + player.width > obs.x &&
-                player.y < obs.y + obs.height &&
-                player.y + player.height > obs.y
+                !player.invincible &&
+                player.x < obs.x + obs.width - 5 &&
+                player.x + player.width > obs.x + 5 &&
+                player.y < obs.y + obs.height - 5 &&
+                player.y + player.height > obs.y + 5
             ) {
+                createParticles(player.x, player.y, '#ff0000', 20);
                 gameOver();
             }
 
             // Score
             if (!obs.passed && obs.x + obs.width < player.x) {
                 obs.passed = true;
-                scoreRef.current += 10;
+                scoreRef.current += (10 * player.multiplier);
                 setScore(scoreRef.current);
             }
         });
 
+        // Powerups Logic
+        powerupsRef.current.forEach(p => {
+            p.x -= gameSpeedRef.current;
+            
+            // Collision
+            if (
+                p.active &&
+                player.x < p.x + p.width &&
+                player.x + player.width > p.x &&
+                player.y < p.y + p.height &&
+                player.y + player.height > p.y
+            ) {
+                p.active = false;
+                createParticles(p.x, p.y, '#ffff00', 10);
+                if (p.type === 'SHIELD') {
+                    player.invincible = true;
+                    player.color = '#00ffff';
+                    setTimeout(() => {
+                        player.invincible = false;
+                        player.color = '#00ff00';
+                    }, 5000);
+                } else if (p.type === 'MULTIPLIER') {
+                    player.multiplier = 2;
+                    setTimeout(() => {
+                        player.multiplier = 1;
+                    }, 10000);
+                }
+            }
+        });
+
+        // Particles Logic
+        particlesRef.current.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life -= 0.05;
+        });
+        particlesRef.current = particlesRef.current.filter(p => p.life > 0);
+
         // Cleanup
-        obstaclesRef.current = obstaclesRef.current.filter(obs => obs.x + obs.width > 0);
+        obstaclesRef.current = obstaclesRef.current.filter(obs => obs.x + obs.width > -100);
+        powerupsRef.current = powerupsRef.current.filter(p => p.x > -100);
 
         // Speed up
         gameSpeedRef.current += SPEED_INCREMENT;
+        bgOffsetRef.current = (bgOffsetRef.current + gameSpeedRef.current * 0.5) % GAME_WIDTH;
     };
 
     const draw = (ctx) => {
         // Clear
-        ctx.fillStyle = '#000';
+        ctx.fillStyle = '#050505';
         ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
+        // Background Grid
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = 1;
+        const gridSize = 40;
+        const offset = bgOffsetRef.current;
+        
+        for (let x = -offset; x < GAME_WIDTH; x += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, GAME_HEIGHT);
+            ctx.stroke();
+        }
+        for (let y = 0; y < GAME_HEIGHT; y += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(GAME_WIDTH, y);
+            ctx.stroke();
+        }
+
         // Ground
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#00ff00';
         ctx.strokeStyle = '#00ff00';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(0, 350);
         ctx.lineTo(GAME_WIDTH, 350);
         ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Player Trail
+        playerRef.current.trail.forEach((pos, i) => {
+            ctx.fillStyle = `rgba(0, 255, 0, ${i * 0.1})`;
+            ctx.fillRect(pos.x, pos.y, playerRef.current.width, playerRef.current.height);
+        });
 
         // Player
         const player = playerRef.current;
         ctx.fillStyle = player.color;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = player.invincible ? 20 : 10;
         ctx.shadowColor = player.color;
         ctx.fillRect(player.x, player.y, player.width, player.height);
+        
+        // Player Eye (Direction)
+        ctx.fillStyle = '#000';
+        ctx.fillRect(player.x + player.width - 10, player.y + 10, 5, 5);
         ctx.shadowBlur = 0;
 
         // Obstacles
-        ctx.fillStyle = '#ff0000';
         obstaclesRef.current.forEach(obs => {
+            ctx.fillStyle = obs.color;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = obs.color;
             ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+            
+            // Detail
+            ctx.fillStyle = '#000';
+            ctx.fillRect(obs.x + 5, obs.y + 5, obs.width - 10, obs.height - 10);
+            ctx.fillStyle = obs.color;
+            ctx.fillRect(obs.x + 10, obs.y + 10, obs.width - 20, obs.height - 20);
+            ctx.shadowBlur = 0;
+        });
+
+        // Powerups
+        powerupsRef.current.forEach(p => {
+            if (!p.active) return;
+            ctx.fillStyle = p.type === 'SHIELD' ? '#00ffff' : '#ffd700';
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.beginPath();
+            ctx.arc(p.x + p.width/2, p.y + p.height/2, p.width/2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        });
+
+        // Particles
+        particlesRef.current.forEach(p => {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life;
+            ctx.fillRect(p.x, p.y, 4, 4);
+            ctx.globalAlpha = 1.0;
         });
 
         // HUD
         ctx.fillStyle = '#fff';
-        ctx.font = '20px Roboto Mono';
-        ctx.fillText(`SCORE: ${scoreRef.current}`, 20, 30);
+        ctx.font = 'bold 24px Roboto Mono';
+        ctx.fillText(`SCORE: ${Math.floor(scoreRef.current)}`, 20, 40);
+        
+        if (player.multiplier > 1) {
+            ctx.fillStyle = '#ffd700';
+            ctx.fillText(`x${player.multiplier}`, 20, 70);
+        }
     };
 
     const loop = (time) => {
@@ -195,15 +373,38 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
     const handleKeyDown = (e) => {
         if (gameState !== 'PLAYING') return;
         
-        if ((e.code === 'Space' || e.code === 'ArrowUp') && playerRef.current.grounded) {
-            playerRef.current.dy = JUMP_FORCE;
-            playerRef.current.grounded = false;
+        const player = playerRef.current;
+
+        if ((e.code === 'Space' || e.code === 'ArrowUp') && player.grounded) {
+            player.dy = JUMP_FORCE;
+            player.grounded = false;
+        }
+
+        if (e.code === 'ArrowDown' && !player.ducking) {
+            player.ducking = true;
+            player.height = 20;
+            player.y += 20; // Push down instantly
+        }
+    };
+
+    const handleKeyUp = (e) => {
+        if (gameState !== 'PLAYING') return;
+        const player = playerRef.current;
+
+        if (e.code === 'ArrowDown' && player.ducking) {
+            player.ducking = false;
+            player.y -= 20; // Pop up
+            player.height = 40;
         }
     };
 
     useEffect(() => {
         window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+        };
     }, [gameState]);
 
     const gameOver = async () => {
@@ -212,7 +413,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             await fetch('/api/v1/arcade/submit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sessionID, score: scoreRef.current })
+                body: JSON.stringify({ sessionID, score: Math.floor(scoreRef.current) })
             });
             if (onGameEnd) onGameEnd();
         } catch (error) {
@@ -224,8 +425,8 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         <Box sx={{ textAlign: 'center', mt: 4 }}>
             {gameState === 'MENU' && (
                 <Box sx={{ p: 4, border: '1px solid #333', borderRadius: 2, background: '#111' }}>
-                    <Typography variant="h4" sx={{ color: '#00ff00', fontFamily: 'Roboto Mono', mb: 2 }}>
-                        INFINITE LOOP
+                    <Typography variant="h4" sx={{ color: '#00ff00', fontFamily: 'Roboto Mono', mb: 2, textShadow: '0 0 10px #00ff00' }}>
+                        THE GLITCH RUNNER
                     </Typography>
                     <Typography sx={{ color: '#fff', mb: 4 }}>
                         Cost: 5 Stake | Prize: Weekly Jackpot
@@ -233,10 +434,10 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
                     {error && <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>}
                     <Button 
                         variant="contained" 
-                        color="primary" 
+                        color="success" 
                         size="large"
                         onClick={startGame}
-                        sx={{ fontFamily: 'Roboto Mono' }}
+                        sx={{ fontFamily: 'Roboto Mono', fontSize: '1.2rem', px: 4, py: 1 }}
                     >
                         INSERT COIN (5 STAKE)
                     </Button>
@@ -244,7 +445,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             )}
 
             {gameState === 'LOADING' && (
-                <CircularProgress />
+                <CircularProgress color="success" />
             )}
 
             <canvas
@@ -255,20 +456,22 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
                     display: gameState === 'PLAYING' || gameState === 'GAMEOVER' ? 'block' : 'none',
                     margin: '0 auto',
                     border: '2px solid #333',
-                    background: '#000'
+                    background: '#050505',
+                    boxShadow: '0 0 20px rgba(0, 255, 0, 0.2)'
                 }}
             />
 
             {gameState === 'GAMEOVER' && (
                 <Box sx={{ mt: 2 }}>
-                    <Typography variant="h5" color="error" sx={{ fontFamily: 'Roboto Mono', mb: 2 }}>
+                    <Typography variant="h5" color="error" sx={{ fontFamily: 'Roboto Mono', mb: 2, textShadow: '0 0 10px red' }}>
                         CONNECTION TERMINATED
                     </Typography>
                     <Typography variant="h6" sx={{ color: '#fff', mb: 2 }}>
-                        Final Score: {score}
+                        Final Score: {Math.floor(score)}
                     </Typography>
                     <Button 
                         variant="outlined" 
+                        color="success"
                         onClick={() => setGameState('MENU')}
                         sx={{ fontFamily: 'Roboto Mono' }}
                     >
@@ -278,8 +481,8 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             )}
             
             {gameState === 'PLAYING' && (
-                <Typography variant="caption" sx={{ color: '#666', mt: 1, display: 'block' }}>
-                    Controls: SPACE or UP ARROW to Jump
+                <Typography variant="caption" sx={{ color: '#666', mt: 1, display: 'block', fontFamily: 'Roboto Mono' }}>
+                    [SPACE/UP] Jump | [DOWN] Duck
                 </Typography>
             )}
         </Box>

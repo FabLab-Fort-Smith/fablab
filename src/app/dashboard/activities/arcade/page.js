@@ -12,6 +12,7 @@ const ArcadePage = () => {
     const { data: session, status } = useSession();
     const theme = useTheme();
     const [jackpot, setJackpot] = useState(0);
+    const [refreshLeaderboard, setRefreshLeaderboard] = useState(0);
 
     const fetchJackpot = async () => {
         try {
@@ -31,6 +32,11 @@ const ArcadePage = () => {
         return () => clearInterval(interval);
     }, []);
 
+    const handleGameEnd = () => {
+        setRefreshLeaderboard(prev => prev + 1);
+        fetchJackpot(); // Refresh jackpot as it might have grown
+    };
+
     if (status === 'loading') return <LoadingTerminal steps={['Connecting to Arcade Server...', 'Loading Assets...']} />;
     if (!session) return <Typography>Please login to play.</Typography>;
 
@@ -48,25 +54,21 @@ const ArcadePage = () => {
                     textAlign: 'center', 
                     fontFamily: 'Roboto Mono, monospace', 
                     color: '#00ff00',
-                    textShadow: '0 0 10px rgba(0,255,0,0.5)',
-                    mb: 4 
+                    textShadow: '0 0 20px rgba(0, 255, 0, 0.5)',
+                    mb: 4
                 }}>
                     THE GLITCH ARCADE
                 </Typography>
 
                 <Grid container spacing={4}>
-                    {/* Left Column: Game */}
                     <Grid item xs={12} md={8}>
-                        <InfiniteLoopGame 
-                            user={session.user} 
-                            onGameEnd={fetchJackpot} // Refresh jackpot after game (since we contributed)
-                        />
+                        <InfiniteLoopGame user={session.user} onGameEnd={handleGameEnd} />
                     </Grid>
-
-                    {/* Right Column: Stats */}
                     <Grid item xs={12} md={4}>
-                        <JackpotDisplay amount={jackpot} />
-                        <ArcadeLeaderboard />
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <JackpotDisplay amount={jackpot} />
+                            <ArcadeLeaderboard refreshTrigger={refreshLeaderboard} />
+                        </Box>
                     </Grid>
                 </Grid>
             </Container>
