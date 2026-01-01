@@ -5,6 +5,8 @@ import SecurityIcon from '@mui/icons-material/Security';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions';
 
+import NotificationsIcon from '@mui/icons-material/Notifications';
+
 const SettingsTab = ({ user }) => {
     const theme = useTheme();
     const [openPasswordDialog, setOpenPasswordDialog] = useState(false);
@@ -17,6 +19,10 @@ const SettingsTab = ({ user }) => {
         showEmail: user.privacy?.showEmail ?? true,
         showDiscord: user.privacy?.showDiscord ?? true,
         showPhone: user.privacy?.showPhone ?? false
+    });
+    const [notificationSettings, setNotificationSettings] = useState({
+        email: user.notificationPreferences?.email ?? true,
+        discord: user.notificationPreferences?.discord ?? true
     });
     const [snackbar, setSnackbar] = useState({
         open: false,
@@ -56,6 +62,32 @@ const SettingsTab = ({ user }) => {
             console.error(error);
             setSnackbar({ open: true, message: "Error updating settings.", severity: 'error' });
             setPrivacySettings(privacySettings); // Revert
+        }
+    };
+
+    const handleNotificationChange = async (setting) => {
+        const newSettings = { ...notificationSettings, [setting]: !notificationSettings[setting] };
+        setNotificationSettings(newSettings);
+
+        try {
+            const res = await fetch(`/api/v1/users?userID=${user.userID}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    notificationPreferences: newSettings
+                })
+            });
+            
+            if (res.ok) {
+                setSnackbar({ open: true, message: "Notification preferences updated.", severity: 'success' });
+            } else {
+                setSnackbar({ open: true, message: "Failed to update notification preferences.", severity: 'error' });
+                setNotificationSettings(notificationSettings); // Revert
+            }
+        } catch (error) {
+            console.error(error);
+            setSnackbar({ open: true, message: "Error updating settings.", severity: 'error' });
+            setNotificationSettings(notificationSettings); // Revert
         }
     };
 
@@ -138,6 +170,31 @@ const SettingsTab = ({ user }) => {
                             <FormControlLabel
                                 control={<Switch checked={privacySettings.showPhone} onChange={() => handlePrivacyChange('showPhone')} />}
                                 label="Show Phone Number"
+                            />
+                        </Box>
+                    </Grid>
+                </Grid>
+            </Paper>
+
+            <Divider sx={{ my: 4, borderColor: theme.palette.divider }} />
+
+            <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <NotificationsIcon /> Notification Preferences
+            </Typography>
+            <Paper sx={{ p: 2, mb: 4, border: `1px solid ${theme.palette.divider}`, backgroundColor: 'transparent' }}>
+                <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                        <Typography variant="body2" sx={{ color: theme.palette.text.secondary, mb: 2 }}>
+                            Manage how you receive notifications from The Lab.
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            <FormControlLabel
+                                control={<Switch checked={notificationSettings.email} onChange={() => handleNotificationChange('email')} />}
+                                label="Email Notifications"
+                            />
+                            <FormControlLabel
+                                control={<Switch checked={notificationSettings.discord} onChange={() => handleNotificationChange('discord')} />}
+                                label="Discord DM Notifications"
                             />
                         </Box>
                     </Grid>

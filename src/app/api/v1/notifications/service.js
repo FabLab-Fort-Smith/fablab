@@ -13,10 +13,13 @@ export default class NotificationService {
         const notification = new Notification(userID, type, title, message, link, metadata);
         const result = await NotificationModel.createNotification(notification);
 
-        // Send Discord DM if user has connected account
+        // Send Discord DM if user has connected account and has opted in
         try {
             const user = await UserModel.getUserByID(userID);
-            if (user && user.discordId) {
+            // Check if user has discordId AND notificationPreferences.discord is not explicitly false (default true)
+            const shouldSendDiscord = user && user.discordId && (user.notificationPreferences?.discord !== false);
+            
+            if (shouldSendDiscord) {
                 let discordContent = `**${title}**\n${message}`;
                 // Ensure link is absolute if provided
                 if (link) {
