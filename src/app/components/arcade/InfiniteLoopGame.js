@@ -713,7 +713,10 @@ const InfiniteLoopGame = ({ user, onGameEnd, jackpot }) => {
                                     <span style={{ color: '#fff' }}>ENTRY COST:</span> 5 STAKE
                                 </Typography>
                                 <Typography sx={{ color: '#aaa', fontFamily: 'Roboto Mono', mb: 1 }}>
-                                    <span style={{ color: '#ffd700' }}>JACKPOT:</span> 3.5 STAKE (70%) is added to the weekly prize pool.
+                                    <span style={{ color: '#ffd700' }}>JACKPOT:</span> Starts at <b>100 STAKE</b> every week!
+                                </Typography>
+                                <Typography sx={{ color: '#aaa', fontFamily: 'Roboto Mono', mb: 1 }}>
+                                    <span style={{ color: '#00ff00' }}>GROWTH:</span> Once the base jackpot is funded, 3.5 STAKE (70%) from every run is added to the pot.
                                 </Typography>
                                 <Typography sx={{ color: '#aaa', fontFamily: 'Roboto Mono', mb: 1 }}>
                                     <span style={{ color: '#00ff00' }}>REBATE:</span> Earn up to 1.0 STAKE back based on your score.
