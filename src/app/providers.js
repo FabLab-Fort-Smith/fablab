@@ -21,6 +21,7 @@ import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import EmailIcon from '@mui/icons-material/Email';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import CampaignIcon from '@mui/icons-material/Campaign';
+import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
 
 const getUserNavigation = (userID) => [
     {
@@ -37,6 +38,11 @@ const getUserNavigation = (userID) => [
         segment: 'dashboard/terminal',
         title: 'HackTheLab',
         icon: <TerminalIcon />,
+    },
+    {
+        segment: 'dashboard/arcade',
+        title: 'The Glitch Arcade',
+        icon: <SportsEsportsIcon />,
     },
     {
         segment: 'dashboard/feed',
