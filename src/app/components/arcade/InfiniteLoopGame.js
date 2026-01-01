@@ -606,14 +606,24 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
                     <Typography variant="h6" sx={{ color: '#fff', mb: 2 }}>
                         Data Uploaded: {Math.floor(score)} MB
                     </Typography>
-                    <Button 
-                        variant="outlined" 
-                        color="success"
-                        onClick={() => setGameState('MENU')}
-                        sx={{ fontFamily: 'Roboto Mono' }}
-                    >
-                        RETURN TO ROOT
-                    </Button>
+                    <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                        <Button 
+                            variant="contained" 
+                            color="success"
+                            onClick={startGame}
+                            sx={{ fontFamily: 'Roboto Mono' }}
+                        >
+                            PLAY AGAIN (5 STAKE)
+                        </Button>
+                        <Button 
+                            variant="outlined" 
+                            color="success"
+                            onClick={() => setGameState('MENU')}
+                            sx={{ fontFamily: 'Roboto Mono' }}
+                        >
+                            RETURN TO ROOT
+                        </Button>
+                    </Box>
                 </Box>
             )}
             
