@@ -33,11 +33,17 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
     const obstaclesRef = useRef([]);
     const powerupsRef = useRef([]);
     const particlesRef = useRef([]);
+    const matrixDropsRef = useRef([]); // For Matrix Rain
     const gameSpeedRef = useRef(INITIAL_SPEED);
     const scoreRef = useRef(0);
     const frameIdRef = useRef(null);
     const lastTimeRef = useRef(0);
-    const bgOffsetRef = useRef(0);
+
+    // Initialize Matrix Rain
+    useEffect(() => {
+        const columns = Math.floor(GAME_WIDTH / 20);
+        matrixDropsRef.current = Array(columns).fill(1);
+    }, []);
 
     const startGame = async () => {
         setGameState('LOADING');
@@ -88,20 +94,21 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         let obstacle;
 
         if (type > 0.7) {
-            // Flying Drone (Duck under)
+            // "Virus" Drone (Duck under)
             obstacle = {
-                type: 'DRONE',
+                type: 'VIRUS',
                 x: GAME_WIDTH,
                 y: 260,
                 width: 40,
-                height: 30,
+                height: 40,
                 passed: false,
-                color: '#ff0055'
+                color: '#ff0055',
+                rotation: 0
             };
         } else {
-            // Firewall (Jump over)
+            // "Firewall" (Jump over)
             obstacle = {
-                type: 'WALL',
+                type: 'FIREWALL',
                 x: GAME_WIDTH,
                 y: 310, // Ground is 350, height 40
                 width: 30,
@@ -114,7 +121,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
     };
 
     const spawnPowerup = () => {
-        const type = Math.random() > 0.5 ? 'SHIELD' : 'MULTIPLIER';
+        const type = Math.random() > 0.5 ? 'DATA_PACKET' : 'ENCRYPTION_KEY';
         const powerup = {
             type,
             x: GAME_WIDTH,
@@ -169,27 +176,28 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
                 spawnObstacle();
             }
         }
-        if (Math.random() < 0.002) {
+        if (Math.random() < 0.005) { // Increased spawn rate for "Data"
             spawnPowerup();
         }
 
         // Obstacles Logic
         obstaclesRef.current.forEach(obs => {
             obs.x -= gameSpeedRef.current;
+            if (obs.type === 'VIRUS') obs.rotation += 0.1;
             
             // Collision
             if (
                 !player.invincible &&
-                player.x < obs.x + obs.width - 5 &&
-                player.x + player.width > obs.x + 5 &&
-                player.y < obs.y + obs.height - 5 &&
-                player.y + player.height > obs.y + 5
+                player.x < obs.x + obs.width - 10 &&
+                player.x + player.width > obs.x + 10 &&
+                player.y < obs.y + obs.height - 10 &&
+                player.y + player.height > obs.y + 10
             ) {
                 createParticles(player.x, player.y, '#ff0000', 20);
                 gameOver();
             }
 
-            // Score
+            // Score (Distance)
             if (!obs.passed && obs.x + obs.width < player.x) {
                 obs.passed = true;
                 scoreRef.current += (10 * player.multiplier);
@@ -211,18 +219,18 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             ) {
                 p.active = false;
                 createParticles(p.x, p.y, '#ffff00', 10);
-                if (p.type === 'SHIELD') {
+                if (p.type === 'ENCRYPTION_KEY') {
+                    // Shield
                     player.invincible = true;
                     player.color = '#00ffff';
                     setTimeout(() => {
                         player.invincible = false;
                         player.color = '#00ff00';
                     }, 5000);
-                } else if (p.type === 'MULTIPLIER') {
-                    player.multiplier = 2;
-                    setTimeout(() => {
-                        player.multiplier = 1;
-                    }, 10000);
+                } else if (p.type === 'DATA_PACKET') {
+                    // Bonus Score
+                    scoreRef.current += 50;
+                    setScore(scoreRef.current);
                 }
             }
         });
@@ -241,32 +249,30 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
         // Speed up
         gameSpeedRef.current += SPEED_INCREMENT;
-        bgOffsetRef.current = (bgOffsetRef.current + gameSpeedRef.current * 0.5) % GAME_WIDTH;
+    };
+
+    const drawMatrixRain = (ctx) => {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        
+        ctx.fillStyle = '#0F0'; // Green text
+        ctx.font = '15px monospace';
+
+        matrixDropsRef.current.forEach((y, index) => {
+            const text = String.fromCharCode(0x30A0 + Math.random() * 96);
+            const x = index * 20;
+            ctx.fillText(text, x, y * 20);
+
+            if (y * 20 > GAME_HEIGHT && Math.random() > 0.975) {
+                matrixDropsRef.current[index] = 0;
+            }
+            matrixDropsRef.current[index]++;
+        });
     };
 
     const draw = (ctx) => {
-        // Clear
-        ctx.fillStyle = '#050505';
-        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-
-        // Background Grid
-        ctx.strokeStyle = '#111';
-        ctx.lineWidth = 1;
-        const gridSize = 40;
-        const offset = bgOffsetRef.current;
-        
-        for (let x = -offset; x < GAME_WIDTH; x += gridSize) {
-            ctx.beginPath();
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, GAME_HEIGHT);
-            ctx.stroke();
-        }
-        for (let y = 0; y < GAME_HEIGHT; y += gridSize) {
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(GAME_WIDTH, y);
-            ctx.stroke();
-        }
+        // Background (Matrix Rain)
+        drawMatrixRain(ctx);
 
         // Ground
         ctx.shadowBlur = 10;
@@ -292,35 +298,82 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         ctx.shadowColor = player.color;
         ctx.fillRect(player.x, player.y, player.width, player.height);
         
-        // Player Eye (Direction)
+        // Player "Code" Texture
         ctx.fillStyle = '#000';
-        ctx.fillRect(player.x + player.width - 10, player.y + 10, 5, 5);
+        ctx.font = '10px monospace';
+        ctx.fillText('USER', player.x + 5, player.y + 15);
+        ctx.fillText('ID:1', player.x + 5, player.y + 30);
         ctx.shadowBlur = 0;
 
         // Obstacles
         obstaclesRef.current.forEach(obs => {
-            ctx.fillStyle = obs.color;
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = obs.color;
-            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-            
-            // Detail
-            ctx.fillStyle = '#000';
-            ctx.fillRect(obs.x + 5, obs.y + 5, obs.width - 10, obs.height - 10);
-            ctx.fillStyle = obs.color;
-            ctx.fillRect(obs.x + 10, obs.y + 10, obs.width - 20, obs.height - 20);
-            ctx.shadowBlur = 0;
+            if (obs.type === 'FIREWALL') {
+                // Firewall (Red Grid Wall)
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+                ctx.strokeStyle = '#ff0000';
+                ctx.lineWidth = 2;
+                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+                ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+                
+                // Grid lines
+                ctx.beginPath();
+                ctx.moveTo(obs.x, obs.y + 10);
+                ctx.lineTo(obs.x + obs.width, obs.y + 10);
+                ctx.moveTo(obs.x, obs.y + 20);
+                ctx.lineTo(obs.x + obs.width, obs.y + 20);
+                ctx.moveTo(obs.x, obs.y + 30);
+                ctx.lineTo(obs.x + obs.width, obs.y + 30);
+                ctx.stroke();
+
+            } else if (obs.type === 'VIRUS') {
+                // Virus (Spiky Shape)
+                ctx.save();
+                ctx.translate(obs.x + obs.width/2, obs.y + obs.height/2);
+                ctx.rotate(obs.rotation);
+                ctx.fillStyle = '#ff0055';
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#ff0055';
+                
+                ctx.beginPath();
+                const spikes = 8;
+                const outerRadius = 20;
+                const innerRadius = 10;
+                for (let i = 0; i < spikes; i++) {
+                    let angle = (i / spikes) * Math.PI * 2;
+                    ctx.lineTo(Math.cos(angle) * outerRadius, Math.sin(angle) * outerRadius);
+                    angle += Math.PI / spikes;
+                    ctx.lineTo(Math.cos(angle) * innerRadius, Math.sin(angle) * innerRadius);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
         });
 
         // Powerups
         powerupsRef.current.forEach(p => {
             if (!p.active) return;
-            ctx.fillStyle = p.type === 'SHIELD' ? '#00ffff' : '#ffd700';
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = ctx.fillStyle;
-            ctx.beginPath();
-            ctx.arc(p.x + p.width/2, p.y + p.height/2, p.width/2, 0, Math.PI * 2);
-            ctx.fill();
+            
+            if (p.type === 'DATA_PACKET') {
+                // Blue Data Cube
+                ctx.fillStyle = '#00ffff';
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#00ffff';
+                ctx.fillRect(p.x, p.y, p.width, p.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = '12px monospace';
+                ctx.fillText('DATA', p.x + 2, p.y + 15);
+            } else {
+                // Yellow Key
+                ctx.fillStyle = '#ffd700';
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#ffd700';
+                ctx.beginPath();
+                ctx.arc(p.x + p.width/2, p.y + p.height/2, p.width/2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.fillText('KEY', p.x + 2, p.y + 15);
+            }
             ctx.shadowBlur = 0;
         });
 
@@ -335,11 +388,11 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         // HUD
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 24px Roboto Mono';
-        ctx.fillText(`SCORE: ${Math.floor(scoreRef.current)}`, 20, 40);
+        ctx.fillText(`DATA UPLOADED: ${Math.floor(scoreRef.current)} MB`, 20, 40);
         
-        if (player.multiplier > 1) {
-            ctx.fillStyle = '#ffd700';
-            ctx.fillText(`x${player.multiplier}`, 20, 70);
+        if (player.invincible) {
+            ctx.fillStyle = '#00ffff';
+            ctx.fillText(`ENCRYPTION ACTIVE`, 20, 70);
         }
     };
 
@@ -426,9 +479,14 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             {gameState === 'MENU' && (
                 <Box sx={{ p: 4, border: '1px solid #333', borderRadius: 2, background: '#111' }}>
                     <Typography variant="h4" sx={{ color: '#00ff00', fontFamily: 'Roboto Mono', mb: 2, textShadow: '0 0 10px #00ff00' }}>
-                        THE GLITCH RUNNER
+                        SYSTEM BREACH PROTOCOL
                     </Typography>
-                    <Typography sx={{ color: '#fff', mb: 4 }}>
+                    <Typography sx={{ color: '#fff', mb: 2, maxWidth: '600px', mx: 'auto' }}>
+                        You are a rogue data packet in the Lab's mainframe. 
+                        Collect <b>DATA SHARDS</b> to increase your score. 
+                        Avoid <b>FIREWALLS</b> and <b>VIRUSES</b>.
+                    </Typography>
+                    <Typography sx={{ color: '#aaa', mb: 4 }}>
                         Cost: 5 Stake | Prize: Weekly Jackpot
                     </Typography>
                     {error && <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>}
@@ -439,7 +497,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
                         onClick={startGame}
                         sx={{ fontFamily: 'Roboto Mono', fontSize: '1.2rem', px: 4, py: 1 }}
                     >
-                        INSERT COIN (5 STAKE)
+                        INITIATE RUN (5 STAKE)
                     </Button>
                 </Box>
             )}
@@ -455,8 +513,9 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
                 style={{ 
                     display: gameState === 'PLAYING' || gameState === 'GAMEOVER' ? 'block' : 'none',
                     margin: '0 auto',
-                    border: '2px solid #333',
-                    background: '#050505',
+                    border: '4px solid #333',
+                    borderRadius: '4px',
+                    background: '#000',
                     boxShadow: '0 0 20px rgba(0, 255, 0, 0.2)'
                 }}
             />
@@ -467,7 +526,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
                         CONNECTION TERMINATED
                     </Typography>
                     <Typography variant="h6" sx={{ color: '#fff', mb: 2 }}>
-                        Final Score: {Math.floor(score)}
+                        Data Uploaded: {Math.floor(score)} MB
                     </Typography>
                     <Button 
                         variant="outlined" 
@@ -475,7 +534,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
                         onClick={() => setGameState('MENU')}
                         sx={{ fontFamily: 'Roboto Mono' }}
                     >
-                        RETURN TO MENU
+                        RETURN TO ROOT
                     </Button>
                 </Box>
             )}
