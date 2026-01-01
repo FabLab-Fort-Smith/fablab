@@ -124,9 +124,9 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             obstacle = {
                 type: 'VIRUS',
                 x: GAME_WIDTH,
-                y: 260,
-                width: 40,
-                height: 40,
+                y: 230,
+                width: 60,
+                height: 60,
                 passed: false,
                 color: '#ff0055',
                 rotation: 0
@@ -136,9 +136,9 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             obstacle = {
                 type: 'FIREWALL',
                 x: GAME_WIDTH,
-                y: 310, // Ground is 350, height 40
-                width: 30,
-                height: 40,
+                y: 290, // Ground is 350, height 60
+                width: 40,
+                height: 60,
                 passed: false,
                 color: '#ff3300'
             };
@@ -152,8 +152,8 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             type,
             x: GAME_WIDTH,
             y: 200 + Math.random() * 100,
-            width: 25,
-            height: 25,
+            width: 40,
+            height: 40,
             active: true
         };
         powerupsRef.current.push(powerup);
@@ -203,7 +203,6 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         // Obstacles Logic
         obstaclesRef.current.forEach(obs => {
             obs.x -= gameSpeedRef.current;
-            if (obs.type === 'VIRUS') obs.rotation += 0.1;
             
             // Collision
             if (
@@ -334,16 +333,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
             let obsImg = obs.type === 'VIRUS' ? imgs.virus : imgs.firewall;
             
             if (obsImg && obsImg.complete && obsImg.naturalWidth !== 0) {
-                ctx.save();
-                if (obs.type === 'VIRUS') {
-                    // Rotate virus
-                    ctx.translate(obs.x + obs.width/2, obs.y + obs.height/2);
-                    ctx.rotate(obs.rotation);
-                    ctx.drawImage(obsImg, -obs.width/2, -obs.height/2, obs.width, obs.height);
-                } else {
-                    ctx.drawImage(obsImg, obs.x, obs.y, obs.width, obs.height);
-                }
-                ctx.restore();
+                ctx.drawImage(obsImg, obs.x, obs.y, obs.width, obs.height);
             } else {
                 // Fallback drawing
                 if (obs.type === 'FIREWALL') {
@@ -355,12 +345,11 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
                 } else if (obs.type === 'VIRUS') {
                     ctx.save();
                     ctx.translate(obs.x + obs.width/2, obs.y + obs.height/2);
-                    ctx.rotate(obs.rotation);
                     ctx.fillStyle = '#ff0055';
                     ctx.beginPath();
                     const spikes = 8;
-                    const outerRadius = 20;
-                    const innerRadius = 10;
+                    const outerRadius = 30;
+                    const innerRadius = 15;
                     for (let i = 0; i < spikes; i++) {
                         let angle = (i / spikes) * Math.PI * 2;
                         ctx.lineTo(Math.cos(angle) * outerRadius, Math.sin(angle) * outerRadius);
