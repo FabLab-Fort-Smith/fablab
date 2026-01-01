@@ -349,6 +349,26 @@ export default function BountiesPage() {
         }
     };
 
+    const handleDeleteBounty = async (bountyID) => {
+        if (!confirm("Are you sure you want to delete this bounty? This action cannot be undone.")) return;
+        
+        try {
+            const response = await fetch(`/api/v1/bounties?bountyID=${bountyID}&userID=${session.user.userID}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                setBounties(prev => prev.filter(b => b.bountyID !== bountyID));
+            } else {
+                const data = await response.json();
+                alert(`Failed to delete bounty: ${data.error}`);
+            }
+        } catch (error) {
+            console.error("Error deleting bounty:", error);
+            alert("An error occurred while deleting the bounty.");
+        }
+    };
+
     const handleOpenClaims = (bounty) => {
         setSelectedBountyForClaims(bounty);
         setOpenClaims(true);
@@ -473,11 +493,18 @@ export default function BountiesPage() {
                                                     size="small" 
                                                 />
                                                 {canEdit && (
-                                                    <Tooltip title="Edit Bounty">
-                                                        <IconButton size="small" onClick={() => handleOpenEdit(bounty)} sx={{ ml: 0.5 }}>
-                                                            <EditIcon fontSize="small" />
-                                                        </IconButton>
-                                                    </Tooltip>
+                                                    <>
+                                                        <Tooltip title="Edit Bounty">
+                                                            <IconButton size="small" onClick={() => handleOpenEdit(bounty)} sx={{ ml: 0.5 }}>
+                                                                <EditIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                        <Tooltip title="Delete Bounty">
+                                                            <IconButton size="small" onClick={() => handleDeleteBounty(bounty.bountyID)} sx={{ ml: 0.5 }} color="error">
+                                                                <DeleteIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </>
                                                 )}
                                             </Box>
                                         </Box>

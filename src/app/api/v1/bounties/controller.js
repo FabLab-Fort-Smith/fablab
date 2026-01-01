@@ -81,4 +81,20 @@ export default class BountyController {
             return new Response(JSON.stringify({ error: error.message }), { status: 500 });
         }
     }
+
+    static async deleteBounty(req) {
+        try {
+            const { searchParams } = new URL(req.url);
+            const bountyID = searchParams.get('bountyID');
+            const userID = searchParams.get('userID');
+
+            if (!bountyID) return new Response(JSON.stringify({ error: "Bounty ID required" }), { status: 400 });
+            if (!userID) return new Response(JSON.stringify({ error: "User ID required" }), { status: 400 });
+
+            const result = await BountyService.deleteBounty(bountyID, userID);
+            return new Response(JSON.stringify({ success: true, result }), { status: 200 });
+        } catch (error) {
+            return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+        }
+    }
 }

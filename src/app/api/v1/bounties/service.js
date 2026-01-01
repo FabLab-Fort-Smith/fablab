@@ -617,6 +617,21 @@ export default class BountyService {
         return await BountyModel.updateBounty(bountyID, { status: 'cancelled' });
     }
 
+    static async deleteBounty(bountyID, userID) {
+        const bounty = await BountyModel.getBountyById(bountyID);
+        if (!bounty) throw new Error("Bounty not found");
+        
+        // Check if user is creator OR admin
+        const user = await UserModel.getUserByQuery({ userID });
+        const isAdmin = user?.role === 'admin';
+        
+        if (bounty.creatorID !== userID && !isAdmin) {
+            throw new Error("Only the creator or an admin can delete this bounty");
+        }
+
+        return await BountyModel.deleteBounty(bountyID);
+    }
+
     static async editBounty(bountyID, userID, updateData) {
         const bounty = await BountyModel.getBountyById(bountyID);
         if (!bounty) throw new Error("Bounty not found");
