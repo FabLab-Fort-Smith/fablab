@@ -42,6 +42,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
     const imagesRef = useRef({
         runnerRun: null,
         runnerJump: null,
+        runnerSlide: null,
         virus: null,
         firewall: null,
         shield: null,
@@ -59,6 +60,7 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
 
             imagesRef.current.runnerRun = loadImg('/runner/sprite-run.png');
             imagesRef.current.runnerJump = loadImg('/runner/sprite-jump.png');
+            imagesRef.current.runnerSlide = loadImg('/runner/sprite-slide.png');
             imagesRef.current.virus = loadImg('/runner/thVirus.png');
             imagesRef.current.firewall = loadImg('/runner/firewall.png');
             imagesRef.current.shield = loadImg('/runner/shieldOrb.png');
@@ -200,11 +202,17 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         const imgs = imagesRef.current;
 
         // Update Player Width based on sprite aspect ratio
-        const currentSprite = player.grounded ? imgs.runnerRun : imgs.runnerJump;
+        let currentSprite;
+        if (player.ducking) {
+            currentSprite = imgs.runnerSlide;
+        } else {
+            currentSprite = player.grounded ? imgs.runnerRun : imgs.runnerJump;
+        }
+
         if (currentSprite && currentSprite.complete && currentSprite.naturalHeight !== 0) {
              const ratio = currentSprite.naturalWidth / currentSprite.naturalHeight;
-             // Base width on the "standing" height of 80 to avoid squashing when ducking
-             player.width = 80 * ratio;
+             // Base width on the current height (80 standing, 40 ducking)
+             player.width = player.height * ratio;
         }
         
         // Physics
@@ -344,7 +352,13 @@ const InfiniteLoopGame = ({ user, onGameEnd }) => {
         ctx.shadowBlur = player.invincible ? 20 : 0;
         ctx.shadowColor = player.color;
 
-        let playerImg = player.grounded ? imgs.runnerRun : imgs.runnerJump;
+        let playerImg;
+        if (player.ducking) {
+            playerImg = imgs.runnerSlide;
+        } else {
+            playerImg = player.grounded ? imgs.runnerRun : imgs.runnerJump;
+        }
+
         if (playerImg && playerImg.complete && playerImg.naturalWidth !== 0) {
              ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
         } else {
