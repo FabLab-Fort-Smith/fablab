@@ -305,4 +305,14 @@ export default class UserModel {
             return 0;
         }
     }
+
+    static async getUsersByBadge(badgeID) {
+        try {
+            const dbUsers = await db.dbUsers();
+            return await dbUsers.find({ "badges.id": badgeID }).toArray();
+        } catch (error) {
+            console.error("Error getting users by badge:", error);
+            return [];
+        }
+    }
 }

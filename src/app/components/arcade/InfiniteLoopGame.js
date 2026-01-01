@@ -724,6 +724,18 @@ const InfiniteLoopGame = ({ user, onGameEnd, jackpot }) => {
                             </Box>
 
                             <Typography variant="h6" sx={{ color: '#fff', fontFamily: 'Roboto Mono', mb: 2, borderBottom: '1px solid #333', pb: 1 }}>
+                                // REWARDS
+                            </Typography>
+                            <Box sx={{ mb: 3 }}>
+                                <Typography sx={{ color: '#aaa', fontFamily: 'Roboto Mono', mb: 1 }}>
+                                    <span style={{ color: '#ffd700' }}>WEEKLY JACKPOT:</span> The player with the highest score at the end of the week wins the entire accumulated Jackpot.
+                                </Typography>
+                                <Typography sx={{ color: '#aaa', fontFamily: 'Roboto Mono', mb: 1 }}>
+                                    <span style={{ color: '#00ff00' }}>TOP RUNNER BADGE:</span> The weekly champion earns the exclusive 👑 <b>Top Runner</b> badge and Discord Role until they are dethroned.
+                                </Typography>
+                            </Box>
+
+                            <Typography variant="h6" sx={{ color: '#fff', fontFamily: 'Roboto Mono', mb: 2, borderBottom: '1px solid #333', pb: 1 }}>
                                 // CONTROLS
                             </Typography>
                             <Box sx={{ mb: 3 }}>

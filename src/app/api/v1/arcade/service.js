@@ -1,5 +1,7 @@
 import ArcadeModel from "./model";
 import UserModel from "../users/model";
+import DiscordService from "@/lib/discord";
+import Constants from "@/lib/constants";
 import { ObjectId } from "mongodb";
 
 export default class ArcadeService {
@@ -38,16 +40,43 @@ export default class ArcadeService {
                     }
                 });
 
-                // 3. Transfer Badge
-                // Remove 'top-runner' badge from all users
+                // 3. Transfer Badge & Discord Role
+                
+                // A. Remove from previous winners
+                const previousWinners = await UserModel.getUsersByBadge('top-runner');
+                for (const user of previousWinners) {
+                    if (user.discordId) {
+                        await DiscordService.removeRole(user.discordId, Constants.TOP_RUNNER_ROLE_ID);
+                    }
+                }
                 await UserModel.removeBadgeFromAll('top-runner');
 
-                // Add 'top-runner' badge to the new winner
+                // B. Add to new winner
                 const badge = {
                     id: 'top-runner',
                     name: 'Top Runner',
                     description: 'Awarded to the weekly Arcade Jackpot winner.',
                     icon: '👑',
+                    awardedAt: new Date()
+                };
+
+                const winner = await UserModel.updateUser({ userID: winnerID }, {
+                    $push: { badges: badge }
+                });
+
+                if (winner && winner.discordId) {
+                    await DiscordService.addRole(winner.discordId, Constants.TOP_RUNNER_ROLE_ID);
+                    await DiscordService.sendHackTheLabNotification(`👑 **New Arcade Champion!**\nCongratulations to **${winner.username}** for winning the Weekly Jackpot of **${prize} Stake**! They are now the **Top Runner**!`);
+                }
+
+                // 4. Close Jackpot
+                await ArcadeModel.updateJackpot(jackpot._id, {
+                    status: 'closed',
+                    winnerID: winnerID,
+                    closedAt: new Date()
+                });
+
+            } else {
                     awardedAt: new Date()
                 };
 
