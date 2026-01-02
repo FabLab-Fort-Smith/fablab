@@ -164,7 +164,7 @@ export default class UserController {
         } catch (error) {
             console.error("Error in UserController.updateUser:", error);
             return new Response(
-                JSON.stringify({ error: "An error occurred while updating the user." }),
+                JSON.stringify({ error: error.message || "An error occurred while updating the user." }),
                 { status: 500 }
             );
         }

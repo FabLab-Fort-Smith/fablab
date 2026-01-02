@@ -385,7 +385,7 @@ export default class UserService {
             return updatedUser;
         } catch (error) {
             console.error("Error in UserService.updateUser:", error);
-            throw new Error("Failed to update user.");
+            throw error;
         }
     }
 
