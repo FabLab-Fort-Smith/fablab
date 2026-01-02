@@ -128,6 +128,13 @@ export default class UserService {
             if(updateData.email) updateData.email = AuthService.encryptEmail(updateData.email);
             if(updateData.phoneNumber) updateData.phoneNumber = AuthService.encryptPhone(updateData.phoneNumber);
 
+            // Prevent overwriting stakeHistory with $set if it exists in updateData
+            // This avoids "Updating the path 'stakeHistory' would create a conflict" errors
+            // when we also use $push on stakeHistory later in this function.
+            if (updateData.stakeHistory) {
+                delete updateData.stakeHistory;
+            }
+
             // 1. Fetch current user to calculate new status
             // We construct a search query that matches UserModel.getUserByQuery logic
             const searchObj = {
