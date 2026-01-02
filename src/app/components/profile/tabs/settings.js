@@ -348,9 +348,6 @@ const SettingsTab = ({ user }) => {
                 </Grid>
             </Paper>
 
-                </Grid>
-            </Paper>
-
             <Divider sx={{ my: 4, borderColor: theme.palette.divider }} />
 
             <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main, display: 'flex', alignItems: 'center', gap: 1 }}>
