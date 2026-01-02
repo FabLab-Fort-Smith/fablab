@@ -173,7 +173,28 @@ export default class UserModel {
     static updateUser = async (query, updateData) => {
         try {
             console.log("🔄 Updating user with query:", query);
-            console.log("🔄 Update data:", updateData);
+            
+            // Helper to sanitize null bytes from strings
+            const sanitizeStrings = (obj) => {
+                if (typeof obj === 'string') {
+                    return obj.replace(/\u0000/g, '');
+                }
+                if (Array.isArray(obj)) {
+                    return obj.map(sanitizeStrings);
+                }
+                if (typeof obj === 'object' && obj !== null && !(obj instanceof Date)) {
+                    const newObj = {};
+                    for (const key in obj) {
+                        newObj[key] = sanitizeStrings(obj[key]);
+                    }
+                    return newObj;
+                }
+                return obj;
+            };
+
+            // Sanitize updateData
+            updateData = sanitizeStrings(updateData);
+            console.log("🔄 Update data (sanitized):", updateData);
 
             // Exclude the _id field from the updateData object
             const { _id, ...updateFields } = updateData;
