@@ -1204,14 +1204,15 @@ export default function TerminalPage() {
         if (missionLevel >= 3) {
             helpText.push("  grep <pattern> <file> - Search for pattern in file");
             helpText.push("  curl <url> - Transfer data from or to a server");
+            helpText.push("  su <user> - Switch user");
+            helpText.push("  exit - Log out of current user");
         }
         if (missionLevel >= 5) {
             helpText.push("  crack <hash> <wordlist> - Crack a password hash");
             helpText.push("  unzip <file> - Extract compressed files");
         }
         if (missionLevel >= 6) {
-            helpText.push("  su <user> - Switch user");
-            helpText.push("  exit - Log out of current user");
+            // su moved to level 3
         }
         if (missionLevel >= 8) {
             helpText.push("  ps - List running processes");
@@ -1227,7 +1228,7 @@ export default function TerminalPage() {
         newHistory.push(...helpText);
         break;
       case 'su':
-        if (missionLevel < 6) {
+        if (missionLevel < 3) {
             newHistory.push(`Command not found: ${command}`);
             break;
         }
