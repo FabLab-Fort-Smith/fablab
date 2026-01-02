@@ -3,8 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { 
     Box, Typography, Paper, Chip, IconButton, Tooltip, 
     Card, CardContent, Grid, Avatar, useTheme, useMediaQuery, 
-    Container, TextField, InputAdornment, Stack, Button, Pagination 
+    Container, TextField, InputAdornment, Stack, Button, Pagination,
+    Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, Autocomplete
 } from '@mui/material';
+import MergeTypeIcon from '@mui/icons-material/MergeType';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 import EditIcon from '@mui/icons-material/Edit';
 import SearchIcon from '@mui/icons-material/Search';
@@ -32,6 +34,78 @@ export default function MembersPage() {
     });
     const [rowCount, setRowCount] = useState(0);
     const [syncing, setSyncing] = useState(false);
+
+    // Merge State
+    const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+    const [sourceUser, setSourceUser] = useState(null);
+    const [targetUser, setTargetUser] = useState(null);
+    const [merging, setMerging] = useState(false);
+    const [allUsersForMerge, setAllUsersForMerge] = useState([]); // For autocomplete
+
+    useEffect(() => {
+        if (mergeDialogOpen) {
+            // Fetch all users for the autocomplete when dialog opens
+            // We need a lightweight list for selection
+            fetchAllUsersForMerge();
+        }
+    }, [mergeDialogOpen]);
+
+    const fetchAllUsersForMerge = async () => {
+        try {
+            // Fetching with a large limit to get everyone for the dropdown
+            // In a real large app, this should be a search-as-you-type
+            const response = await fetch(`/api/v1/users?limit=1000`);
+            const data = await response.json();
+            if (data.success) {
+                setAllUsersForMerge(data.users);
+            }
+        } catch (error) {
+            console.error('Error fetching users for merge:', error);
+        }
+    };
+
+    const handleMergeUsers = async () => {
+        if (!sourceUser || !targetUser) return;
+        if (sourceUser.userID === targetUser.userID) {
+            alert("Cannot merge a user into themselves.");
+            return;
+        }
+
+        if (!confirm(`Are you sure you want to merge ${sourceUser.email} INTO ${targetUser.email}? This action cannot be undone and ${sourceUser.email} will be deleted.`)) {
+            return;
+        }
+
+        setMerging(true);
+        try {
+            const response = await fetch('/api/v1/users/merge', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    sourceUserID: sourceUser.userID,
+                    targetUserID: targetUser.userID,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert('Users merged successfully');
+                setMergeDialogOpen(false);
+                setSourceUser(null);
+                setTargetUser(null);
+                fetchUsers(paginationModel.page + 1, paginationModel.pageSize); // Refresh list
+            } else {
+                alert('Error merging users: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Error merging users:', error);
+            alert('An error occurred while merging users');
+        } finally {
+            setMerging(false);
+        }
+    };
 
     useEffect(() => {
         if (status === 'unauthenticated') {
@@ -199,6 +273,13 @@ export default function MembersPage() {
                     </Button>
                     <Button 
                         variant="outlined" 
+                        startIcon={<MergeTypeIcon />}
+                        onClick={() => setMergeDialogOpen(true)}
+                    >
+                        Merge Accounts
+                    </Button>
+                    <Button 
+                        variant="outlined" 
                         startIcon={<AccessTimeIcon />}
                         onClick={() => router.push('/dashboard/checkin-log')}
                         sx={{ display: { xs: 'none', sm: 'flex' } }}
@@ -320,6 +401,47 @@ export default function MembersPage() {
                 user={selectedUser} 
                 onUpdate={handleUserUpdate}
             />
+
+            {/* Merge Users Dialog */}
+            <Dialog open={mergeDialogOpen} onClose={() => setMergeDialogOpen(false)} maxWidth="sm" fullWidth>
+                <DialogTitle>Merge User Accounts</DialogTitle>
+                <DialogContent>
+                    <DialogContentText sx={{ mb: 3 }}>
+                        Select a Source user (to be deleted) and a Target user (to keep). 
+                        All data from the Source user will be moved to the Target user.
+                        <strong> This action is irreversible.</strong>
+                    </DialogContentText>
+                    
+                    <Stack spacing={3}>
+                        <Autocomplete
+                            options={allUsersForMerge}
+                            getOptionLabel={(option) => `${option.firstName} ${option.lastName} (${option.email})`}
+                            value={sourceUser}
+                            onChange={(event, newValue) => setSourceUser(newValue)}
+                            renderInput={(params) => <TextField {...params} label="Source User (Will be DELETED)" />}
+                        />
+                        
+                        <Autocomplete
+                            options={allUsersForMerge}
+                            getOptionLabel={(option) => `${option.firstName} ${option.lastName} (${option.email})`}
+                            value={targetUser}
+                            onChange={(event, newValue) => setTargetUser(newValue)}
+                            renderInput={(params) => <TextField {...params} label="Target User (Will KEEP)" />}
+                        />
+                    </Stack>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setMergeDialogOpen(false)}>Cancel</Button>
+                    <Button 
+                        onClick={handleMergeUsers} 
+                        variant="contained" 
+                        color="error"
+                        disabled={!sourceUser || !targetUser || merging}
+                    >
+                        {merging ? 'Merging...' : 'Merge Accounts'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Container>
     );
 }

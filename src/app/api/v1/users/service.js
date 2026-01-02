@@ -3,6 +3,8 @@
 import User from "./class";
 import UserModel from "./model";
 import BadgeModel from "../badges/model";
+import BountyModel from "../bounties/model";
+import PortfolioModel from "../portfolio/model";
 import Constants from "@/lib/constants";
 import AuthService from '../../auth/[...nextauth]/service.js';
 import DiscordService from "@/lib/discord";
@@ -541,8 +543,9 @@ export default class UserService {
      * Moves data from sourceUser to targetUser and deletes sourceUser
      * @param {string} targetUserID - The ID of the user to keep
      * @param {string} sourceUserID - The ID of the user to delete
+     * @param {Object} overrides - Optional field overrides { fieldName: 'source' | 'target' }
      */
-    static mergeUsers = async (targetUserID, sourceUserID) => {
+    static mergeUsers = async (targetUserID, sourceUserID, overrides = {}) => {
         try {
             console.log(`🔀 Merging User ${sourceUserID} into ${targetUserID}`);
             
@@ -553,32 +556,89 @@ export default class UserService {
                 throw new Error("One or both users not found.");
             }
 
-            // Fields to copy if missing in target
+            // 1. Merge Basic Fields (Only if missing in target, unless overridden)
             const fieldsToMerge = [
                 'discordHandle', 'discordId', 'googleId', 'phoneNumber', 
                 'firstName', 'lastName', 'image', 'bio', 'hobbies', 'creatorType',
-                'cityChange', 'knownMembers', 'questions'
+                'cityChange', 'knownMembers', 'questions', 'squareID'
             ];
 
             const updateData = {};
             fieldsToMerge.forEach(field => {
-                if (!targetUser[field] && sourceUser[field]) {
+                // If override says 'source', take from source (if exists)
+                if (overrides[field] === 'source') {
+                    if (sourceUser[field]) updateData[field] = sourceUser[field];
+                }
+                // If override says 'target', do nothing (keep target)
+                else if (overrides[field] === 'target') {
+                    // Do nothing
+                }
+                // Default: Only fill if missing in target
+                else if (!targetUser[field] && sourceUser[field]) {
                     updateData[field] = sourceUser[field];
                 }
             });
 
-            // If source has a provider and target doesn't (or target is local), update provider
             if (sourceUser.provider && (!targetUser.provider || targetUser.provider === 'local')) {
                 updateData.provider = sourceUser.provider;
             }
 
-            // Update target user
+            // 2. Merge Stake
+            const sourceStake = sourceUser.stake || 0;
+            if (sourceStake > 0) {
+                updateData.stake = (targetUser.stake || 0) + sourceStake;
+            }
+
+            // 3. Merge Arrays (StakeHistory, VolunteerLog, Badges, CapturedFlags)
+            
+            // Stake History
+            const targetHistory = targetUser.stakeHistory || [];
+            const sourceHistory = sourceUser.stakeHistory || [];
+            if (sourceHistory.length > 0) {
+                updateData.stakeHistory = [...targetHistory, ...sourceHistory];
+            }
+
+            // Volunteer Log (Membership)
+            const sourceLog = sourceUser.membership?.volunteerLog || [];
+            if (sourceLog.length > 0) {
+                const targetLog = targetUser.membership?.volunteerLog || [];
+                const mergedLog = [...targetLog, ...sourceLog];
+                
+                // We need to preserve other membership fields
+                // If we haven't touched membership in updateData yet, copy from target
+                if (!updateData.membership) {
+                    updateData.membership = { ...(targetUser.membership || {}) };
+                }
+                updateData.membership.volunteerLog = mergedLog;
+            }
+
+            // Badges (Unique)
+            const sourceBadges = sourceUser.badges || [];
+            if (sourceBadges.length > 0) {
+                const targetBadges = targetUser.badges || [];
+                const mergedBadges = [...new Set([...targetBadges, ...sourceBadges])];
+                updateData.badges = mergedBadges;
+            }
+
+            // Captured Flags (Unique)
+            const sourceFlags = sourceUser.capturedFlags || [];
+            if (sourceFlags.length > 0) {
+                const targetFlags = targetUser.capturedFlags || [];
+                const mergedFlags = [...new Set([...targetFlags, ...sourceFlags])];
+                updateData.capturedFlags = mergedFlags;
+            }
+
+            // 4. Update Target User
             if (Object.keys(updateData).length > 0) {
-                console.log("Updating target user with:", updateData);
+                console.log("Updating target user with merged data:", updateData);
                 await this.updateUser(targetUserID, updateData);
             }
 
-            // Delete source user
+            // 5. Update References in Other Collections
+            await BountyModel.updateUserReferences(sourceUserID, targetUserID);
+            await PortfolioModel.updateUserReferences(sourceUserID, targetUserID);
+
+            // 6. Delete Source User
             console.log("Deleting source user:", sourceUserID);
             await this.deleteUser({ userID: sourceUserID });
 
