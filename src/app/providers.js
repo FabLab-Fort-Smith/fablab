@@ -77,8 +77,13 @@ const getUserNavigation = (userID) => [
                 icon: <SportsEsportsIcon />,
             },
             {
+                segment: 'holodeck',
+                title: 'The Holodeck (v2)',
+                icon: <TerminalIcon />,
+            },
+            {
                 segment: 'terminal',
-                title: 'HackTheLab',
+                title: 'HackTheLab (Legacy)',
                 icon: <TerminalIcon />,
             },
             {

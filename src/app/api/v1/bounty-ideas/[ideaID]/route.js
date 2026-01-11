@@ -9,7 +9,7 @@ export async function PUT(req, { params }) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { ideaID } = params;
+        const { ideaID } = await params;
         const body = await req.json();
         const success = await BountyIdeaService.updateIdea(ideaID, body);
         
@@ -30,7 +30,7 @@ export async function DELETE(req, { params }) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { ideaID } = params;
+        const { ideaID } = await params;
         const success = await BountyIdeaService.deleteIdea(ideaID);
 
         if (!success) {
