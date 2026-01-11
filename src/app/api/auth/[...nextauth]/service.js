@@ -81,6 +81,18 @@ export default class AuthService {
         const hashedPassword = password ? await bcrypt.hash(password, 10) : 'no password';
         console.log('creating new user with:', firstName, lastName, encryptedEmail, hashedPassword, encryptedPhone, status);
         
+        // Ensure username is lowercased if it exists, though check should handle it
+        // We allow display casing in storage if desired, but check is case-insensitive.
+        // If strict uniqueness is desired, we rely on the findByUsername check above 
+        // which I will add now.
+
+        if (username) {
+            const existingUsername = await UserModel.findByUsername(username);
+            if (existingUsername) {
+                throw new Error("Username is already taken.");
+            }
+        }
+        
         const newUser = new User(
             firstName,
             lastName,
