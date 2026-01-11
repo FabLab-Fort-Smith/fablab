@@ -202,7 +202,7 @@ export default function BoardBountiesPage() {
                                 mb: 4
                             }}>
                                 <QRCode
-                                    value={`${baseUrl}/dashboard/bounties?highlight=${selectedBounty.bountyID}`}
+                                    value={`${baseUrl}/dashboard/activities/bounties?highlight=${selectedBounty.bountyID}`}
                                     size={200}
                                 />
                             </Box>
