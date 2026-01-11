@@ -74,7 +74,11 @@ export default class UserModel {
             // Optimization: Prioritize exact match for userID
             if (query.userID) {
                 console.log("🔍 Searching user by ID (optimized):", query.userID);
-                const user = await dbUsers.findOne({ userID: query.userID });
+                // Use case-insensitive match to be robust against "User-..." vs "user-..."
+                const user = await dbUsers.findOne({ 
+                    userID: { $regex: new RegExp(`^${query.userID}$`, "i") } 
+                });
+                
                 if (user) {
                     console.log("✅ User found by ID:", user.userID);
                     return user;
