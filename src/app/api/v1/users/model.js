@@ -70,8 +70,22 @@ export default class UserModel {
         try {
             query = sanitizeStrings(query);
             const dbUsers = await db.dbUsers();
-            console.log("🔍 Searching user in the database with query:", query);
+            
+            // Optimization: Prioritize exact match for userID
+            if (query.userID) {
+                console.log("🔍 Searching user by ID (optimized):", query.userID);
+                const user = await dbUsers.findOne({ userID: query.userID });
+                if (user) {
+                    console.log("✅ User found by ID:", user.userID);
+                    return user;
+                }
+                // If userID was provided but no user found, returning null is correct.
+                // We shouldn't fall back to loose regex search if a specific ID was requested.
+                console.warn("⚠️ No user found for specific userID:", query.userID);
+                return null;
+            }
 
+            console.log("🔍 Searching user in the database with query:", query);
             const user = await dbUsers.findOne({
                 $or: Object.keys(query).map(key => ({ [key]: { $regex: query[key], $options: "i" } }))
             });
