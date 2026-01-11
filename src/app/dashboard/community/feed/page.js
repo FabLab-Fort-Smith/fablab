@@ -318,7 +318,7 @@ export default function FeedPage() {
                                                 )}
                                             </Box>
                                         </Box>
-                                        <IconButton size="small" onClick={() => router.push(isBounty ? `/dashboard/bounties/${id}` : `/dashboard/showcase/${id}`)}>
+                                        <IconButton size="small" onClick={() => router.push(isBounty ? `/dashboard/activities/bounties?highlight=${id}` : `/dashboard/showcase?highlight=${id}`)}>
                                             <MoreHorizIcon />
                                         </IconButton>
                                     </Box>
