@@ -21,8 +21,102 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import AccessAlarmIcon from '@mui/icons-material/AccessAlarm';
 import StarIcon from '@mui/icons-material/Star';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import MobileStepper from '@mui/material/MobileStepper';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
+
+const ImageCarousel = ({ images, alt }) => {
+    const [activeStep, setActiveStep] = useState(0);
+    const maxSteps = images?.length || 0;
+
+    if (!images || images.length === 0) return null;
+
+    const handleNext = (e) => {
+        e.stopPropagation();
+        setActiveStep((prevStep) => prevStep + 1);
+    };
+
+    const handleBack = (e) => {
+        e.stopPropagation();
+        setActiveStep((prevStep) => prevStep - 1);
+    };
+
+    return (
+        <Box sx={{ position: 'relative', width: '100%', bgcolor: 'black' }}>
+            <CardMedia
+                component="img"
+                image={images[activeStep]}
+                alt={alt}
+                sx={{ 
+                    width: '100%', 
+                    height: 'auto',
+                    maxHeight: '80vh',
+                    objectFit: 'contain',
+                    cursor: 'pointer'
+                }}
+                onClick={() => window.open(images[activeStep], '_blank')}
+            />
+            {maxSteps > 1 && (
+                <>
+                    <IconButton
+                        size="small"
+                        onClick={handleBack}
+                        disabled={activeStep === 0}
+                        sx={{
+                            position: 'absolute',
+                            left: 8,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            bgcolor: 'rgba(0,0,0,0.5)',
+                            color: 'white',
+                            '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
+                            '&.Mui-disabled': { display: 'none' }
+                        }}
+                    >
+                        <ChevronLeftIcon />
+                    </IconButton>
+                    <IconButton
+                        size="small"
+                        onClick={handleNext}
+                        disabled={activeStep === maxSteps - 1}
+                        sx={{
+                            position: 'absolute',
+                            right: 8,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            bgcolor: 'rgba(0,0,0,0.5)',
+                            color: 'white',
+                            '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
+                            '&.Mui-disabled': { display: 'none' }
+                        }}
+                    >
+                        <ChevronRightIcon />
+                    </IconButton>
+                    <MobileStepper
+                        steps={maxSteps}
+                        position="static"
+                        activeStep={activeStep}
+                        sx={{
+                            maxWidth: 400,
+                            flexGrow: 1,
+                            bgcolor: 'transparent',
+                            position: 'absolute',
+                            bottom: 0,
+                            width: '100%',
+                            justifyContent: 'center',
+                            '.MuiMobileStepper-dot': { bgcolor: 'rgba(255,255,255,0.5)' },
+                            '.MuiMobileStepper-dotActive': { bgcolor: 'white' }
+                        }}
+                        nextButton={null}
+                        backButton={null}
+                    />
+                </>
+            )}
+        </Box>
+    );
+};
 
 export default function FeedPage() {
     const { data: session } = useSession();
@@ -423,20 +517,7 @@ export default function FeedPage() {
                                         </Box>
                                     ) : (
                                         // SHOWCASE CARD CONTENT
-                                        <CardMedia
-                                            component="img"
-                                            image={item.imageUrls?.[0]}
-                                            alt={item.title}
-                                            sx={{ 
-                                                width: '100%', 
-                                                height: 'auto',
-                                                maxHeight: '80vh',
-                                                objectFit: 'contain',
-                                                cursor: 'pointer',
-                                                bgcolor: 'black'
-                                            }}
-                                            onClick={() => window.open(item.imageUrls?.[0], '_blank')}
-                                        />
+                                        <ImageCarousel images={item.imageUrls} alt={item.title} />
                                     )}
 
                                     {/* Actions */}
