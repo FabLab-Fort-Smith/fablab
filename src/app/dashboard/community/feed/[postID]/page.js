@@ -21,11 +21,38 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 
-const ImageCarousel = ({ images, alt }) => {
+const ImageCarousel = ({ images, alt, onClick }) => {
     const [activeStep, setActiveStep] = useState(0);
+    const [touchStart, setTouchStart] = useState(null);
+    const [touchEnd, setTouchEnd] = useState(null);
     const maxSteps = images?.length || 0;
 
     if (!images || images.length === 0) return null;
+
+    const minSwipeDistance = 50;
+
+    const onTouchStart = (e) => {
+        setTouchEnd(null);
+        setTouchStart(e.targetTouches[0].clientX);
+    };
+
+    const onTouchMove = (e) => {
+        setTouchEnd(e.targetTouches[0].clientX);
+    };
+
+    const onTouchEnd = () => {
+        if (!touchStart || !touchEnd) return;
+        const distance = touchStart - touchEnd;
+        const isLeftSwipe = distance > minSwipeDistance;
+        const isRightSwipe = distance < -minSwipeDistance;
+        
+        if (isLeftSwipe && activeStep < maxSteps - 1) {
+            setActiveStep(prev => prev + 1);
+        }
+        if (isRightSwipe && activeStep > 0) {
+            setActiveStep(prev => prev - 1);
+        }
+    };
 
     const handleNext = (e) => {
         e.stopPropagation();
@@ -38,7 +65,12 @@ const ImageCarousel = ({ images, alt }) => {
     };
 
     return (
-        <Box sx={{ position: 'relative', width: '100%', bgcolor: 'black' }}>
+        <Box 
+            sx={{ position: 'relative', width: '100%', bgcolor: 'black' }}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+        >
             <CardMedia
                 component="img"
                 image={images[activeStep]}
@@ -48,8 +80,9 @@ const ImageCarousel = ({ images, alt }) => {
                     height: 'auto',
                     maxHeight: '80vh',
                     objectFit: 'contain',
-                    cursor: 'default'
+                    cursor: onClick ? 'pointer' : 'default'
                 }}
+                onClick={onClick}
             />
             {maxSteps > 1 && (
                 <>
@@ -58,6 +91,7 @@ const ImageCarousel = ({ images, alt }) => {
                         onClick={handleBack}
                         disabled={activeStep === 0}
                         sx={{
+                            display: { xs: 'none', md: 'flex' },
                             position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
                             bgcolor: 'rgba(0,0,0,0.5)', color: 'white',
                             '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
@@ -71,6 +105,7 @@ const ImageCarousel = ({ images, alt }) => {
                         onClick={handleNext}
                         disabled={activeStep === maxSteps - 1}
                         sx={{
+                            display: { xs: 'none', md: 'flex' },
                             position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
                             bgcolor: 'rgba(0,0,0,0.5)', color: 'white',
                             '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
