@@ -295,7 +295,7 @@ export default function FeedPage() {
         
         const url = isBounty 
             ? `${window.location.origin}/dashboard/activities/bounties/${id}`
-            : `${window.location.origin}/dashboard/community/feed?highlight=${id}`;
+            : `${window.location.origin}/dashboard/community/feed/${id}`;
 
         navigator.clipboard.writeText(url);
         setSnackbar({ open: true, message: 'Link copied to clipboard!', severity: 'success' });
@@ -308,7 +308,7 @@ export default function FeedPage() {
             const isBounty = selectedItem.type === 'bounty';
             const url = isBounty 
                 ? `${window.location.origin}/dashboard/activities/bounties/${id}`
-                : `${window.location.origin}/dashboard/community/feed?highlight=${id}`;
+                : `${window.location.origin}/dashboard/community/feed/${id}`;
 
             try {
                 await navigator.share({
@@ -393,10 +393,8 @@ export default function FeedPage() {
         if (isBounty) {
             router.push(`/dashboard/activities/bounties/${id}`);
         } else {
-            // Updated to stay on feed with highlight
-            const url = new URL(window.location.href);
-            url.searchParams.set('highlight', id);
-            router.push(url.pathname + url.search);
+            // Navigate to dedicated post page
+            router.push(`/dashboard/community/feed/${id}`);
         }
         handleMenuClose();
     };
@@ -407,7 +405,7 @@ export default function FeedPage() {
          const id = isBounty ? menuTargetItem.bountyID : menuTargetItem.id;
          const url = isBounty 
             ? `${window.location.origin}/dashboard/activities/bounties/${id}`
-            : `${window.location.origin}/dashboard/community/feed?highlight=${id}`;
+            : `${window.location.origin}/dashboard/community/feed/${id}`; // Link to detail page
             
          navigator.clipboard.writeText(url);
          setSnackbar({ open: true, message: 'Link copied to clipboard!', severity: 'success' });
@@ -449,10 +447,10 @@ export default function FeedPage() {
                         const creator = item.creator || {};
                         
                         return (
-                            <Grid item xs={12} sm={8} md={6} lg={5} key={`${item.type}-${id}`} sx={{ mb: { xs: 0, md: 4 } }}>
+                            <Grid item xs={12} sm={10} md={9} lg={8} xl={7} key={`${item.type}-${id}`} sx={{ mb: { xs: 0, md: 4 } }}>
                                 <Card id={`feed-item-${id}`} sx={{ 
-                                    width: { xs: 'calc(100% + 32px)', md: '100%' },
-                                    mx: { xs: -2, md: 0 },
+                                    width: '100%',
+                                    mx: 'auto',
                                     borderRadius: { xs: 0, md: 1 },
                                     boxShadow: { xs: 'none', md: 1 },
                                     borderBottom: { xs: '1px solid #333', md: 'none' },
