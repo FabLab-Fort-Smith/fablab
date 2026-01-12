@@ -39,9 +39,11 @@ export default class AnnouncementController {
         try {
             const session = await auth();
             const isAdmin = session?.user?.role === 'admin';
+            const { searchParams } = new URL(req.url);
+            const showAll = searchParams.get('all') === 'true';
 
             let announcements;
-            if (isAdmin) {
+            if (isAdmin && showAll) {
                 announcements = await AnnouncementService.getAllAnnouncements();
             } else {
                 announcements = await AnnouncementService.getActiveAnnouncements();

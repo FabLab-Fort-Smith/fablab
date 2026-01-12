@@ -53,7 +53,7 @@ export default function AnnouncementManagementPage() {
 
     const fetchAnnouncements = async () => {
         try {
-            const response = await axios.get('/api/v1/announcements');
+            const response = await axios.get('/api/v1/announcements?all=true');
             setAnnouncements(response.data);
         } catch (err) {
             console.error("Error fetching announcements:", err);
