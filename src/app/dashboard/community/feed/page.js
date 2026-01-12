@@ -22,11 +22,12 @@ import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import AccessAlarmIcon from '@mui/icons-material/AccessAlarm';
 import StarIcon from '@mui/icons-material/Star';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function FeedPage() {
     const { data: session } = useSession();
     const router = useRouter();
+    const searchParams = useSearchParams();
     
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -53,6 +54,24 @@ export default function FeedPage() {
     useEffect(() => {
         fetchFeed();
     }, [sort]);
+
+    // Handle Highlight
+    useEffect(() => {
+        const highlight = searchParams.get('highlight');
+        if (highlight && items.length > 0 && !loading) {
+            setTimeout(() => {
+                const element = document.getElementById(`feed-item-${highlight}`);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    element.style.transition = 'box-shadow 0.5s';
+                    element.style.boxShadow = '0 0 20px #00ff00';
+                    setTimeout(() => {
+                        element.style.boxShadow = 'none';
+                    }, 3000);
+                }
+            }, 500);
+        }
+    }, [items, loading, searchParams]);
 
     const fetchFeed = async () => {
         setLoading(true);
@@ -182,7 +201,7 @@ export default function FeedPage() {
         
         const url = isBounty 
             ? `${window.location.origin}/dashboard/activities/bounties/${id}`
-            : `${window.location.origin}/dashboard/showcase?highlight=${id}`;
+            : `${window.location.origin}/dashboard/community/feed?highlight=${id}`;
 
         navigator.clipboard.writeText(url);
         setSnackbar({ open: true, message: 'Link copied to clipboard!', severity: 'success' });
@@ -195,7 +214,7 @@ export default function FeedPage() {
             const isBounty = selectedItem.type === 'bounty';
             const url = isBounty 
                 ? `${window.location.origin}/dashboard/activities/bounties/${id}`
-                : `${window.location.origin}/dashboard/showcase?highlight=${id}`;
+                : `${window.location.origin}/dashboard/community/feed?highlight=${id}`;
 
             try {
                 await navigator.share({
@@ -280,7 +299,10 @@ export default function FeedPage() {
         if (isBounty) {
             router.push(`/dashboard/activities/bounties/${id}`);
         } else {
-            router.push(`/dashboard/showcase?highlight=${id}`);
+            // Updated to stay on feed with highlight
+            const url = new URL(window.location.href);
+            url.searchParams.set('highlight', id);
+            router.push(url.pathname + url.search);
         }
         handleMenuClose();
     };
@@ -291,7 +313,7 @@ export default function FeedPage() {
          const id = isBounty ? menuTargetItem.bountyID : menuTargetItem.id;
          const url = isBounty 
             ? `${window.location.origin}/dashboard/activities/bounties/${id}`
-            : `${window.location.origin}/dashboard/showcase?highlight=${id}`;
+            : `${window.location.origin}/dashboard/community/feed?highlight=${id}`;
             
          navigator.clipboard.writeText(url);
          setSnackbar({ open: true, message: 'Link copied to clipboard!', severity: 'success' });
@@ -334,7 +356,7 @@ export default function FeedPage() {
                         
                         return (
                             <Grid item xs={12} sm={8} md={6} lg={5} key={`${item.type}-${id}`} sx={{ mb: { xs: 0, md: 4 } }}>
-                                <Card sx={{ 
+                                <Card id={`feed-item-${id}`} sx={{ 
                                     width: { xs: 'calc(100% + 32px)', md: '100%' },
                                     mx: { xs: -2, md: 0 },
                                     borderRadius: { xs: 0, md: 1 },
