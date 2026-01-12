@@ -535,7 +535,7 @@ export default function FeedPage() {
                                                 p: 2,
                                                 position: 'relative'
                                             }}
-                                            onClick={() => router.push(`/dashboard/bounties/${id}`)}
+                                            onClick={() => router.push(`/dashboard/activities/bounties/${id}`)}
                                         >
                                             <Typography variant="h5" fontWeight="bold" align="center" color="primary" sx={{ wordBreak: 'break-word', zIndex: 1 }}>
                                                 {item.title}
