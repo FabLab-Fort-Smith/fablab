@@ -6,7 +6,7 @@ import {
     DialogContent, DialogActions, IconButton, Avatar, 
     CircularProgress, Alert, Fab, ImageList, ImageListItem,
     ToggleButton, ToggleButtonGroup, List, ListItem, 
-    ListItemAvatar, ListItemText, Snackbar, Chip
+    ListItemAvatar, ListItemText, Snackbar, Chip, Menu, MenuItem
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import FavoriteIcon from '@mui/icons-material/Favorite';
@@ -45,6 +45,10 @@ export default function FeedPage() {
     const [tipAmount, setTipAmount] = useState(10);
     const [tipLoading, setTipLoading] = useState(false);
     const [tipRecipient, setTipRecipient] = useState(null);
+
+    // Menu State
+    const [menuAnchorEl, setMenuAnchorEl] = useState(null);
+    const [menuTargetItem, setMenuTargetItem] = useState(null);
 
     useEffect(() => {
         fetchFeed();
@@ -174,8 +178,12 @@ export default function FeedPage() {
 
     const handleCopyLink = () => {
         const id = selectedItem.type === 'bounty' ? selectedItem.bountyID : selectedItem.id;
-        const path = selectedItem.type === 'bounty' ? 'bounties' : 'showcase';
-        const url = `${window.location.origin}/dashboard/${path}/${id}`;
+        const isBounty = selectedItem.type === 'bounty';
+        
+        const url = isBounty 
+            ? `${window.location.origin}/dashboard/activities/bounties/${id}`
+            : `${window.location.origin}/dashboard/showcase?highlight=${id}`;
+
         navigator.clipboard.writeText(url);
         setSnackbar({ open: true, message: 'Link copied to clipboard!', severity: 'success' });
         handleCloseShare();
@@ -184,12 +192,16 @@ export default function FeedPage() {
     const handleNativeShare = async () => {
         if (navigator.share && selectedItem) {
             const id = selectedItem.type === 'bounty' ? selectedItem.bountyID : selectedItem.id;
-            const path = selectedItem.type === 'bounty' ? 'bounties' : 'showcase';
+            const isBounty = selectedItem.type === 'bounty';
+            const url = isBounty 
+                ? `${window.location.origin}/dashboard/activities/bounties/${id}`
+                : `${window.location.origin}/dashboard/showcase?highlight=${id}`;
+
             try {
                 await navigator.share({
                     title: selectedItem.title,
                     text: `Check this out: ${selectedItem.title}`,
-                    url: `${window.location.origin}/dashboard/${path}/${id}`
+                    url
                 });
                 handleCloseShare();
             } catch (error) {
@@ -248,6 +260,42 @@ export default function FeedPage() {
         } finally {
             setTipLoading(false);
         }
+    };
+
+    const handleMenuOpen = (event, item) => {
+        setMenuAnchorEl(event.currentTarget);
+        setMenuTargetItem(item);
+    };
+
+    const handleMenuClose = () => {
+        setMenuAnchorEl(null);
+        setMenuTargetItem(null);
+    };
+
+    const handleViewDetails = () => {
+        if (!menuTargetItem) return;
+        const isBounty = menuTargetItem.type === 'bounty';
+        const id = isBounty ? menuTargetItem.bountyID : menuTargetItem.id;
+        
+        if (isBounty) {
+            router.push(`/dashboard/activities/bounties/${id}`);
+        } else {
+            router.push(`/dashboard/showcase?highlight=${id}`);
+        }
+        handleMenuClose();
+    };
+
+    const handleMenuCopyLink = () => {
+         if (!menuTargetItem) return;
+         const isBounty = menuTargetItem.type === 'bounty';
+         const id = isBounty ? menuTargetItem.bountyID : menuTargetItem.id;
+         const url = isBounty 
+            ? `${window.location.origin}/dashboard/activities/bounties/${id}`
+            : `${window.location.origin}/dashboard/showcase?highlight=${id}`;
+            
+         navigator.clipboard.writeText(url);
+         setSnackbar({ open: true, message: 'Link copied to clipboard!', severity: 'success' });
+         handleMenuClose();
     };
 
     return (
@@ -318,7 +366,7 @@ export default function FeedPage() {
                                                 )}
                                             </Box>
                                         </Box>
-                                        <IconButton size="small" onClick={() => router.push(isBounty ? `/dashboard/activities/bounties?highlight=${id}` : `/dashboard/showcase?highlight=${id}`)}>
+                                        <IconButton size="small" onClick={(e) => handleMenuOpen(e, item)}>
                                             <MoreHorizIcon />
                                         </IconButton>
                                     </Box>
@@ -544,6 +592,17 @@ export default function FeedPage() {
                     </Box>
                 </DialogContent>
             </Dialog>
+
+            {/* Context Menu */}
+            <Menu
+                anchorEl={menuAnchorEl}
+                open={Boolean(menuAnchorEl)}
+                onClose={handleMenuClose}
+                MenuListProps={{ 'aria-labelledby': 'basic-button' }}
+            >
+                <MenuItem onClick={handleViewDetails}>View Post</MenuItem>
+                <MenuItem onClick={handleMenuCopyLink}>Copy Link</MenuItem>
+            </Menu>
 
             <Snackbar 
                 open={snackbar.open} 
