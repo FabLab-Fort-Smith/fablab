@@ -25,8 +25,8 @@ export async function POST(req) {
         const targetDevice = deviceId || 'access-scanner-01'; // Default or from UI
 
         // Call WebSocket Server
-        // Assuming running on localhost:3002 or via IP
-        const wsServerUrl = process.env.WS_SERVER_URL || 'http://localhost:3002';
+        // Use Prod URL as default
+        const wsServerUrl = process.env.WS_SERVER_URL || 'https://socket.crittercodes.dev';
         
         const response = await fetch(`${wsServerUrl}/api/v2/pairing/start`, {
             method: 'POST',
