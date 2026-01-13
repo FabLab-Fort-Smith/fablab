@@ -42,7 +42,8 @@ export async function GET(req) {
         // If they have the card saved, we assume it was issued, but check flag just in case
         const keyIssued = m.accessKey && m.accessKey.issued;
         
-        if ((isActiveStatus || hasActiveSub) && !isSuspended) {
+        // Trust the key if it's issued, unless they are explicitly suspended/banned
+        if ((isActiveStatus || hasActiveSub || keyIssued) && !isSuspended) {
              return NextResponse.json({ 
                  granted: true, 
                  userId: user.userID,

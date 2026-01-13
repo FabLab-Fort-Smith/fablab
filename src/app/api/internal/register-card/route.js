@@ -22,14 +22,16 @@ export async function POST(req) {
         console.log(`[Internal API] Registering Card ${cardId} for User ${userId}`);
 
         // Update User
-        // Note: Check UserModel structure. Assuming membership.accessKey.id is the place
-        // Or create a new field "rfidTag"
-        // Based on MemberDialog.js logic: membership.accessKey.issued is a boolean.
-        
+        // We use nested objects so UserService triggers its internal status update logic
+        // (e.g. Setting status to 'active' if key is issued)
         const updateData = {
-            'membership.accessKey.issued': true,
-            'membership.accessKey.code': cardId, // Storing the UID here
-            'membership.accessKey.issuedAt': new Date().toISOString()
+            membership: {
+                accessKey: {
+                    issued: true,
+                    code: cardId,
+                    issuedAt: new Date().toISOString()
+                }
+            }
         };
 
         const updatedUser = await UserService.updateUser(userId, updateData);
