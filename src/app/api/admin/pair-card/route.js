@@ -1,12 +1,12 @@
 
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth'; // Adjust import path based on actual auth config location
+import { auth } from '@/auth';
 
 export async function POST(req) {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     
     // Check if admin
+
     // Note: Adjust the role check based on your actual auth schema
     if (!session || !session.user || !['admin', 'staff'].includes(session.user.role)) {
        // return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
