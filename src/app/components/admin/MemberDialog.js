@@ -17,6 +17,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import StarIcon from '@mui/icons-material/Star';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
 import NudgeConfirmDialog from './NudgeConfirmDialog';
 import Constants from '@/lib/constants';
 
@@ -155,6 +156,31 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
             }
         } catch (error) {
             console.error("Error sending verification email:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handlePairKey = async () => {
+        if (!confirm(`Using Scanner "Access Scanner 01".\n\nIs the user ready to tap their card?`)) return;
+        
+        setLoading(true);
+        try {
+            const res = await fetch('/api/admin/pair-card', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.userID })
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+                alert(`Pairing Mode Started!\n\nUser has 60 seconds to tap their card.\n\nMessage: ${data.message || 'Waiting...'}`);
+            } else {
+                alert(`Error: ${data.error}`);
+            }
+        } catch (error) {
+            console.error("Pairing Error:", error);
+            alert("Network Error");
         } finally {
             setLoading(false);
         }
@@ -829,6 +855,27 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                         </Button>
                                     </>
                                 )}
+                            </Box>
+                        </Box>
+
+                        <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                            <Typography variant="subtitle2" gutterBottom>Physical Access</Typography>
+                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                                <Chip 
+                                    icon={<LockOpenIcon />}
+                                    label={formData.membership?.accessKey?.issued ? "Key Issued" : "No Key"} 
+                                    color={formData.membership?.accessKey?.issued ? "success" : "default"} 
+                                    variant="outlined"
+                                />
+                                <Button 
+                                    variant="contained" 
+                                    color="info"
+                                    size="small" 
+                                    onClick={handlePairKey} 
+                                    disabled={loading}
+                                >
+                                    Pair New Key (NFC)
+                                </Button>
                             </Box>
                         </Box>
 
