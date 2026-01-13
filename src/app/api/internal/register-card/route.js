@@ -28,7 +28,7 @@ export async function POST(req) {
             membership: {
                 accessKey: {
                     issued: true,
-                    code: cardId,
+                    code: String(cardId), // Force string to avoid any schema casting issues
                     issuedAt: new Date().toISOString()
                 }
             }
@@ -37,8 +37,11 @@ export async function POST(req) {
         const updatedUser = await UserService.updateUser(userId, updateData);
 
         if (!updatedUser) {
+            console.error('[Internal API] Update failed, user not found or match failed.');
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
+        
+        console.log('[Internal API] Successfully updated user:', updatedUser.userID, 'Key stored:', updatedUser.membership?.accessKey?.code);
 
         return NextResponse.json({ success: true, userId: updatedUser.userID });
 
