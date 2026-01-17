@@ -47,6 +47,7 @@ export async function GET(req) {
              return NextResponse.json({ 
                  granted: true, 
                  userId: user.userID,
+                 username: user.username,
                  name: `${user.firstName} ${user.lastName}`,
                  role: user.role
              });
