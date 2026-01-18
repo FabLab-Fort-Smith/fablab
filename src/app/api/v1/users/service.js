@@ -9,6 +9,7 @@ import Constants from "@/lib/constants";
 import AuthService from '../../auth/[...nextauth]/service.js';
 import DiscordService from "@/lib/discord";
 import NotificationService from "../notifications/service";
+import WalletService from "@/app/api/v1/wallet/service";
 import { 
     sendApplicationReceivedEmail, 
     sendStatusChangeEmail, 
@@ -145,6 +146,10 @@ export default class UserService {
             
             const currentUser = await UserModel.getUserByQuery(searchObj);
             
+            // Flags for rewards to be issued AFTER user update
+            let shouldAwardProfile = false;
+            let shouldAwardApplication = false;
+
             // Check for profile completion reward
             if (currentUser) {
                 const hasBio = !!currentUser.bio;
@@ -155,28 +160,10 @@ export default class UserService {
                 // Check if already awarded by looking at stakeHistory
                 const alreadyAwarded = currentUser.stakeHistory?.some(h => h.reason === "Profile Completion Reward");
 
-                console.log(`🔍 Profile Completion Check for ${currentUser.userID}:`);
-                console.log(`   Current: Bio=${hasBio}, Image=${hasImage}`);
-                console.log(`   Future:  Bio=${willHaveBio}, Image=${willHaveImage}`);
-                console.log(`   Already Awarded: ${alreadyAwarded}`);
-
                 if (willHaveBio && willHaveImage && !alreadyAwarded) {
-                     console.log("🎉 Awarding Profile Completion Stake!");
-                     updateData.stake = (currentUser.stake || 0) + Constants.ONBOARDING_REWARDS.COMPLETE_PROFILE;
-                     
-                     // Auto-set to public if not explicitly disabled in this update
-                     if (updateData.isPublic !== false) {
-                        updateData.isPublic = true;
-                     }
-
-                     if (!updateData.$push) updateData.$push = {};
-                     if (!updateData.$push.stakeHistory) updateData.$push.stakeHistory = { $each: [] };
-                     
-                     updateData.$push.stakeHistory.$each.push({
-                        amount: Constants.ONBOARDING_REWARDS.COMPLETE_PROFILE,
-                        reason: "Profile Completion Reward",
-                        timestamp: new Date()
-                     });
+                     console.log("🎉 Queuing Profile Completion Stake!");
+                     shouldAwardProfile = true;
+                     updateData.isPublic = true; // Still set public status
                 }
             }
 
@@ -254,17 +241,8 @@ export default class UserService {
                 // Check if application was just submitted
                 if (!currentUser.membership?.applicationDate && mergedMembership.applicationDate) {
                     applicationSubmitted = true;
-                    const currentStake = updateData.stake !== undefined ? updateData.stake : (currentUser.stake || 0);
-                    updateData.stake = currentStake + Constants.ONBOARDING_REWARDS.SUBMIT_APPLICATION;
-                    
-                    if (!updateData.$push) updateData.$push = {};
-                    if (!updateData.$push.stakeHistory) updateData.$push.stakeHistory = { $each: [] };
-                    
-                    updateData.$push.stakeHistory.$each.push({
-                        amount: Constants.ONBOARDING_REWARDS.SUBMIT_APPLICATION,
-                        reason: "Application Submitted Reward",
-                        timestamp: new Date()
-                    });
+                    // Queue reward instead of setting updateData.stake
+                    shouldAwardApplication = true;
                 }
 
                 // Check if we should auto-update status
@@ -401,6 +379,25 @@ export default class UserService {
                         DiscordService.syncMembershipRole(updatedUser.discordId, updatedUser.membership.status)
                             .catch(err => console.error("Background Membership Role Sync Failed:", err));
                     }
+                }
+
+                // 6. Award Staked Rewards (Wallet Service)
+                if (shouldAwardProfile) {
+                     await WalletService.addStake(
+                         updatedUser.userID,
+                         Constants.ONBOARDING_REWARDS.COMPLETE_PROFILE,
+                         "Profile Completion Reward",
+                         "onboarding_reward_profile"
+                     ).catch(err => console.error("Failed to award profile stake:", err));
+                }
+
+                if (shouldAwardApplication) {
+                     await WalletService.addStake(
+                         updatedUser.userID,
+                         Constants.ONBOARDING_REWARDS.SUBMIT_APPLICATION,
+                         "Application Submitted Reward",
+                         "onboarding_reward_app"
+                     ).catch(err => console.error("Failed to award application stake:", err));
                 }
             }
             return updatedUser;

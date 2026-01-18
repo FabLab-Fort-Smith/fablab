@@ -7,6 +7,7 @@ import AuthService from "../../auth/[...nextauth]/service";
 import DiscordService from "@/lib/discord";
 import Constants from "@/lib/constants";
 import { v4 as uuidv4 } from 'uuid';
+import WalletService from "@/app/api/v1/wallet/service";
 
 export default class BountyService {
     static async createBounty(data) {
@@ -14,32 +15,18 @@ export default class BountyService {
         const baseStake = 50;
         const additionalStake = Number(data.stakeValue) || 0;
         const totalStake = baseStake + additionalStake;
+        const bountyID = uuidv4(); // Generate ID early for meta
 
         // If additional stake is offered by a non-admin, deduct it from their account
-        // Note: We need to fetch the user to check role and balance
-        // For now, assuming the controller/frontend handles the role check or we trust the input?
-        // Better to check here.
-        
         if (additionalStake > 0) {
             const creator = await UserModel.getUserByQuery({ userID: data.creatorID });
             if (creator && creator.role !== 'admin') {
-                if ((creator.stake || 0) < additionalStake) {
-                    throw new Error(`Insufficient stake. You have ${creator.stake || 0}, but tried to offer ${additionalStake} additional stake.`);
-                }
-                
-                // Deduct stake
-                await UserModel.updateUser(
-                    { userID: data.creatorID }, 
-                    { 
-                        stake: (creator.stake || 0) - additionalStake,
-                        $push: {
-                            stakeHistory: {
-                                amount: -additionalStake,
-                                reason: `Bounty Creation Cost: ${data.title}`,
-                                timestamp: new Date()
-                            }
-                        }
-                    }
+                await WalletService.deductStake(
+                    data.creatorID,
+                    additionalStake,
+                    `Bounty Creation Cost: ${data.title}`,
+                    'bounty_creation',
+                    { bountyID }
                 );
             }
         }
@@ -59,6 +46,7 @@ export default class BountyService {
             data.imageUrl,
             data.badgeRewardID
         );
+        bounty.bountyID = bountyID; // Ensure ID matches
         
         const createdBounty = await BountyModel.createBounty(bounty);
 
@@ -397,16 +385,16 @@ export default class BountyService {
         if (assigneeID) {
             const user = await UserModel.getUserByQuery({ userID: assigneeID });
             if (user) {
-                const updates = {
-                    stake: (user.stake || 0) + (bounty.stakeValue || 0),
-                    $push: {
-                        stakeHistory: {
-                            amount: bounty.stakeValue || 0,
-                            reason: `Bounty Completed: ${bounty.title}`,
-                            timestamp: new Date()
-                        }
-                    }
-                };
+                const updates = {}; // Initialize updates object
+
+                // 1. Award Stake using WalletService
+                await WalletService.addStake(
+                    assigneeID,
+                    bounty.stakeValue || 0,
+                    `Bounty Completed: ${bounty.title}`,
+                    'bounty_completion',
+                    { bountyID: bounty.bountyID }
+                );
 
                 // If reward is volunteer hours, log them
                 if (bounty.rewardType === 'hours') {
@@ -545,7 +533,7 @@ export default class BountyService {
             creatorID: originalBounty.creatorID,
             rewardType: originalBounty.rewardType,
             rewardValue: originalBounty.rewardValue,
-            stakeValue: Math.max(0, (originalBounty.stakeValue || 0) - 3), // Pass only additional stake
+            stakeValue: Math.max(0, (originalBounty.stakeValue || 0) - 50 - 3), // Pass only additional stake (Total - Base - Decay)
             requirements: originalBounty.requirements,
             recurrence: originalBounty.recurrence,
             startsAt: nextDate
@@ -566,6 +554,24 @@ export default class BountyService {
             throw new Error("Only the creator or an admin can cancel this bounty");
         }
 
+        // Refund Logic
+        if ((bounty.stakeValue || 0) > 50) {
+            // Check if creator is admin (they didn't pay in)
+            const creator = await UserModel.getUserByQuery({ userID: bounty.creatorID });
+            if (creator && creator.role !== 'admin') {
+                const refundAmount = (bounty.stakeValue || 0) - 50;
+                if (refundAmount > 0) {
+                     await WalletService.addStake(
+                         bounty.creatorID,
+                         refundAmount,
+                         `Bounty Cancelled Refund: ${bounty.title}`,
+                         'refund',
+                         { bountyID }
+                     );
+                }
+            }
+        }
+
         return await BountyModel.updateBounty(bountyID, { status: 'cancelled' });
     }
 
@@ -579,6 +585,31 @@ export default class BountyService {
         
         if (bounty.creatorID !== userID && !isAdmin) {
             throw new Error("Only the creator or an admin can delete this bounty");
+        }
+
+        // Refund Logic
+        if ((bounty.stakeValue || 0) > 50) {
+            // Only refund if barely created or open? 
+            // If completed, deleteBounty shouldn't act?
+            // "Prevent editing if already completed" exists in editBounty.
+            // Deleting a completed bounty deletes history but the user kept the stake.
+            // So we shouldn't refund creator if it was paid out.
+            
+            if (['open', 'assigned'].includes(bounty.status)) {
+                const creator = await UserModel.getUserByQuery({ userID: bounty.creatorID });
+                if (creator && creator.role !== 'admin') {
+                    const refundAmount = (bounty.stakeValue || 0) - 50;
+                    if (refundAmount > 0) {
+                         await WalletService.addStake(
+                             bounty.creatorID,
+                             refundAmount,
+                             `Bounty Deleted Refund: ${bounty.title}`,
+                             'refund',
+                             { bountyID }
+                         );
+                    }
+                }
+            }
         }
 
         return await BountyModel.deleteBounty(bountyID);

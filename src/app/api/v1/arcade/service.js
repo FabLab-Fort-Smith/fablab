@@ -4,6 +4,7 @@ import PortfolioModel from "../portfolio/model";
 import DiscordService from "@/lib/discord";
 import Constants from "@/lib/constants";
 import { ObjectId } from "mongodb";
+import WalletService from "@/app/api/v1/wallet/service";
 
 export default class ArcadeService {
     static GAME_COST = 5;
@@ -31,17 +32,13 @@ export default class ArcadeService {
                 console.log(`🏆 Winner found: ${winnerID}, Prize: ${prize}`);
 
                 // 2. Award Prize
-                await UserModel.updateUser({ userID: winnerID }, {
-                    $inc: { stake: prize },
-                    $push: {
-                        stakeHistory: {
-                            amount: prize,
-                            reason: `Weekly Jackpot Winner!`,
-                            timestamp: new Date(),
-                            type: 'jackpot_win'
-                        }
-                    }
-                });
+                await WalletService.addStake(
+                    winnerID,
+                    prize,
+                    `Weekly Jackpot Winner!`,
+                    'jackpot_win',
+                    { jackpotId: jackpot._id }
+                );
 
                 // 3. Transfer Badge & Discord Role
                 
@@ -139,29 +136,20 @@ export default class ArcadeService {
     }
 
     static async startGame(userID, gameType = 'infinite_loop') {
-        // 1. Validate User & Stake
-        const user = await UserModel.getUserByID(userID);
-        if (!user) throw new Error("User not found");
-        if (user.stake < this.GAME_COST) throw new Error("Insufficient Stake");
-
-        // 2. Get or Create Active Jackpot
+        // 1. Get or Create Active Jackpot
         const jackpot = await this._getOrCreateActiveJackpot();
 
-        // 3. Deduct Stake (Burn & Jackpot)
-        // We deduct the full cost from the user. 
-        await UserModel.updateUser({ userID }, {
-            $inc: { stake: -this.GAME_COST },
-            $push: {
-                stakeHistory: {
-                    amount: -this.GAME_COST,
-                    reason: `Arcade: ${gameType}`,
-                    timestamp: new Date(),
-                    type: 'arcade_entry'
-                }
-            }
-        });
+        // 2. Deduct Stake (Burn & Jackpot)
+        // This handles validation and insufficient funds checks
+        await WalletService.deductStake(
+            userID,
+            this.GAME_COST,
+            `Arcade: ${gameType}`,
+            'arcade_entry',
+            { gameType }
+        );
 
-        // 4. Handle Jackpot Funding Logic
+        // 3. Handle Jackpot Funding Logic
         // If the base jackpot hasn't been fully funded (paid back) yet,
         // we burn the entire entry fee towards the funding goal.
         // Once funded, we switch to the standard growth model (3.5 to jackpot, 1.5 burn).
@@ -241,17 +229,13 @@ export default class ArcadeService {
         }
 
         if (roundedRebate > 0) {
-            await UserModel.updateUser({ userID: session.userID }, {
-                $inc: { stake: roundedRebate },
-                $push: {
-                    stakeHistory: {
-                        amount: roundedRebate,
-                        reason: `Arcade Rebate (New High Score!): ${score} pts`,
-                        timestamp: new Date(),
-                        type: 'arcade_rebate'
-                    }
-                }
-            });
+            await WalletService.addStake(
+                session.userID,
+                roundedRebate,
+                `Arcade Rebate (New High Score!): ${score} pts`,
+                'arcade_rebate',
+                { score, game: session.game }
+            );
         }
 
         await ArcadeModel.updateSession(sessionID, {
