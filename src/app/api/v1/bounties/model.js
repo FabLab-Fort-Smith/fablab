@@ -49,6 +49,30 @@ export default class BountyModel {
         return result.deletedCount > 0;
     }
 
+    static async updateUserReferences(oldUserID, newUserID) {
+        const collection = await this.getCollection();
+        
+        // 1. Update Creator
+        await collection.updateMany({ creatorID: oldUserID }, { $set: { creatorID: newUserID } });
+        
+        // 2. Update AssignedTo
+        await collection.updateMany({ assignedTo: oldUserID }, { $set: { assignedTo: newUserID } });
+        
+        // 3. Update Claims (Array of objects)
+        await collection.updateMany(
+            { "claims.userID": oldUserID },
+            { $set: { "claims.$[elem].userID": newUserID } },
+            { arrayFilters: [{ "elem.userID": oldUserID }] }
+        );
+        
+        // 4. Update Submissions (Array of objects)
+        await collection.updateMany(
+            { "submissions.userID": oldUserID },
+            { $set: { "submissions.$[elem].userID": newUserID } },
+            { arrayFilters: [{ "elem.userID": oldUserID }] }
+        );
+    }
+
     static async countUserCompletedBounties(userID) {
         const collection = await this.getCollection();
         // Count bounties where user is assigned and status is verified

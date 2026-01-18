@@ -4,13 +4,14 @@ import {
     Box, Typography, Button, Card, CardContent, Chip, 
     Dialog, DialogTitle, DialogContent, DialogActions, 
     TextField, MenuItem, Select, InputLabel, FormControl, 
-    Grid, IconButton, Tooltip, Alert
+    Grid, IconButton, Tooltip, Alert, Tabs, Tab, Divider
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import BuildIcon from '@mui/icons-material/Build';
+import FilterListIcon from '@mui/icons-material/FilterList';
 import { useSession } from 'next-auth/react';
 
 export default function BugsPage() {
@@ -20,6 +21,9 @@ export default function BugsPage() {
     const [openVerify, setOpenVerify] = useState(false);
     const [selectedBug, setSelectedBug] = useState(null);
     const [stakeReward, setStakeReward] = useState(0);
+    const [tabValue, setTabValue] = useState(0);
+    const [filterSeverity, setFilterSeverity] = useState('all');
+    
     const [newBug, setNewBug] = useState({
         title: '',
         description: '',
@@ -33,7 +37,8 @@ export default function BugsPage() {
 
     const fetchBugs = async () => {
         try {
-            const res = await fetch('/api/v1/bugs');
+            // Fetch more bugs to allow effective client-side filtering
+            const res = await fetch('/api/v1/bugs?limit=100');
             if (res.ok) {
                 const data = await res.json();
                 setBugs(data);
@@ -100,6 +105,30 @@ export default function BugsPage() {
         }
     };
 
+    const handleTabChange = (event, newValue) => {
+        setTabValue(newValue);
+    };
+
+    const getFilteredBugs = () => {
+        let filtered = bugs;
+        
+        // Tab Filtering
+        if (tabValue === 0) { // Active
+            filtered = bugs.filter(b => ['open', 'verified'].includes(b.status));
+        } else if (tabValue === 1) { // Resolved
+            filtered = bugs.filter(b => ['fixed', 'rejected'].includes(b.status));
+        }
+        
+        // Severity Filtering
+        if (filterSeverity !== 'all') {
+            filtered = filtered.filter(b => b.severity === filterSeverity);
+        }
+        
+        return filtered;
+    };
+
+    const displayedBugs = getFilteredBugs();
+
     return (
         <Box sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -113,8 +142,41 @@ export default function BugsPage() {
                 </Button>
             </Box>
 
+            <Card sx={{ mb: 4 }}>
+                <Box sx={{ borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center', pr: 2 }}>
+                    <Tabs value={tabValue} onChange={handleTabChange}>
+                        <Tab label={`Active (${bugs.filter(b => ['open', 'verified'].includes(b.status)).length})`} />
+                        <Tab label={`Resolved (${bugs.filter(b => ['fixed', 'rejected'].includes(b.status)).length})`} />
+                        <Tab label="All History" /> 
+                    </Tabs>
+                    
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <FilterListIcon color="action" />
+                        <FormControl variant="standard" sx={{ minWidth: 120 }}>
+                            <Select
+                                value={filterSeverity}
+                                onChange={(e) => setFilterSeverity(e.target.value)}
+                                disableUnderline
+                                displayEmpty
+                            >
+                                <MenuItem value="all">All Severities</MenuItem>
+                                <MenuItem value="critical">Critical</MenuItem>
+                                <MenuItem value="high">High</MenuItem>
+                                <MenuItem value="medium">Medium</MenuItem>
+                                <MenuItem value="low">Low</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </Box>
+                </Box>
+            </Card>
+
             <Grid container spacing={3}>
-                {bugs.map((bug) => (
+                {displayedBugs.length === 0 && (
+                    <Grid item xs={12}>
+                        <Alert severity="info">No bugs found in this category.</Alert>
+                    </Grid>
+                )}
+                {displayedBugs.map((bug) => (
                     <Grid item xs={12} md={6} lg={4} key={bug.bugID}>
                         <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                             <CardContent>
@@ -142,36 +204,42 @@ export default function BugsPage() {
                                     </Box>
                                 )}
                                 <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
                                         <Typography variant="caption">
                                             By: {bug.submitterUsername}
                                         </Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            {new Date(bug.createdAt).toLocaleDateString()}
+                                        </Typography>
+                                    </Box>
+                                    
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         {bug.stakeReward > 0 && (
                                             <Chip label={`+${bug.stakeReward} Stake`} color="warning" size="small" icon={<BugReportIcon />} />
                                         )}
+                                        
+                                        {session?.user?.role === 'admin' && bug.status === 'open' && (
+                                            <>
+                                                <Tooltip title="Reject">
+                                                    <IconButton size="small" color="error" onClick={() => handleUpdateStatus(bug.bugID, 'rejected')}>
+                                                        <CancelIcon />
+                                                    </IconButton>
+                                                </Tooltip>
+                                                <Tooltip title="Verify & Reward">
+                                                    <IconButton size="small" color="success" onClick={() => openVerifyDialog(bug)}>
+                                                        <CheckCircleIcon />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </>
+                                        )}
+                                        {session?.user?.role === 'admin' && bug.status === 'verified' && (
+                                            <Tooltip title="Mark Fixed">
+                                                <IconButton size="small" color="primary" onClick={() => handleUpdateStatus(bug.bugID, 'fixed')}>
+                                                    <BuildIcon />
+                                                </IconButton>
+                                            </Tooltip>
+                                        )}
                                     </Box>
-                                    
-                                    {session?.user?.role === 'admin' && bug.status === 'open' && (
-                                        <Box>
-                                            <Tooltip title="Reject">
-                                                <IconButton size="small" color="error" onClick={() => handleUpdateStatus(bug.bugID, 'rejected')}>
-                                                    <CancelIcon />
-                                                </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Verify & Reward">
-                                                <IconButton size="small" color="success" onClick={() => openVerifyDialog(bug)}>
-                                                    <CheckCircleIcon />
-                                                </IconButton>
-                                            </Tooltip>
-                                        </Box>
-                                    )}
-                                    {session?.user?.role === 'admin' && bug.status === 'verified' && (
-                                        <Tooltip title="Mark Fixed">
-                                            <IconButton size="small" color="primary" onClick={() => handleUpdateStatus(bug.bugID, 'fixed')}>
-                                                <BuildIcon />
-                                            </IconButton>
-                                        </Tooltip>
-                                    )}
                                 </Box>
                             </CardContent>
                         </Card>

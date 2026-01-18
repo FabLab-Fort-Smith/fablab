@@ -34,13 +34,16 @@ export default class UserModel {
     }
 
     /**
-     * ✅ Find user by username
+     * ✅ Find user by username (case-insensitive)
      * @param {string} username
      * @returns {Object | null} - User object or null if not found
      */
     static async findByUsername(username) {
         const dbInstance = await db.connect();
-        return await dbInstance.collection("users").findOne({ username });
+        // Case-insensitive regex search
+        return await dbInstance.collection("users").findOne({ 
+            username: { $regex: new RegExp(`^${username}$`, 'i') } 
+        });
     }
 
     /**

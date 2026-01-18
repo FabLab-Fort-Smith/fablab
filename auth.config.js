@@ -2,6 +2,11 @@ export const authConfig = {
     pages: {
         signIn: '/auth/signin',
     },
+    session: {
+        strategy: 'jwt',
+        maxAge: 30 * 24 * 60 * 60, // 30 days
+        updateAge: 24 * 60 * 60, // Update session every 24 hours
+    },
     providers: [],
     secret: process.env.AUTH_SECRET,
     callbacks: {

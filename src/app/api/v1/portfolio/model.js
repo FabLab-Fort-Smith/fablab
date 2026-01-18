@@ -105,4 +105,24 @@ export default class PortfolioModel {
             { $pull: { likes: userID } }
         );
     }
+
+    static async updateUserReferences(oldUserID, newUserID) {
+        const collection = await this.getCollection();
+        
+        // 1. Update Owner
+        await collection.updateMany({ userID: oldUserID }, { $set: { userID: newUserID } });
+        
+        // 2. Update Likes (Array of strings)
+        await collection.updateMany(
+            { likes: oldUserID },
+            { $set: { "likes.$": newUserID } }
+        );
+        
+        // 3. Update Comments (Array of objects)
+        await collection.updateMany(
+            { "comments.userID": oldUserID },
+            { $set: { "comments.$[elem].userID": newUserID } },
+            { arrayFilters: [{ "elem.userID": oldUserID }] }
+        );
+    }
 }

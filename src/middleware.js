@@ -11,6 +11,11 @@ export default async function middleware(req) {
     const session = await auth();
     const { pathname } = req.nextUrl;
 
+    // ✅ Redirect authenticated users away from auth pages
+    if (session && pathname.startsWith('/auth')) {
+        return NextResponse.redirect(new URL('/dashboard', req.url));
+    }
+
     // ✅ Allow public routes to be accessed without authentication
     if (publicRoutes.includes(pathname) || pathname.startsWith('/members')) {
         return NextResponse.next();
@@ -27,7 +32,7 @@ export default async function middleware(req) {
     return NextResponse.next();
 }
 
-// ✅ Apply middleware only to protected routes
+// ✅ Apply middleware only to protected routes and auth routes
 export const config = {
-    matcher: ["/dashboard/:path*"],
+    matcher: ["/dashboard/:path*", "/auth/:path*"],
 };

@@ -1,5 +1,6 @@
 import UserModel from "@/app/api/v1/users/model";
 import TransactionModel from "./model";
+import WalletService from "@/app/api/v1/wallet/service";
 
 export default class TransactionService {
     
@@ -16,69 +17,48 @@ export default class TransactionService {
             const sender = await UserModel.getUserByID(senderId);
             if (!sender) throw new Error("Sender not found");
 
-            if (sender.stake < amount) {
-                throw new Error("Insufficient stake");
-            }
-
             // 2. Find Receiver
             let receiver = null;
             if (receiverId) {
                 receiver = await UserModel.getUserByID(receiverId);
             } else if (receiverDiscordId) {
-                // Try to find by Discord ID
-                // Note: getUserByQuery uses regex, but for exact ID match we should be careful.
-                // Ideally we'd have a specific method, but let's try this.
-                // Actually, let's use the raw DB in UserModel if possible, but we can't access it here easily.
-                // We'll use getUserByQuery with the exact string.
                 receiver = await UserModel.getUserByQuery({ discordId: receiverDiscordId });
             }
 
-            // 3. Deduct from Sender
-            await UserModel.updateUser({ userID: senderId }, { 
-                $inc: { stake: -amount },
-                $push: { 
-                    stakeHistory: {
-                        amount: -amount,
-                        reason: `Tip to ${receiver ? receiver.username : 'User'}`,
-                        timestamp: new Date(),
-                        type: 'tip_sent',
-                        receiverId: receiverId || receiverDiscordId
-                    }
-                }
-            });
-
-            // 4. Handle Receiver
+            // 3. Process Transaction
             if (receiver) {
-                // Receiver exists, add stake immediately
-                await UserModel.updateUser({ userID: receiver.userID }, { 
-                    $inc: { stake: amount },
-                    $push: { 
-                        stakeHistory: {
-                            amount: amount,
-                            reason: `Tip from ${sender.username}`,
-                            timestamp: new Date(),
-                            type: 'tip_received',
-                            senderId: sender.userID
-                        }
-                    }
-                });
+                // Direct Transfer
+                await WalletService.transferStake(
+                    senderId, 
+                    receiver.userID, 
+                    amount, 
+                    `Tip from ${sender.username}`, 
+                    'tip'
+                );
                 
-                // Record Transaction
+                // Record Transaction Meta
                 await TransactionModel.createTransaction({
                     senderId: sender.userID,
                     receiverId: receiver.userID,
                     amount,
                     type: 'tip',
                     status: 'completed',
-                    metadata: {
-                        receiverDiscordId
-                    }
+                    metadata: { receiverDiscordId }
                 });
 
                 return { status: 'completed', receiver };
             } else {
                 // Receiver not found (Escrow)
                 if (!receiverDiscordId) throw new Error("Receiver not identified");
+
+                // Deduct from Sender (Hold in Escrow)
+                await WalletService.deductStake(
+                    senderId, 
+                    amount, 
+                    `Tip to Discord User (Pending): ${receiverDiscordId}`, 
+                    'tip_sent',
+                    { receiverDiscordId }
+                );
 
                 // Record Pending Transaction
                 await TransactionModel.createTransaction({
@@ -87,9 +67,7 @@ export default class TransactionService {
                     amount,
                     type: 'tip',
                     status: 'pending',
-                    metadata: {
-                        receiverDiscordId
-                    }
+                    metadata: { receiverDiscordId }
                 });
 
                 return { status: 'pending', receiver: null };
@@ -119,18 +97,13 @@ export default class TransactionService {
 
             if (receiver) {
                 // Add stake to receiver
-                await UserModel.updateUser({ userID: receiver.userID }, { 
-                    $inc: { stake: amount },
-                    $push: { 
-                        stakeHistory: {
-                            amount,
-                            reason,
-                            timestamp: new Date(),
-                            type: 'award',
-                            senderId: adminId
-                        }
-                    }
-                });
+                await WalletService.addStake(
+                    receiver.userID,
+                    amount,
+                    reason,
+                    'award',
+                    { senderId: adminId }
+                );
 
                 // Record Transaction
                 await TransactionModel.createTransaction({
@@ -139,15 +112,16 @@ export default class TransactionService {
                     amount,
                     type: 'award',
                     status: 'completed',
-                    metadata: {
-                        reason
-                    }
+                    metadata: { reason }
                 });
 
                 return { status: 'completed', receiver };
             } else {
                 // Receiver not found (Escrow)
                 if (!receiverDiscordId) throw new Error("Receiver not identified");
+
+                // Note: Awards to unknown users via Discord ID are NOT held in escrow (staked isn't deducted from admin).
+                // They just sit in pending transactions until claimed.
 
                 // Record Pending Transaction
                 await TransactionModel.createTransaction({
@@ -184,7 +158,13 @@ export default class TransactionService {
             await TransactionModel.updateTransactionStatus(txn.transactionId, 'completed', { receiverId: userId });
             
             // Add stake to user
-            await UserModel.updateUser({ userID: userId }, { $inc: { stake: txn.amount } });
+            await WalletService.addStake(
+                userId,
+                txn.amount,
+                `Claimed ${txn.type} (from Discord Link)`,
+                'claim_pending',
+                { originalTxnId: txn.transactionId }
+            );
             
             totalClaimed += txn.amount;
         }

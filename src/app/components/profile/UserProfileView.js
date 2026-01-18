@@ -23,6 +23,8 @@ import FavoriteIcon from '@mui/icons-material/Favorite';
 import CloseIcon from '@mui/icons-material/Close';
 import StarIcon from '@mui/icons-material/Star';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { useRouter } from 'next/navigation';
 import Constants from '@/lib/constants';
 import StakeLedger from './tabs/StakeLedger';
@@ -35,6 +37,7 @@ export default function UserProfileView({ user, isPublicView = false }) {
     const [showcaseItems, setShowcaseItems] = useState([]);
     const [bounties, setBounties] = useState([]);
     const [selectedShowcaseItem, setSelectedShowcaseItem] = useState(null);
+    const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [loadingData, setLoadingData] = useState(false);
     const [badges, setBadges] = useState({});
     
@@ -330,13 +333,29 @@ export default function UserProfileView({ user, isPublicView = false }) {
                                         cursor: 'pointer',
                                         '&:hover .overlay': { opacity: 1 }
                                     }}
-                                    onClick={() => setSelectedShowcaseItem(item)}
+                                    onClick={() => {
+                                        setSelectedShowcaseItem(item);
+                                        setActiveImageIndex(0);
+                                    }}
                                 >
-                                    <img
-                                        src={item.imageUrls[0]}
-                                        alt={item.title}
-                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                    />
+                                    {item.imageUrls && item.imageUrls.length > 0 ? (
+                                        <img
+                                            src={item.imageUrls[0]}
+                                            alt={item.title}
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                        />
+                                    ) : (
+                                        <Box sx={{ 
+                                            width: '100%', 
+                                            height: '100%', 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'center',
+                                            bgcolor: 'rgba(255,255,255,0.05)'
+                                        }}>
+                                            <CollectionsIcon sx={{ fontSize: 40, opacity: 0.5 }} />
+                                        </Box>
+                                    )}
                                     {/* Hover Overlay */}
                                     <Box 
                                         className="overlay"
@@ -408,7 +427,7 @@ export default function UserProfileView({ user, isPublicView = false }) {
                                         textAlign: 'center',
                                         '&:hover .overlay': { opacity: 1 }
                                     }}
-                                    onClick={() => router.push(`/dashboard/bounties/${bounty.bountyID}`)}
+                                    onClick={() => router.push(`/dashboard/activities/bounties/${bounty.bountyID}`)}
                                 >
                                     {bounty.imageUrl ? (
                                         <img
@@ -736,12 +755,60 @@ export default function UserProfileView({ user, isPublicView = false }) {
                             </IconButton>
                         </DialogTitle>
                         <DialogContent>
-                            <Box sx={{ mb: 2 }}>
-                                <img 
-                                    src={selectedShowcaseItem.imageUrls[0]} 
-                                    alt={selectedShowcaseItem.title} 
-                                    style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: 8 }} 
-                                />
+                            <Box sx={{ mb: 2, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'black', borderRadius: 2, overflow: 'hidden', minHeight: '300px' }}>
+                                {selectedShowcaseItem.imageUrls && selectedShowcaseItem.imageUrls.length > 0 ? (
+                                    <>
+                                        <img 
+                                            src={selectedShowcaseItem.imageUrls[activeImageIndex]} 
+                                            alt={selectedShowcaseItem.title} 
+                                            style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain' }} 
+                                        />
+                                        
+                                        {/* Navigation Arrows */}
+                                        {selectedShowcaseItem.imageUrls.length > 1 && (
+                                            <>
+                                                {activeImageIndex > 0 && (
+                                                    <IconButton 
+                                                        onClick={() => setActiveImageIndex(prev => prev - 1)}
+                                                        sx={{ position: 'absolute', left: 8, color: 'white', bgcolor: 'rgba(0,0,0,0.5)', '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' } }}
+                                                    >
+                                                        <ArrowBackIosNewIcon />
+                                                    </IconButton>
+                                                )}
+                                                {activeImageIndex < selectedShowcaseItem.imageUrls.length - 1 && (
+                                                    <IconButton 
+                                                        onClick={() => setActiveImageIndex(prev => prev + 1)}
+                                                        sx={{ position: 'absolute', right: 8, color: 'white', bgcolor: 'rgba(0,0,0,0.5)', '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' } }}
+                                                    >
+                                                        <ArrowForwardIosIcon />
+                                                    </IconButton>
+                                                )}
+                                                
+                                                {/* Dots Indicator */}
+                                                <Box sx={{ position: 'absolute', bottom: 8, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 1 }}>
+                                                    {selectedShowcaseItem.imageUrls.map((_, idx) => (
+                                                        <Box 
+                                                            key={idx} 
+                                                            onClick={() => setActiveImageIndex(idx)}
+                                                            sx={{ 
+                                                                width: 8, 
+                                                                height: 8, 
+                                                                borderRadius: '50%', 
+                                                                bgcolor: idx === activeImageIndex ? 'white' : 'rgba(255,255,255,0.5)',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        />
+                                                    ))}
+                                                </Box>
+                                            </>
+                                        )}
+                                    </>
+                                ) : (
+                                    <Box sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                        <CollectionsIcon sx={{ fontSize: 60, opacity: 0.5, mb: 1, color: 'rgba(255,255,255,0.5)' }} />
+                                        <Typography color="rgba(255,255,255,0.7)">No images available</Typography>
+                                    </Box>
+                                )}
                             </Box>
                             <Typography variant="body1" paragraph>
                                 {selectedShowcaseItem.description}

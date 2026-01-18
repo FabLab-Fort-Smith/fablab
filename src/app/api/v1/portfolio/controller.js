@@ -25,8 +25,11 @@ export default class PortfolioController {
             const skip = parseInt(searchParams.get("skip")) || 0;
             const sort = searchParams.get("sort") || 'latest';
             const userID = searchParams.get("userID");
+            const id = searchParams.get("id");
 
-            const filter = userID ? { userID } : {};
+            const filter = {};
+            if (userID) filter.userID = userID;
+            if (id) filter.id = id;
 
             const items = await PortfolioService.getAllItems(filter, limit, skip, sort);
             return NextResponse.json(items, { status: 200 });

@@ -35,7 +35,7 @@ export default class PortfolioService {
                         type: 'success',
                         title: 'Badge Earned!',
                         message: `You earned the "${Constants.BADGES.SHOWCASE_PIONEER.name}" badge +${Constants.BADGES.SHOWCASE_PIONEER.stakeReward} Stake!`,
-                        link: `/dashboard/badges`,
+                        link: `/dashboard/${data.userID}/profile`,
                         metadata: { badgeID: Constants.BADGES.SHOWCASE_PIONEER.id }
                     });
                 }
@@ -97,7 +97,7 @@ export default class PortfolioService {
                         type: 'info',
                         title: 'New Like',
                         message: `${likerName} liked your project "${item.title}"`,
-                        link: `/showcase?highlight=${id}`,
+                        link: `/dashboard/showcase?highlight=${id}`,
                         metadata: { itemID: id, type: 'showcase_like' }
                     });
                 } catch (error) {
@@ -150,7 +150,7 @@ export default class PortfolioService {
                     type: 'success',
                     title: 'Badge Earned!',
                     message: `You earned the "${Constants.BADGES.COMMUNITY_VOICE.name}" badge +${Constants.BADGES.COMMUNITY_VOICE.stakeReward} Stake!`,
-                    link: `/dashboard/badges`,
+                    link: `/dashboard/${userID}/profile`,
                     metadata: { badgeID: Constants.BADGES.COMMUNITY_VOICE.id }
                 });
             }
@@ -167,7 +167,7 @@ export default class PortfolioService {
                     type: 'info',
                     title: 'New Comment',
                     message: `${user.firstName} ${user.lastName} commented on your project "${item.title}"`,
-                    link: `/showcase?highlight=${id}`,
+                    link: `/dashboard/showcase?highlight=${id}`,
                     metadata: { itemID: id, type: 'showcase_comment' }
                 });
             }

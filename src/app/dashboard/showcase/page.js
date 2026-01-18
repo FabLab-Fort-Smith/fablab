@@ -50,6 +50,24 @@ export default function ShowcasePage() {
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
     useEffect(() => {
+        const highlight = searchParams.get('highlight');
+        if (highlight && items.length > 0 && !loading) {
+            // Need a slight delay to ensure rendering
+            setTimeout(() => {
+                const element = document.getElementById(`showcase-${highlight}`);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    element.style.transition = 'box-shadow 0.5s';
+                    element.style.boxShadow = '0 0 20px #00ff00';
+                    setTimeout(() => {
+                        element.style.boxShadow = 'none';
+                    }, 3000);
+                }
+            }, 500);
+        }
+    }, [items, loading, searchParams]);
+
+    useEffect(() => {
         fetchItems();
     }, [sort]);
 
@@ -320,7 +338,7 @@ export default function ShowcasePage() {
                 <Grid container spacing={0} justifyContent="center">
                     {items.map((item) => (
                         <Grid item xs={12} sm={8} md={6} lg={5} key={item.id} sx={{ mb: { xs: 0, md: 4 } }}>
-                            <Card sx={{ 
+                            <Card id={`showcase-${item.id}`} sx={{ 
                                 width: { xs: 'calc(100% + 32px)', md: '100%' },
                                 mx: { xs: -2, md: 0 },
                                 borderRadius: { xs: 0, md: 1 },

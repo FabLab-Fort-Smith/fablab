@@ -39,9 +39,11 @@ export default class AnnouncementController {
         try {
             const session = await auth();
             const isAdmin = session?.user?.role === 'admin';
+            const { searchParams } = new URL(req.url);
+            const showAll = searchParams.get('all') === 'true';
 
             let announcements;
-            if (isAdmin) {
+            if (isAdmin && showAll) {
                 announcements = await AnnouncementService.getAllAnnouncements();
             } else {
                 announcements = await AnnouncementService.getActiveAnnouncements();
@@ -64,16 +66,16 @@ export default class AnnouncementController {
                 return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
             }
 
-            const { id } = params;
+            const { id } = await params;
             const updates = await req.json();
 
             const result = await AnnouncementService.updateAnnouncement(id, updates);
             
-            if (!result.value) {
+            if (!result) {
                 return new Response(JSON.stringify({ error: "Announcement not found" }), { status: 404 });
             }
 
-            return new Response(JSON.stringify(result.value), { status: 200 });
+            return new Response(JSON.stringify(result), { status: 200 });
         } catch (error) {
             console.error("Error updating announcement:", error);
             return new Response(JSON.stringify({ error: "Internal Server Error" }), { status: 500 });
@@ -90,7 +92,7 @@ export default class AnnouncementController {
                 return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
             }
 
-            const { id } = params;
+            const { id } = await params;
             const success = await AnnouncementService.deleteAnnouncement(id);
 
             if (!success) {

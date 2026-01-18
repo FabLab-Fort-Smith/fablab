@@ -95,7 +95,7 @@ export default function BountiesFeedPage() {
     };
 
     const handleCopyLink = () => {
-        const link = `${window.location.origin}/dashboard/bounties?highlight=${selectedBounty.bountyID}`;
+        const link = `${window.location.origin}/dashboard/activities/bounties?highlight=${selectedBounty.bountyID}`;
         navigator.clipboard.writeText(link);
         setSnackbar({ open: true, message: 'Link copied to clipboard!', severity: 'success' });
         handleCloseShare();
@@ -130,7 +130,7 @@ export default function BountiesFeedPage() {
                 await navigator.share({
                     title: selectedBounty.title,
                     text: `Check out this bounty: ${selectedBounty.title}`,
-                    url: `${window.location.origin}/dashboard/bounties?highlight=${selectedBounty.bountyID}`,
+                    url: `${window.location.origin}/dashboard/activities/bounties?highlight=${selectedBounty.bountyID}`,
                 });
                 handleCloseShare();
             } catch (error) {
@@ -283,7 +283,7 @@ export default function BountiesFeedPage() {
                                             </Typography>
                                         </Box>
                                     </Box>
-                                    <IconButton size="small" onClick={() => router.push(`/dashboard/bounties/${item.bountyID}`)}>
+                                    <IconButton size="small" onClick={() => router.push(`/dashboard/activities/bounties/${item.bountyID}`)}>
                                         <MoreHorizIcon />
                                     </IconButton>
                                 </Box>
@@ -302,7 +302,7 @@ export default function BountiesFeedPage() {
                                             cursor: 'pointer',
                                             bgcolor: 'black'
                                         }}
-                                        onClick={() => router.push(`/dashboard/bounties/${item.bountyID}`)}
+                                        onClick={() => router.push(`/dashboard/activities/bounties/${item.bountyID}`)}
                                     />
                                 ) : (
                                     <Box 
@@ -317,7 +317,7 @@ export default function BountiesFeedPage() {
                                             cursor: 'pointer',
                                             p: 2
                                         }}
-                                        onClick={() => router.push(`/dashboard/bounties/${item.bountyID}`)}
+                                        onClick={() => router.push(`/dashboard/activities/bounties/${item.bountyID}`)}
                                     >
                                         <Typography variant="h6" fontWeight="bold" align="center" color="primary" sx={{ wordBreak: 'break-word' }}>
                                             {item.title}

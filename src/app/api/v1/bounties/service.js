@@ -4,15 +4,10 @@ import UserModel from "../users/model";
 import BadgeModel from "../badges/model";
 import NotificationService from "../notifications/service";
 import AuthService from "../../auth/[...nextauth]/service";
-import { 
-    sendBountyNotificationEmail, 
-    sendBountyClaimedEmail, 
-    sendBountySubmittedEmail, 
-    sendBountyVerifiedEmail 
-} from "../../../utils/email.util";
 import DiscordService from "@/lib/discord";
 import Constants from "@/lib/constants";
 import { v4 as uuidv4 } from 'uuid';
+import WalletService from "@/app/api/v1/wallet/service";
 
 export default class BountyService {
     static async createBounty(data) {
@@ -20,32 +15,18 @@ export default class BountyService {
         const baseStake = 50;
         const additionalStake = Number(data.stakeValue) || 0;
         const totalStake = baseStake + additionalStake;
+        const bountyID = uuidv4(); // Generate ID early for meta
 
         // If additional stake is offered by a non-admin, deduct it from their account
-        // Note: We need to fetch the user to check role and balance
-        // For now, assuming the controller/frontend handles the role check or we trust the input?
-        // Better to check here.
-        
         if (additionalStake > 0) {
             const creator = await UserModel.getUserByQuery({ userID: data.creatorID });
             if (creator && creator.role !== 'admin') {
-                if ((creator.stake || 0) < additionalStake) {
-                    throw new Error(`Insufficient stake. You have ${creator.stake || 0}, but tried to offer ${additionalStake} additional stake.`);
-                }
-                
-                // Deduct stake
-                await UserModel.updateUser(
-                    { userID: data.creatorID }, 
-                    { 
-                        stake: (creator.stake || 0) - additionalStake,
-                        $push: {
-                            stakeHistory: {
-                                amount: -additionalStake,
-                                reason: `Bounty Creation Cost: ${data.title}`,
-                                timestamp: new Date()
-                            }
-                        }
-                    }
+                await WalletService.deductStake(
+                    data.creatorID,
+                    additionalStake,
+                    `Bounty Creation Cost: ${data.title}`,
+                    'bounty_creation',
+                    { bountyID }
                 );
             }
         }
@@ -65,6 +46,7 @@ export default class BountyService {
             data.imageUrl,
             data.badgeRewardID
         );
+        bounty.bountyID = bountyID; // Ensure ID matches
         
         const createdBounty = await BountyModel.createBounty(bounty);
 
@@ -85,39 +67,26 @@ export default class BountyService {
                 //     continue;
                 // }
 
-                // 1. In-app Notification
+                // 1. In-app & Email Notification (via NotificationService)
                 notifications.push(NotificationService.create({
                     userID: member.userID,
                     type: 'info',
                     title: 'New Bounty Available',
                     message: `New bounty posted: ${bounty.title}`,
-                    link: `/dashboard/bounties?highlight=${bounty.bountyID}`,
-                    metadata: { bountyID: bounty.bountyID }
+                    link: `/dashboard/activities/bounties?highlight=${bounty.bountyID}`,
+                    metadata: { bountyID: bounty.bountyID },
+                    emailType: 'bounty_new',
+                    emailData: { bounty }
                 }));
 
-                // 2. Email Notification
-                if (member.email) {
-                    try {
-                        const decryptedEmail = AuthService.decryptEmail(member.email);
-                        if (decryptedEmail) {
-                            console.log(`📧 Queuing email for ${decryptedEmail} (${member.firstName})`);
-                            notifications.push(sendBountyNotificationEmail(decryptedEmail, member.firstName || 'Member', bounty));
-                        } else {
-                            console.warn(`⚠️ Could not decrypt email for user ${member.userID}`);
-                        }
-                    } catch (err) {
-                        console.error(`❌ Error decrypting email for user ${member.userID}:`, err);
-                    }
-                } else {
-                    console.warn(`⚠️ No email found for user ${member.userID}`);
-                }
+                // Removed manual email sending as it is now handled by NotificationService
             }
             
             // 3. Discord Notification
             try {
                 const BOUNTY_CHANNEL_ID = process.env.DISCORD_BOUNTY_CHANNEL_ID || '1351948796866854953';
                 const baseUrl = process.env.NEXT_PUBLIC_URL || 'https://the-lab.fablabfortsmith.org';
-                const bountyUrl = `${baseUrl}/dashboard/bounties/${bounty.bountyID}`;
+                const bountyUrl = `${baseUrl}/dashboard/activities/bounties/${bounty.bountyID}`;
                 
                 // Fetch badge image if applicable
                 let badgeImage = null;
@@ -289,38 +258,26 @@ export default class BountyService {
             type: 'success',
             title: 'Bounty Claimed',
             message: `You have successfully claimed the bounty: ${bounty.title}`,
-            link: `/dashboard/bounties?highlight=${bountyID}`,
+            link: `/dashboard/activities/bounties?highlight=${bountyID}`,
             metadata: { bountyID }
         });
 
-        // 2. Notify Creator (In-App & Email)
+        // 2. Notify Creator (In-App & Email via NotificationService)
         if (creator && creator.userID !== userID) {
-            // In-App
             await NotificationService.create({
                 userID: creator.userID,
                 type: 'info',
                 title: 'Bounty Claimed',
                 message: `${assignee ? assignee.firstName : 'A user'} has claimed your bounty: ${bounty.title}`,
-                link: `/dashboard/bounties?highlight=${bountyID}`,
-                metadata: { bountyID, claimerID: userID }
-            });
-
-            // Email
-            if (creator.email) {
-                try {
-                    const decryptedEmail = AuthService.decryptEmail(creator.email);
-                    if (decryptedEmail) {
-                        await sendBountyClaimedEmail(
-                            decryptedEmail, 
-                            creator.firstName || 'Member', 
-                            bounty, 
-                            assignee ? `${assignee.firstName} ${assignee.lastName}` : 'A member'
-                        );
-                    }
-                } catch (err) {
-                    console.error(`❌ Error sending bounty claimed email to creator ${creator.userID}:`, err);
+                link: `/dashboard/activities/bounties?highlight=${bountyID}`,
+                metadata: { bountyID, claimerID: userID },
+                emailType: 'bounty_claimed',
+                emailData: {
+                    creatorName: creator.firstName || 'Member',
+                    bounty,
+                    claimerName: assignee ? `${assignee.firstName} ${assignee.lastName}` : 'A member'
                 }
-            }
+            });
         }
 
         return result;
@@ -364,32 +321,21 @@ export default class BountyService {
             const submitter = await UserModel.getUserByQuery({ userID: userID });
             const creator = await UserModel.getUserByQuery({ userID: bounty.creatorID });
 
-            // In-App
+            // In-App & Email via NotificationService
             await NotificationService.create({
                 userID: bounty.creatorID,
                 type: 'info',
                 title: 'Bounty Submitted',
                 message: `Work has been submitted for your bounty: ${bounty.title}`,
-                link: `/dashboard/bounties?highlight=${bountyID}`,
-                metadata: { bountyID, submitterID: userID }
-            });
-
-            // Email
-            if (creator && creator.email) {
-                try {
-                    const decryptedEmail = AuthService.decryptEmail(creator.email);
-                    if (decryptedEmail) {
-                        await sendBountySubmittedEmail(
-                            decryptedEmail,
-                            creator.firstName || 'Member',
-                            bounty,
-                            submitter ? `${submitter.firstName} ${submitter.lastName}` : 'A member'
-                        );
-                    }
-                } catch (err) {
-                    console.error(`❌ Error sending bounty submitted email to creator ${creator.userID}:`, err);
+                link: `/dashboard/activities/bounties?highlight=${bountyID}`,
+                metadata: { bountyID, submitterID: userID },
+                emailType: 'bounty_submitted',
+                emailData: {
+                    creatorName: creator.firstName || 'Member',
+                    bounty,
+                    submitterName: submitter ? `${submitter.firstName} ${submitter.lastName}` : 'A member'
                 }
-            }
+            });
         }
 
         return result;
@@ -398,6 +344,14 @@ export default class BountyService {
     static async verifyBounty(bountyID, verifierID, claimUserID = null) {
         const bounty = await BountyModel.getBountyById(bountyID);
         if (!bounty) throw new Error("Bounty not found");
+
+        // Check permissions
+        const user = await UserModel.getUserByQuery({ userID: verifierID });
+        const isAdmin = user?.role === 'admin';
+
+        if (bounty.creatorID !== verifierID && !isAdmin) {
+             throw new Error("Only the creator or an admin can verify this bounty");
+        }
 
         let assigneeID = null;
 
@@ -431,16 +385,16 @@ export default class BountyService {
         if (assigneeID) {
             const user = await UserModel.getUserByQuery({ userID: assigneeID });
             if (user) {
-                const updates = {
-                    stake: (user.stake || 0) + (bounty.stakeValue || 0),
-                    $push: {
-                        stakeHistory: {
-                            amount: bounty.stakeValue || 0,
-                            reason: `Bounty Completed: ${bounty.title}`,
-                            timestamp: new Date()
-                        }
-                    }
-                };
+                const updates = {}; // Initialize updates object
+
+                // 1. Award Stake using WalletService
+                await WalletService.addStake(
+                    assigneeID,
+                    bounty.stakeValue || 0,
+                    `Bounty Completed: ${bounty.title}`,
+                    'bounty_completion',
+                    { bountyID: bounty.bountyID }
+                );
 
                 // If reward is volunteer hours, log them
                 if (bounty.rewardType === 'hours') {
@@ -536,31 +490,17 @@ export default class BountyService {
 
                 await UserModel.updateUser({ userID: assigneeID }, updates);
 
-                // Notify Assignee
+                // Notify Assignee (In-App & Email via NotificationService)
                 await NotificationService.create({
                     userID: assigneeID,
                     type: 'success',
                     title: 'Bounty Verified!',
                     message: `Your work on "${bounty.title}" has been verified. You received ${bounty.stakeValue} Stake and ${bounty.rewardValue} ${bounty.rewardType === 'hours' ? 'Hours' : ''}.`,
-                    link: `/dashboard/bounties?highlight=${bountyID}`,
-                    metadata: { bountyID }
+                    link: `/dashboard/activities/bounties?highlight=${bountyID}`,
+                    metadata: { bountyID },
+                    emailType: 'bounty_verified',
+                    emailData: { bounty }
                 });
-
-                // Email Assignee
-                if (user.email) {
-                    try {
-                        const decryptedEmail = AuthService.decryptEmail(user.email);
-                        if (decryptedEmail) {
-                            await sendBountyVerifiedEmail(
-                                decryptedEmail,
-                                user.firstName || 'Member',
-                                bounty
-                            );
-                        }
-                    } catch (err) {
-                        console.error(`❌ Error sending bounty verified email to assignee ${assigneeID}:`, err);
-                    }
-                }
             }
         }
 
@@ -593,7 +533,7 @@ export default class BountyService {
             creatorID: originalBounty.creatorID,
             rewardType: originalBounty.rewardType,
             rewardValue: originalBounty.rewardValue,
-            stakeValue: Math.max(0, (originalBounty.stakeValue || 0) - 3), // Pass only additional stake
+            stakeValue: Math.max(0, (originalBounty.stakeValue || 0) - 50 - 3), // Pass only additional stake (Total - Base - Decay)
             requirements: originalBounty.requirements,
             recurrence: originalBounty.recurrence,
             startsAt: nextDate
@@ -614,7 +554,65 @@ export default class BountyService {
             throw new Error("Only the creator or an admin can cancel this bounty");
         }
 
+        // Refund Logic
+        if ((bounty.stakeValue || 0) > 50) {
+            // Check if creator is admin (they didn't pay in)
+            const creator = await UserModel.getUserByQuery({ userID: bounty.creatorID });
+            if (creator && creator.role !== 'admin') {
+                const refundAmount = (bounty.stakeValue || 0) - 50;
+                if (refundAmount > 0) {
+                     await WalletService.addStake(
+                         bounty.creatorID,
+                         refundAmount,
+                         `Bounty Cancelled Refund: ${bounty.title}`,
+                         'refund',
+                         { bountyID }
+                     );
+                }
+            }
+        }
+
         return await BountyModel.updateBounty(bountyID, { status: 'cancelled' });
+    }
+
+    static async deleteBounty(bountyID, userID) {
+        const bounty = await BountyModel.getBountyById(bountyID);
+        if (!bounty) throw new Error("Bounty not found");
+        
+        // Check if user is creator OR admin
+        const user = await UserModel.getUserByQuery({ userID });
+        const isAdmin = user?.role === 'admin';
+        
+        if (bounty.creatorID !== userID && !isAdmin) {
+            throw new Error("Only the creator or an admin can delete this bounty");
+        }
+
+        // Refund Logic
+        if ((bounty.stakeValue || 0) > 50) {
+            // Only refund if barely created or open? 
+            // If completed, deleteBounty shouldn't act?
+            // "Prevent editing if already completed" exists in editBounty.
+            // Deleting a completed bounty deletes history but the user kept the stake.
+            // So we shouldn't refund creator if it was paid out.
+            
+            if (['open', 'assigned'].includes(bounty.status)) {
+                const creator = await UserModel.getUserByQuery({ userID: bounty.creatorID });
+                if (creator && creator.role !== 'admin') {
+                    const refundAmount = (bounty.stakeValue || 0) - 50;
+                    if (refundAmount > 0) {
+                         await WalletService.addStake(
+                             bounty.creatorID,
+                             refundAmount,
+                             `Bounty Deleted Refund: ${bounty.title}`,
+                             'refund',
+                             { bountyID }
+                         );
+                    }
+                }
+            }
+        }
+
+        return await BountyModel.deleteBounty(bountyID);
     }
 
     static async editBounty(bountyID, userID, updateData) {
@@ -694,7 +692,7 @@ export default class BountyService {
                         type: 'info',
                         title: 'New Like',
                         message: `${likerName} liked your bounty "${bounty.title}"`,
-                        link: `/dashboard/bounties?highlight=${bountyID}`,
+                        link: `/dashboard/activities/bounties?highlight=${bountyID}`,
                         metadata: { bountyID: bountyID, type: 'bounty_like' }
                     });
                 } catch (error) {
@@ -733,7 +731,7 @@ export default class BountyService {
                     type: 'info',
                     title: 'New Comment',
                     message: `${user.firstName} ${user.lastName} commented on your bounty "${bounty.title}"`,
-                    link: `/dashboard/bounties?highlight=${bountyID}`,
+                    link: `/dashboard/activities/bounties?highlight=${bountyID}`,
                     metadata: { bountyID: bountyID, type: 'bounty_comment' }
                 });
             }
@@ -759,13 +757,13 @@ export default class BountyService {
             type: 'info',
             title: 'Bounty Shared',
             message: `${sender.firstName} shared a bounty with you: ${bounty.title}`,
-            link: `/dashboard/bounties?highlight=${bountyID}`,
+            link: `/dashboard/activities/bounties?highlight=${bountyID}`,
             metadata: { bountyID, senderID }
         });
 
         // 2. Send Discord DM (if recipient has linked Discord)
         if (recipient.discordId) {
-            const message = `👋 **${sender.firstName}** thought you'd be interested in this bounty!\n\n**${bounty.title}**\n${bounty.description}\n\nCheck it out here: ${process.env.NEXT_PUBLIC_URL}/dashboard/bounties?highlight=${bountyID}`;
+            const message = `👋 **${sender.firstName}** thought you'd be interested in this bounty!\n\n**${bounty.title}**\n${bounty.description}\n\nCheck it out here: ${process.env.NEXT_PUBLIC_URL}/dashboard/activities/bounties?highlight=${bountyID}`;
             await DiscordService.sendDirectMessage(recipient.discordId, message);
         }
 

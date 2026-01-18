@@ -21,8 +21,12 @@ import {
   Alert,
   AlertTitle
 } from "@mui/material";
+import UsersService from '@/services/users';
 import LoadingTerminal from "@/app/components/LoadingTerminal";
 import VolunteerLog from "./VolunteerLog";
+import Chip from '@mui/material/Chip';
+import StarsIcon from '@mui/icons-material/Stars';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 
 const MembershipTab = ({ user, onUpdateMembership }) => {
   const theme = useTheme();
@@ -37,6 +41,10 @@ const MembershipTab = ({ user, onUpdateMembership }) => {
 
   const membershipStatus = user?.membership || {};
   const isReadyForPayment = membershipStatus.applicationDate && membershipStatus.contacted && membershipStatus.onboardingComplete;
+
+  useEffect(() => {
+    setCurrentMembership(user?.membership);
+  }, [user]);
 
   const activeStep = (() => {
       if (!membershipStatus.applicationDate) return 0;
@@ -94,6 +102,43 @@ const MembershipTab = ({ user, onUpdateMembership }) => {
 
     fetchPlans();
   }, []);
+
+  const handleSwitchToGuest = async () => {
+    if (!confirm("Are you sure you want to switch to Guest? This will cancel your current plan benefits.")) return;
+
+    try {
+        const guestMembership = {
+            ...user.membership,
+            type: 'guest',
+            active: false,
+            // Preserve onboarding flags
+            applicationDate: user.membership?.applicationDate,
+            contacted: user.membership?.contacted,
+            onboardingComplete: user.membership?.onboardingComplete,
+            // Clear plan details
+            planID: null,
+            subscriptionID: null,
+            name: 'Guest',
+            price: 0
+        };
+
+        const updatedUser = await UsersService.updateUser(user.userID, { membership: guestMembership });
+        setCurrentMembership(guestMembership); // Update local state
+        
+        if (onUpdateMembership) {
+            onUpdateMembership(updatedUser);
+        }
+        
+        setSnackbarMessage("Successfully switched to Guest.");
+        setSnackbarSeverity("success");
+        setSnackbarOpen(true);
+    } catch (error) {
+        console.error("Error switching to guest:", error);
+        setSnackbarMessage("Failed to update membership.");
+        setSnackbarSeverity("error");
+        setSnackbarOpen(true);
+    }
+  };
 
   const handleBillingToggle = (event, newBillingType) => {
     if (newBillingType) {
@@ -158,11 +203,27 @@ const MembershipTab = ({ user, onUpdateMembership }) => {
         Manage Your Membership
       </Typography>
 
-      <Typography variant="body1" sx={{ mb: 3 }}>
-        {currentMembership
-          ? `You are currently subscribed to the ${currentMembership.name} plan.`
-          : "You are not subscribed to any membership plan (Guest access)."}
-      </Typography>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="body1" gutterBottom>
+          {currentMembership && currentMembership.type !== 'guest' && currentMembership.name
+            ? `You are currently subscribed to the ${currentMembership.name} plan.`
+            : "You are not subscribed to any membership plan (Guest access)."}
+        </Typography>
+        
+        <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+            {currentMembership?.waived && (
+                <Chip icon={<VerifiedUserIcon />} label="Fees Waived" color="success" variant="outlined" />
+            )}
+            {currentMembership?.sponsored && (
+                <Chip 
+                    icon={<StarsIcon />} 
+                    label={currentMembership.sponsoredBy ? `Sponsored by ${currentMembership.sponsoredBy}` : "Sponsored"} 
+                    color="primary" 
+                    variant="outlined" 
+                />
+            )}
+        </Box>
+      </Box>
 
       {/* Billing Cycle Toggle */}
       <Box sx={{ display: "flex", justifyContent: "center", mb: 3 }}>
@@ -204,13 +265,13 @@ const MembershipTab = ({ user, onUpdateMembership }) => {
                 Free
               </Typography>
               <Button
-                variant="contained"
-                color="default"
+                variant={(!currentMembership || currentMembership?.type === 'guest') ? "outlined" : "contained"}
+                color={(!currentMembership || currentMembership?.type === 'guest') ? "success" : "warning"}
                 fullWidth
-                disabled={!currentMembership}
-                onClick={() => onUpdateMembership(null)}
+                disabled={(!currentMembership || currentMembership?.type === 'guest')}
+                onClick={handleSwitchToGuest}
               >
-                {currentMembership ? "Switch to Guest" : "Current Plan"}
+                {(!currentMembership || currentMembership?.type === 'guest') ? "Current Plan" : "Switch to Guest"}
               </Button>
             </CardContent>
           </Card>

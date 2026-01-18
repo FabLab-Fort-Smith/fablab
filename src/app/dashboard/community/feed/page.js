@@ -6,7 +6,7 @@ import {
     DialogContent, DialogActions, IconButton, Avatar, 
     CircularProgress, Alert, Fab, ImageList, ImageListItem,
     ToggleButton, ToggleButtonGroup, List, ListItem, 
-    ListItemAvatar, ListItemText, Snackbar, Chip
+    ListItemAvatar, ListItemText, Snackbar, Chip, Menu, MenuItem
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import FavoriteIcon from '@mui/icons-material/Favorite';
@@ -21,12 +21,141 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import AccessAlarmIcon from '@mui/icons-material/AccessAlarm';
 import StarIcon from '@mui/icons-material/Star';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import MobileStepper from '@mui/material/MobileStepper';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+
+const ImageCarousel = ({ images, alt, onClick }) => {
+    const [activeStep, setActiveStep] = useState(0);
+    const [touchStart, setTouchStart] = useState(null);
+    const [touchEnd, setTouchEnd] = useState(null);
+    const maxSteps = images?.length || 0;
+
+    if (!images || images.length === 0) return null;
+
+    const minSwipeDistance = 50;
+
+    const onTouchStart = (e) => {
+        setTouchEnd(null);
+        setTouchStart(e.targetTouches[0].clientX);
+    };
+
+    const onTouchMove = (e) => {
+        setTouchEnd(e.targetTouches[0].clientX);
+    };
+
+    const onTouchEnd = () => {
+        if (!touchStart || !touchEnd) return;
+        const distance = touchStart - touchEnd;
+        const isLeftSwipe = distance > minSwipeDistance;
+        const isRightSwipe = distance < -minSwipeDistance;
+        
+        if (isLeftSwipe && activeStep < maxSteps - 1) {
+            setActiveStep(prev => prev + 1);
+        }
+        if (isRightSwipe && activeStep > 0) {
+            setActiveStep(prev => prev - 1);
+        }
+    };
+
+    const handleNext = (e) => {
+        e.stopPropagation();
+        setActiveStep((prevStep) => prevStep + 1);
+    };
+
+    const handleBack = (e) => {
+        e.stopPropagation();
+        setActiveStep((prevStep) => prevStep - 1);
+    };
+
+    return (
+        <Box 
+            sx={{ position: 'relative', width: '100%', bgcolor: 'black' }}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+        >
+            <CardMedia
+                component="img"
+                image={images[activeStep]}
+                alt={alt}
+                sx={{ 
+                    width: '100%', 
+                    height: 'auto',
+                    maxHeight: '80vh',
+                    objectFit: 'contain',
+                    cursor: 'pointer'
+                }}
+                onClick={onClick}
+            />
+            {maxSteps > 1 && (
+                <>
+                    <IconButton
+                        size="small"
+                        onClick={handleBack}
+                        disabled={activeStep === 0}
+                        sx={{
+                            display: { xs: 'none', md: 'flex' },
+                            position: 'absolute',
+                            left: 8,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            bgcolor: 'rgba(0,0,0,0.5)',
+                            color: 'white',
+                            '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
+                            '&.Mui-disabled': { display: 'none' }
+                        }}
+                    >
+                        <ChevronLeftIcon />
+                    </IconButton>
+                    <IconButton
+                        size="small"
+                        onClick={handleNext}
+                        disabled={activeStep === maxSteps - 1}
+                        sx={{
+                            display: { xs: 'none', md: 'flex' },
+                            position: 'absolute',
+                            right: 8,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            bgcolor: 'rgba(0,0,0,0.5)',
+                            color: 'white',
+                            '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
+                            '&.Mui-disabled': { display: 'none' }
+                        }}
+                    >
+                        <ChevronRightIcon />
+                    </IconButton>
+                    <MobileStepper
+                        steps={maxSteps}
+                        position="static"
+                        activeStep={activeStep}
+                        sx={{
+                            maxWidth: 400,
+                            flexGrow: 1,
+                            bgcolor: 'transparent',
+                            position: 'absolute',
+                            bottom: 0,
+                            width: '100%',
+                            justifyContent: 'center',
+                            '.MuiMobileStepper-dot': { bgcolor: 'rgba(255,255,255,0.5)' },
+                            '.MuiMobileStepper-dotActive': { bgcolor: 'white' }
+                        }}
+                        nextButton={null}
+                        backButton={null}
+                    />
+                </>
+            )}
+        </Box>
+    );
+};
 
 export default function FeedPage() {
     const { data: session } = useSession();
     const router = useRouter();
+    const searchParams = useSearchParams();
     
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -46,9 +175,31 @@ export default function FeedPage() {
     const [tipLoading, setTipLoading] = useState(false);
     const [tipRecipient, setTipRecipient] = useState(null);
 
+    // Menu State
+    const [menuAnchorEl, setMenuAnchorEl] = useState(null);
+    const [menuTargetItem, setMenuTargetItem] = useState(null);
+
     useEffect(() => {
         fetchFeed();
     }, [sort]);
+
+    // Handle Highlight
+    useEffect(() => {
+        const highlight = searchParams.get('highlight');
+        if (highlight && items.length > 0 && !loading) {
+            setTimeout(() => {
+                const element = document.getElementById(`feed-item-${highlight}`);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    element.style.transition = 'box-shadow 0.5s';
+                    element.style.boxShadow = '0 0 20px #00ff00';
+                    setTimeout(() => {
+                        element.style.boxShadow = 'none';
+                    }, 3000);
+                }
+            }, 500);
+        }
+    }, [items, loading, searchParams]);
 
     const fetchFeed = async () => {
         setLoading(true);
@@ -174,8 +325,12 @@ export default function FeedPage() {
 
     const handleCopyLink = () => {
         const id = selectedItem.type === 'bounty' ? selectedItem.bountyID : selectedItem.id;
-        const path = selectedItem.type === 'bounty' ? 'bounties' : 'showcase';
-        const url = `${window.location.origin}/dashboard/${path}/${id}`;
+        const isBounty = selectedItem.type === 'bounty';
+        
+        const url = isBounty 
+            ? `${window.location.origin}/dashboard/activities/bounties/${id}`
+            : `${window.location.origin}/dashboard/community/feed/${id}`;
+
         navigator.clipboard.writeText(url);
         setSnackbar({ open: true, message: 'Link copied to clipboard!', severity: 'success' });
         handleCloseShare();
@@ -184,12 +339,16 @@ export default function FeedPage() {
     const handleNativeShare = async () => {
         if (navigator.share && selectedItem) {
             const id = selectedItem.type === 'bounty' ? selectedItem.bountyID : selectedItem.id;
-            const path = selectedItem.type === 'bounty' ? 'bounties' : 'showcase';
+            const isBounty = selectedItem.type === 'bounty';
+            const url = isBounty 
+                ? `${window.location.origin}/dashboard/activities/bounties/${id}`
+                : `${window.location.origin}/dashboard/community/feed/${id}`;
+
             try {
                 await navigator.share({
                     title: selectedItem.title,
                     text: `Check this out: ${selectedItem.title}`,
-                    url: `${window.location.origin}/dashboard/${path}/${id}`
+                    url
                 });
                 handleCloseShare();
             } catch (error) {
@@ -250,6 +409,43 @@ export default function FeedPage() {
         }
     };
 
+    const handleMenuOpen = (event, item) => {
+        setMenuAnchorEl(event.currentTarget);
+        setMenuTargetItem(item);
+    };
+
+    const handleMenuClose = () => {
+        setMenuAnchorEl(null);
+        setMenuTargetItem(null);
+    };
+
+    const handleViewDetails = () => {
+        if (!menuTargetItem) return;
+        const isBounty = menuTargetItem.type === 'bounty';
+        const id = isBounty ? menuTargetItem.bountyID : menuTargetItem.id;
+        
+        if (isBounty) {
+            router.push(`/dashboard/activities/bounties/${id}`);
+        } else {
+            // Navigate to dedicated post page
+            router.push(`/dashboard/community/feed/${id}`);
+        }
+        handleMenuClose();
+    };
+
+    const handleMenuCopyLink = () => {
+         if (!menuTargetItem) return;
+         const isBounty = menuTargetItem.type === 'bounty';
+         const id = isBounty ? menuTargetItem.bountyID : menuTargetItem.id;
+         const url = isBounty 
+            ? `${window.location.origin}/dashboard/activities/bounties/${id}`
+            : `${window.location.origin}/dashboard/community/feed/${id}`; // Link to detail page
+            
+         navigator.clipboard.writeText(url);
+         setSnackbar({ open: true, message: 'Link copied to clipboard!', severity: 'success' });
+         handleMenuClose();
+    };
+
     return (
         <Container maxWidth={false} disableGutters sx={{ py: { xs: 0, md: 4 } }}>
             <Box sx={{ mb: 4, textAlign: 'center', display: { xs: 'none', md: 'block' } }}>
@@ -285,10 +481,10 @@ export default function FeedPage() {
                         const creator = item.creator || {};
                         
                         return (
-                            <Grid item xs={12} sm={8} md={6} lg={5} key={`${item.type}-${id}`} sx={{ mb: { xs: 0, md: 4 } }}>
-                                <Card sx={{ 
-                                    width: { xs: 'calc(100% + 32px)', md: '100%' },
-                                    mx: { xs: -2, md: 0 },
+                            <Grid item xs={12} sm={10} md={9} lg={8} xl={7} key={`${item.type}-${id}`} sx={{ mb: { xs: 0, md: 4 } }}>
+                                <Card id={`feed-item-${id}`} sx={{ 
+                                    width: '100%',
+                                    mx: 'auto',
                                     borderRadius: { xs: 0, md: 1 },
                                     boxShadow: { xs: 'none', md: 1 },
                                     borderBottom: { xs: '1px solid #333', md: 'none' },
@@ -318,7 +514,7 @@ export default function FeedPage() {
                                                 )}
                                             </Box>
                                         </Box>
-                                        <IconButton size="small" onClick={() => router.push(isBounty ? `/dashboard/bounties/${id}` : `/dashboard/showcase/${id}`)}>
+                                        <IconButton size="small" onClick={(e) => handleMenuOpen(e, item)}>
                                             <MoreHorizIcon />
                                         </IconButton>
                                     </Box>
@@ -339,7 +535,7 @@ export default function FeedPage() {
                                                 p: 2,
                                                 position: 'relative'
                                             }}
-                                            onClick={() => router.push(`/dashboard/bounties/${id}`)}
+                                            onClick={() => router.push(`/dashboard/activities/bounties/${id}`)}
                                         >
                                             <Typography variant="h5" fontWeight="bold" align="center" color="primary" sx={{ wordBreak: 'break-word', zIndex: 1 }}>
                                                 {item.title}
@@ -353,19 +549,10 @@ export default function FeedPage() {
                                         </Box>
                                     ) : (
                                         // SHOWCASE CARD CONTENT
-                                        <CardMedia
-                                            component="img"
-                                            image={item.imageUrls?.[0]}
-                                            alt={item.title}
-                                            sx={{ 
-                                                width: '100%', 
-                                                height: 'auto',
-                                                maxHeight: '80vh',
-                                                objectFit: 'contain',
-                                                cursor: 'pointer',
-                                                bgcolor: 'black'
-                                            }}
-                                            onClick={() => window.open(item.imageUrls?.[0], '_blank')}
+                                        <ImageCarousel 
+                                            images={item.imageUrls} 
+                                            alt={item.title} 
+                                            onClick={() => router.push(`/dashboard/community/feed/${id}`)}
                                         />
                                     )}
 
@@ -544,6 +731,17 @@ export default function FeedPage() {
                     </Box>
                 </DialogContent>
             </Dialog>
+
+            {/* Context Menu */}
+            <Menu
+                anchorEl={menuAnchorEl}
+                open={Boolean(menuAnchorEl)}
+                onClose={handleMenuClose}
+                MenuListProps={{ 'aria-labelledby': 'basic-button' }}
+            >
+                <MenuItem onClick={handleViewDetails}>View Post</MenuItem>
+                <MenuItem onClick={handleMenuCopyLink}>Copy Link</MenuItem>
+            </Menu>
 
             <Snackbar 
                 open={snackbar.open} 

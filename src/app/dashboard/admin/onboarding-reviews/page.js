@@ -51,7 +51,8 @@ export default function OnboardingReviewsPage() {
 
     const fetchApplicants = async () => {
         try {
-            const response = await fetch('/api/v1/users');
+            // Fetch with a high limit to ensure we get all applicants
+            const response = await fetch('/api/v1/users?limit=1000');
             if (response.ok) {
                 const data = await response.json();
                 // Filter for users who have applied (have applicationDate)

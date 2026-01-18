@@ -6,8 +6,10 @@ import { v4 as uuidv4 } from "uuid";
 const customersApi = squareClient.customersApi;
 const checkoutApi = squareClient.checkoutApi; // For creating the checkout link
 
-export async function POST(request, { params: { planID } }) {
+export async function POST(request, context) {
   try {
+    const { params } = context;
+    const { planID } = await params;
     // Expecting userID, price, currency, and addon in the request body
     const { userID, price, currency, addon } = await request.json();
 

@@ -18,7 +18,7 @@ export default function MobileBottomNav() {
 
     // Determine value based on path
     let value = 0;
-    if (pathname.includes('/dashboard/feed')) value = 0;
+    if (pathname.includes('/dashboard/community/feed')) value = 0;
     else if (pathname.includes('/dashboard/checkin')) value = 1;
     else if (pathname.includes('/dashboard/member/') || pathname.includes('/profile')) value = 3;
     else if (pathname.includes('/dashboard/activities/leaderboard')) value = 4;
@@ -29,10 +29,10 @@ export default function MobileBottomNav() {
     };
 
     const handleNavigation = (newValue) => {
-        if (newValue === 0) router.push('/dashboard/feed');
+        if (newValue === 0) router.push('/dashboard/community/feed');
         if (newValue === 1) router.push('/dashboard/checkin');
         if (newValue === 2) handlePostClick();
-        if (newValue === 3) router.push(`/dashboard/member/${session?.user?.userID}`);
+        if (newValue === 3) router.push(`/dashboard/${session?.user?.userID}/profile`);
         if (newValue === 4) router.push('/dashboard/activities/leaderboard');
     };
 

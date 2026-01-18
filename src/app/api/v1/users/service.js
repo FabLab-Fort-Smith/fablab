@@ -3,17 +3,17 @@
 import User from "./class";
 import UserModel from "./model";
 import BadgeModel from "../badges/model";
+import BountyModel from "../bounties/model";
+import PortfolioModel from "../portfolio/model";
 import Constants from "@/lib/constants";
 import AuthService from '../../auth/[...nextauth]/service.js';
 import DiscordService from "@/lib/discord";
 import NotificationService from "../notifications/service";
+import WalletService from "@/app/api/v1/wallet/service";
 import { 
     sendApplicationReceivedEmail, 
     sendStatusChangeEmail, 
-    sendProfileCompletionEmail,
-    sendNudgeEmail,
-    sendAdminNotificationEmail,
-    sendVolunteerHoursApprovedEmail
+    sendAdminNotificationEmail
 } from "@/app/utils/email.util";
 
 export default class UserService {
@@ -126,6 +126,13 @@ export default class UserService {
             if(updateData.email) updateData.email = AuthService.encryptEmail(updateData.email);
             if(updateData.phoneNumber) updateData.phoneNumber = AuthService.encryptPhone(updateData.phoneNumber);
 
+            // Prevent overwriting stakeHistory with $set if it exists in updateData
+            // This avoids "Updating the path 'stakeHistory' would create a conflict" errors
+            // when we also use $push on stakeHistory later in this function.
+            if (updateData.stakeHistory) {
+                delete updateData.stakeHistory;
+            }
+
             // 1. Fetch current user to calculate new status
             // We construct a search query that matches UserModel.getUserByQuery logic
             const searchObj = {
@@ -139,6 +146,10 @@ export default class UserService {
             
             const currentUser = await UserModel.getUserByQuery(searchObj);
             
+            // Flags for rewards to be issued AFTER user update
+            let shouldAwardProfile = false;
+            let shouldAwardApplication = false;
+
             // Check for profile completion reward
             if (currentUser) {
                 const hasBio = !!currentUser.bio;
@@ -149,28 +160,10 @@ export default class UserService {
                 // Check if already awarded by looking at stakeHistory
                 const alreadyAwarded = currentUser.stakeHistory?.some(h => h.reason === "Profile Completion Reward");
 
-                console.log(`🔍 Profile Completion Check for ${currentUser.userID}:`);
-                console.log(`   Current: Bio=${hasBio}, Image=${hasImage}`);
-                console.log(`   Future:  Bio=${willHaveBio}, Image=${willHaveImage}`);
-                console.log(`   Already Awarded: ${alreadyAwarded}`);
-
                 if (willHaveBio && willHaveImage && !alreadyAwarded) {
-                     console.log("🎉 Awarding Profile Completion Stake!");
-                     updateData.stake = (currentUser.stake || 0) + Constants.ONBOARDING_REWARDS.COMPLETE_PROFILE;
-                     
-                     // Auto-set to public if not explicitly disabled in this update
-                     if (updateData.isPublic !== false) {
-                        updateData.isPublic = true;
-                     }
-
-                     if (!updateData.$push) updateData.$push = {};
-                     if (!updateData.$push.stakeHistory) updateData.$push.stakeHistory = { $each: [] };
-                     
-                     updateData.$push.stakeHistory.$each.push({
-                        amount: Constants.ONBOARDING_REWARDS.COMPLETE_PROFILE,
-                        reason: "Profile Completion Reward",
-                        timestamp: new Date()
-                     });
+                     console.log("🎉 Queuing Profile Completion Stake!");
+                     shouldAwardProfile = true;
+                     updateData.isPublic = true; // Still set public status
                 }
             }
 
@@ -248,17 +241,8 @@ export default class UserService {
                 // Check if application was just submitted
                 if (!currentUser.membership?.applicationDate && mergedMembership.applicationDate) {
                     applicationSubmitted = true;
-                    const currentStake = updateData.stake !== undefined ? updateData.stake : (currentUser.stake || 0);
-                    updateData.stake = currentStake + Constants.ONBOARDING_REWARDS.SUBMIT_APPLICATION;
-                    
-                    if (!updateData.$push) updateData.$push = {};
-                    if (!updateData.$push.stakeHistory) updateData.$push.stakeHistory = { $each: [] };
-                    
-                    updateData.$push.stakeHistory.$each.push({
-                        amount: Constants.ONBOARDING_REWARDS.SUBMIT_APPLICATION,
-                        reason: "Application Submitted Reward",
-                        timestamp: new Date()
-                    });
+                    // Queue reward instead of setting updateData.stake
+                    shouldAwardApplication = true;
                 }
 
                 // Check if we should auto-update status
@@ -340,7 +324,18 @@ export default class UserService {
 
                     // If status changed to 'probation' (new member), send profile reminder AND notify admin to issue key
                     if (newStatus === 'probation') {
-                        sendProfileCompletionEmail(updatedUser.email, updatedUser.firstName, updatedUser.userID).catch(console.error);
+                        // Notify User via NotificationService
+                        NotificationService.create({
+                            userID: updatedUser.userID,
+                            type: 'info',
+                            title: 'Complete Your Profile',
+                            message: 'Welcome to Probation! Please complete your profile to get started.',
+                            link: `/dashboard/${updatedUser.userID}/profile`,
+                            emailType: 'profile_completion',
+                            emailData: {
+                                dashboardLink: `${process.env.NEXT_PUBLIC_URL}/dashboard/${updatedUser.userID}/profile`
+                            }
+                        }).catch(err => console.error("Failed to send profile completion notification:", err));
                         
                         // Notify Admin
                         sendAdminNotificationEmail(
@@ -356,12 +351,18 @@ export default class UserService {
                 if (approvedLogs.length > 0) {
                     // Send an email for each approved log
                     for (const log of approvedLogs) {
-                        sendVolunteerHoursApprovedEmail(
-                            updatedUser.email,
-                            updatedUser.firstName,
-                            log.hours,
-                            log.description
-                        ).catch(console.error);
+                        NotificationService.create({
+                             userID: updatedUser.userID,
+                             type: 'success',
+                             title: 'Volunteer Hours Approved',
+                             message: `Your volunteer hours (${log.hours}) for "${log.description}" have been approved.`,
+                             link: `/dashboard/${updatedUser.userID}/membership`,
+                             emailType: 'volunteer_approved',
+                             emailData: {
+                                 hours: log.hours,
+                                 description: log.description
+                             }
+                        }).catch(console.error);
                     }
                 }
 
@@ -379,11 +380,30 @@ export default class UserService {
                             .catch(err => console.error("Background Membership Role Sync Failed:", err));
                     }
                 }
+
+                // 6. Award Staked Rewards (Wallet Service)
+                if (shouldAwardProfile) {
+                     await WalletService.addStake(
+                         updatedUser.userID,
+                         Constants.ONBOARDING_REWARDS.COMPLETE_PROFILE,
+                         "Profile Completion Reward",
+                         "onboarding_reward_profile"
+                     ).catch(err => console.error("Failed to award profile stake:", err));
+                }
+
+                if (shouldAwardApplication) {
+                     await WalletService.addStake(
+                         updatedUser.userID,
+                         Constants.ONBOARDING_REWARDS.SUBMIT_APPLICATION,
+                         "Application Submitted Reward",
+                         "onboarding_reward_app"
+                     ).catch(err => console.error("Failed to award application stake:", err));
+                }
             }
             return updatedUser;
         } catch (error) {
             console.error("Error in UserService.updateUser:", error);
-            throw new Error("Failed to update user.");
+            throw error;
         }
     }
 
@@ -476,7 +496,7 @@ export default class UserService {
 
                     if (hoursNeeded > 0) {
                         step = 'Volunteer Hours Needed';
-                        actionLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/bounties`;
+                        actionLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/activities/bounties`;
                         actionText = 'View Bounties';
 
                         if (status === 'probation') {
@@ -525,7 +545,17 @@ export default class UserService {
 
             if (user.email) {
                 // Email is already decrypted by getUserByQuery
-                await sendNudgeEmail(user.email, user.firstName, step, message, actionLink, actionText);
+                await NotificationService.create({
+                    userID: user.userID,
+                    type: 'info',
+                    title: step,
+                    message: message,
+                    link: actionLink,
+                    emailType: 'nudge',
+                    emailData: {
+                        actionText: actionText
+                    }
+                });
                 return { success: true, message: `Nudge sent for ${step}` };
             }
             throw new Error("User has no valid email.");
@@ -541,8 +571,9 @@ export default class UserService {
      * Moves data from sourceUser to targetUser and deletes sourceUser
      * @param {string} targetUserID - The ID of the user to keep
      * @param {string} sourceUserID - The ID of the user to delete
+     * @param {Object} overrides - Optional field overrides { fieldName: 'source' | 'target' }
      */
-    static mergeUsers = async (targetUserID, sourceUserID) => {
+    static mergeUsers = async (targetUserID, sourceUserID, overrides = {}) => {
         try {
             console.log(`🔀 Merging User ${sourceUserID} into ${targetUserID}`);
             
@@ -553,32 +584,89 @@ export default class UserService {
                 throw new Error("One or both users not found.");
             }
 
-            // Fields to copy if missing in target
+            // 1. Merge Basic Fields (Only if missing in target, unless overridden)
             const fieldsToMerge = [
                 'discordHandle', 'discordId', 'googleId', 'phoneNumber', 
                 'firstName', 'lastName', 'image', 'bio', 'hobbies', 'creatorType',
-                'cityChange', 'knownMembers', 'questions'
+                'cityChange', 'knownMembers', 'questions', 'squareID'
             ];
 
             const updateData = {};
             fieldsToMerge.forEach(field => {
-                if (!targetUser[field] && sourceUser[field]) {
+                // If override says 'source', take from source (if exists)
+                if (overrides[field] === 'source') {
+                    if (sourceUser[field]) updateData[field] = sourceUser[field];
+                }
+                // If override says 'target', do nothing (keep target)
+                else if (overrides[field] === 'target') {
+                    // Do nothing
+                }
+                // Default: Only fill if missing in target
+                else if (!targetUser[field] && sourceUser[field]) {
                     updateData[field] = sourceUser[field];
                 }
             });
 
-            // If source has a provider and target doesn't (or target is local), update provider
             if (sourceUser.provider && (!targetUser.provider || targetUser.provider === 'local')) {
                 updateData.provider = sourceUser.provider;
             }
 
-            // Update target user
+            // 2. Merge Stake
+            const sourceStake = sourceUser.stake || 0;
+            if (sourceStake > 0) {
+                updateData.stake = (targetUser.stake || 0) + sourceStake;
+            }
+
+            // 3. Merge Arrays (StakeHistory, VolunteerLog, Badges, CapturedFlags)
+            
+            // Stake History
+            const targetHistory = targetUser.stakeHistory || [];
+            const sourceHistory = sourceUser.stakeHistory || [];
+            if (sourceHistory.length > 0) {
+                updateData.stakeHistory = [...targetHistory, ...sourceHistory];
+            }
+
+            // Volunteer Log (Membership)
+            const sourceLog = sourceUser.membership?.volunteerLog || [];
+            if (sourceLog.length > 0) {
+                const targetLog = targetUser.membership?.volunteerLog || [];
+                const mergedLog = [...targetLog, ...sourceLog];
+                
+                // We need to preserve other membership fields
+                // If we haven't touched membership in updateData yet, copy from target
+                if (!updateData.membership) {
+                    updateData.membership = { ...(targetUser.membership || {}) };
+                }
+                updateData.membership.volunteerLog = mergedLog;
+            }
+
+            // Badges (Unique)
+            const sourceBadges = sourceUser.badges || [];
+            if (sourceBadges.length > 0) {
+                const targetBadges = targetUser.badges || [];
+                const mergedBadges = [...new Set([...targetBadges, ...sourceBadges])];
+                updateData.badges = mergedBadges;
+            }
+
+            // Captured Flags (Unique)
+            const sourceFlags = sourceUser.capturedFlags || [];
+            if (sourceFlags.length > 0) {
+                const targetFlags = targetUser.capturedFlags || [];
+                const mergedFlags = [...new Set([...targetFlags, ...sourceFlags])];
+                updateData.capturedFlags = mergedFlags;
+            }
+
+            // 4. Update Target User
             if (Object.keys(updateData).length > 0) {
-                console.log("Updating target user with:", updateData);
+                console.log("Updating target user with merged data:", updateData);
                 await this.updateUser(targetUserID, updateData);
             }
 
-            // Delete source user
+            // 5. Update References in Other Collections
+            await BountyModel.updateUserReferences(sourceUserID, targetUserID);
+            await PortfolioModel.updateUserReferences(sourceUserID, targetUserID);
+
+            // 6. Delete Source User
             console.log("Deleting source user:", sourceUserID);
             await this.deleteUser({ userID: sourceUserID });
 

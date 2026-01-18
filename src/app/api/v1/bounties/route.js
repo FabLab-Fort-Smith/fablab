@@ -11,3 +11,7 @@ export async function POST(req) {
 export async function PUT(req) {
     return await BountyController.updateBounty(req);
 }
+
+export async function DELETE(req) {
+    return await BountyController.deleteBounty(req);
+}

@@ -164,7 +164,7 @@ export default class UserController {
         } catch (error) {
             console.error("Error in UserController.updateUser:", error);
             return new Response(
-                JSON.stringify({ error: "An error occurred while updating the user." }),
+                JSON.stringify({ error: error.message || "An error occurred while updating the user." }),
                 { status: 500 }
             );
         }
@@ -222,6 +222,29 @@ export default class UserController {
             return new Response(JSON.stringify(result), { status: 200 });
         } catch (error) {
             console.error("Error in UserController.nudgeUser:", error);
+            return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+        }
+    }
+
+    /**
+     * ✅ Merge two users
+     */
+    static mergeUsers = async (req) => {
+        try {
+            const { targetUserID, sourceUserID, overrides } = await req.json();
+            
+            if (!targetUserID || !sourceUserID) {
+                return new Response(JSON.stringify({ error: "Target and Source User IDs are required" }), { status: 400 });
+            }
+
+            if (targetUserID === sourceUserID) {
+                return new Response(JSON.stringify({ error: "Cannot merge a user into themselves" }), { status: 400 });
+            }
+
+            const result = await UserService.mergeUsers(targetUserID, sourceUserID, overrides);
+            return new Response(JSON.stringify({ success: true, user: result }), { status: 200 });
+        } catch (error) {
+            console.error("Error in UserController.mergeUsers:", error);
             return new Response(JSON.stringify({ error: error.message }), { status: 500 });
         }
     }

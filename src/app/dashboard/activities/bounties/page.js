@@ -23,6 +23,7 @@ import WhatshotIcon from '@mui/icons-material/Whatshot';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { uploadFileToS3 } from '@/utils/s3.util';
 
 export default function BountiesPage() {
     const { data: session } = useSession();
@@ -192,25 +193,17 @@ export default function BountiesPage() {
         if (!file) return;
 
         setUploading(true);
-        const formData = new FormData();
-        formData.append('file', file);
-
         try {
-            const res = await fetch('/api/upload', {
-                method: 'POST',
-                body: formData
-            });
-            
-            if (res.ok) {
-                const data = await res.json();
-                setNewBounty(prev => ({ ...prev, imageUrl: data.url }));
+            const url = await uploadFileToS3(file);
+            if (url) {
+                setNewBounty(prev => ({ ...prev, imageUrl: url }));
             } else {
-                console.error("Upload failed");
+                console.error("Upload failed: No URL returned");
                 alert("Failed to upload image");
             }
         } catch (error) {
             console.error("Error uploading image:", error);
-            alert("Error uploading image");
+            alert(`Error uploading image: ${error.message}`);
         } finally {
             setUploading(false);
         }
@@ -349,6 +342,26 @@ export default function BountiesPage() {
         }
     };
 
+    const handleDeleteBounty = async (bountyID) => {
+        if (!confirm("Are you sure you want to delete this bounty? This action cannot be undone.")) return;
+        
+        try {
+            const response = await fetch(`/api/v1/bounties?bountyID=${bountyID}&userID=${session.user.userID}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                setBounties(prev => prev.filter(b => b.bountyID !== bountyID));
+            } else {
+                const data = await response.json();
+                alert(`Failed to delete bounty: ${data.error}`);
+            }
+        } catch (error) {
+            console.error("Error deleting bounty:", error);
+            alert("An error occurred while deleting the bounty.");
+        }
+    };
+
     const handleOpenClaims = (bounty) => {
         setSelectedBountyForClaims(bounty);
         setOpenClaims(true);
@@ -375,7 +388,7 @@ export default function BountiesPage() {
                     <Button 
                         variant="outlined" 
                         component={Link}
-                        href="/dashboard/bounties/feed"
+                        href="/dashboard/activities/bounties/feed"
                         sx={{ mr: 2, display: { xs: 'none', md: 'inline-flex' } }}
                     >
                         Feed View
@@ -473,15 +486,22 @@ export default function BountiesPage() {
                                                     size="small" 
                                                 />
                                                 {canEdit && (
-                                                    <Tooltip title="Edit Bounty">
-                                                        <IconButton size="small" onClick={() => handleOpenEdit(bounty)} sx={{ ml: 0.5 }}>
-                                                            <EditIcon fontSize="small" />
-                                                        </IconButton>
-                                                    </Tooltip>
+                                                    <>
+                                                        <Tooltip title="Edit Bounty">
+                                                            <IconButton size="small" onClick={() => handleOpenEdit(bounty)} sx={{ ml: 0.5 }}>
+                                                                <EditIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                        <Tooltip title="Delete Bounty">
+                                                            <IconButton size="small" onClick={() => handleDeleteBounty(bounty.bountyID)} sx={{ ml: 0.5 }} color="error">
+                                                                <DeleteIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </>
                                                 )}
                                             </Box>
                                         </Box>
-                                        <Link href={`/dashboard/bounties/${bounty.bountyID}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                                        <Link href={`/dashboard/activities/bounties/${bounty.bountyID}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                                             <Typography variant="h6" gutterBottom sx={{ 
                                                 fontWeight: 'bold',
                                                 fontSize: { xs: '1.1rem', md: '1.25rem' },
@@ -535,7 +555,7 @@ export default function BountiesPage() {
                                                 size="medium" 
                                                 variant="outlined" 
                                                 component={Link} 
-                                                href={`/dashboard/bounties/${bounty.bountyID}`}
+                                                href={`/dashboard/activities/bounties/${bounty.bountyID}`}
                                                 fullWidth
                                                 sx={{ borderRadius: 2 }}
                                             >
@@ -941,7 +961,7 @@ export default function BountiesPage() {
                     color="secondary" 
                     aria-label="feed" 
                     sx={{ position: 'fixed', bottom: 16, right: 16, display: { xs: 'flex', md: 'none' } }}
-                    onClick={() => router.push('/dashboard/bounties/feed')}
+                    onClick={() => router.push('/dashboard/activities/bounties/feed')}
                 >
                     <WhatshotIcon />
                 </Fab>

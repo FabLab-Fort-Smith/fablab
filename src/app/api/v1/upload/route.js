@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand } from "@aws-sdk/client-s3";
 
+export const maxDuration = 60; // Increase timeout to 60s for slow uploads
+export const dynamic = 'force-dynamic';
+
 // Initialize S3 Client (Server-Side Only)
 const s3Client = new S3Client({
     region: process.env.S3_REGION || 'us-east-1',
@@ -20,6 +23,8 @@ const ensureBucketExists = async (bucketName) => {
             console.log(`Bucket ${bucketName} not found. Creating...`);
             await s3Client.send(new CreateBucketCommand({ Bucket: bucketName }));
             console.log(`Bucket ${bucketName} created.`);
+        } else if (error.$metadata?.httpStatusCode === 403) {
+            console.warn(`Bucket ${bucketName} exists but access is forbidden (403). Attempting upload anyway...`);
         } else {
             throw error;
         }
@@ -59,24 +64,20 @@ export async function POST(req) {
             Key: fileKey,
             Body: buffer,
             ContentType: file.type,
-            ACL: 'public-read', 
+            // ACL: 'public-read', // Removed ACL to prevent 403s on restricted buckets
         };
 
         await s3Client.send(new PutObjectCommand(uploadParams));
 
         // Construct public URL
-        // If using MinIO locally, it might be http://localhost:9000/bucket/key
-        // If using AWS, it might be https://bucket.s3.region.amazonaws.com/key
-        // We'll use the endpoint + bucket + key logic for MinIO compatibility
-        
-        // HOTFIX: Use the public domain for the returned URL, even if S3_ENDPOINT is an IP
-        const publicEndpoint = process.env.S3_PUBLIC_ENDPOINT || 'https://s3.crittercodes.dev';
+        // We always want to use the domain name for the frontend, never the internal IP
+        const publicEndpoint = 'https://s3.crittercodes.dev';
         const publicUrl = `${publicEndpoint}/${bucketName}/${fileKey}`;
 
         return NextResponse.json({ url: publicUrl });
 
     } catch (error) {
         console.error("Error uploading to S3:", error);
-        return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to upload file: " + (error.message || "Unknown error") }, { status: 500 });
     }
 }

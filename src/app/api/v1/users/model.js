@@ -1,6 +1,23 @@
 // src/app/api/users/user.model.js
 import { db } from "@/lib/database";
 
+// Helper to sanitize null bytes from strings
+const sanitizeStrings = (obj) => {
+    if (typeof obj === 'string') {
+        return obj.replace(/\u0000/g, '');
+    }
+    if (Array.isArray(obj)) {
+        return obj.map(sanitizeStrings);
+    }
+    if (typeof obj === 'object' && obj !== null && !(obj instanceof Date)) {
+        const newObj = {};
+        for (const key in obj) {
+            newObj[key] = sanitizeStrings(obj[key]);
+        }
+        return newObj;
+    }
+    return obj;
+};
 
 export default class UserModel {
     /**
@@ -10,6 +27,9 @@ export default class UserModel {
      */
     static createUser = async (user) => {
         try {
+            // Sanitize user data
+            user = sanitizeStrings(user);
+            
             const dbUsers = await db.dbUsers();
             const results = await dbUsers.insertOne(user);
             if (!results.insertedId) {
@@ -32,6 +52,7 @@ export default class UserModel {
      */
     static getUserByID = async (userID) => {
         try {
+            userID = sanitizeStrings(userID);
             const dbUsers = await db.dbUsers();
             return await dbUsers.findOne({ userID: userID });
         } catch (error) {
@@ -47,9 +68,28 @@ export default class UserModel {
      */
     static getUserByQuery = async (query) => {
         try {
+            query = sanitizeStrings(query);
             const dbUsers = await db.dbUsers();
-            console.log("🔍 Searching user in the database with query:", query);
+            
+            // Optimization: Prioritize exact match for userID
+            if (query.userID) {
+                console.log("🔍 Searching user by ID (optimized):", query.userID);
+                // Use case-insensitive match to be robust against "User-..." vs "user-..."
+                const user = await dbUsers.findOne({ 
+                    userID: { $regex: new RegExp(`^${query.userID}$`, "i") } 
+                });
+                
+                if (user) {
+                    console.log("✅ User found by ID:", user.userID);
+                    return user;
+                }
+                // If userID was provided but no user found, returning null is correct.
+                // We shouldn't fall back to loose regex search if a specific ID was requested.
+                console.warn("⚠️ No user found for specific userID:", query.userID);
+                return null;
+            }
 
+            console.log("🔍 Searching user in the database with query:", query);
             const user = await dbUsers.findOne({
                 $or: Object.keys(query).map(key => ({ [key]: { $regex: query[key], $options: "i" } }))
             });
@@ -173,7 +213,11 @@ export default class UserModel {
     static updateUser = async (query, updateData) => {
         try {
             console.log("🔄 Updating user with query:", query);
-            console.log("🔄 Update data:", updateData);
+            
+            // Sanitize updateData and query
+            updateData = sanitizeStrings(updateData);
+            query = sanitizeStrings(query);
+            console.log("🔄 Update data (sanitized):", updateData);
 
             // Exclude the _id field from the updateData object
             const { _id, ...updateFields } = updateData;
@@ -225,7 +269,7 @@ export default class UserModel {
             return updatedUser;
         } catch (error) {
             console.error("Error updating user:", error);
-            return null;
+            throw error;
         }
     }
 
