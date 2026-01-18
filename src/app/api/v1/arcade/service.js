@@ -11,6 +11,7 @@ export default class ArcadeService {
     static MAX_REBATE = 1.0; // Max stake earned back per run
     static REBATE_THRESHOLD = 500; // Score needed for max rebate
     static BASE_JACKPOT = 100; // Guaranteed starting jackpot
+    static MAX_PPS = 150; // Max Points Per Second (Server-Side Cheat Detection)
 
     static async checkAndCycleJackpot() {
         const jackpot = await ArcadeModel.getCurrentJackpot();
@@ -203,6 +204,32 @@ export default class ArcadeService {
         const session = await ArcadeModel.getSessionById(sessionID);
         if (!session) throw new Error("Session not found");
         if (session.status !== 'active') throw new Error("Session already completed");
+
+        // --- CHEAT DETECTION ---
+        const now = new Date();
+        const startTime = new Date(session.startedAt);
+        const durationSeconds = (now - startTime) / 1000;
+        
+        // Allow a small buffer (e.g. 5 seconds or 500 points) for lag/startup
+        const maxPossibleScore = (durationSeconds * this.MAX_PPS) + 500;
+
+        if (score > maxPossibleScore) {
+            console.warn(`🚨 CHEAT DETECTED: User ${session.userID} submitted score ${score} in ${durationSeconds.toFixed(2)}s (Max: ${maxPossibleScore.toFixed(0)})`);
+            
+            // Fail the session silently or throw error? 
+            // Better to mark as "flagged" or just cap the score?
+            // "The only way to prevent this is to run checks on everything on server."
+            // For now, we will reject the score to prevent jackpot theft.
+            
+            await ArcadeModel.updateSession(sessionID, {
+                status: 'flagged',
+                score: parseInt(score),
+                endedAt: now,
+                note: `Cheat Detected: Score ${score} > Max ${maxPossibleScore.toFixed(0)}`
+            });
+
+            throw new Error("Score validation failed. Session flagged for review.");
+        }
 
         // Calculate Rebate (Performance Reward)
         // Logic: Beat your personal high score to get MAX_REBATE (1.0)

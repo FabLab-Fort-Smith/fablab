@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand } from "@aws-sdk/client-s3";
 
+export const maxDuration = 60; // Increase timeout to 60s for slow uploads
+export const dynamic = 'force-dynamic';
+
 // Initialize S3 Client (Server-Side Only)
 const s3Client = new S3Client({
     region: process.env.S3_REGION || 'us-east-1',
