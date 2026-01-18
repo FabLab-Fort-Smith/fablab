@@ -427,7 +427,7 @@ export default function UserProfileView({ user, isPublicView = false }) {
                                         textAlign: 'center',
                                         '&:hover .overlay': { opacity: 1 }
                                     }}
-                                    onClick={() => router.push(`/dashboard/bounties/${bounty.bountyID}`)}
+                                    onClick={() => router.push(`/dashboard/activities/bounties/${bounty.bountyID}`)}
                                 >
                                     {bounty.imageUrl ? (
                                         <img

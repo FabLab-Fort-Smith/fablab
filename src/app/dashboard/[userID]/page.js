@@ -193,7 +193,7 @@ const DashboardPage = ({ params }) => {
       { 
           title: 'Bounties', 
           icon: <BountyIcon fontSize="large" />, 
-          path: `/dashboard/bounties`,
+          path: `/dashboard/activities/bounties`,
           desc: 'Earn credits'
       },
       { 

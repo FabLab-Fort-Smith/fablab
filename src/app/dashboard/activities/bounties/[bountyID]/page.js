@@ -160,7 +160,7 @@ export default function BountyDetailPage() {
                 <MuiLink component={Link} underline="hover" color="inherit" href="/dashboard">
                     Dashboard
                 </MuiLink>
-                <MuiLink component={Link} underline="hover" color="inherit" href="/dashboard/bounties">
+                <MuiLink component={Link} underline="hover" color="inherit" href="/dashboard/activities/bounties">
                     Bounties
                 </MuiLink>
                 <Typography color="text.primary">{bounty.title}</Typography>
@@ -169,7 +169,7 @@ export default function BountyDetailPage() {
             <Button 
                 startIcon={<ArrowBackIcon />} 
                 component={Link} 
-                href="/dashboard/bounties"
+                href="/dashboard/activities/bounties"
                 sx={{ mb: 3 }}
             >
                 Back to Board

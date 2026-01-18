@@ -20,6 +20,8 @@ const ensureBucketExists = async (bucketName) => {
             console.log(`Bucket ${bucketName} not found. Creating...`);
             await s3Client.send(new CreateBucketCommand({ Bucket: bucketName }));
             console.log(`Bucket ${bucketName} created.`);
+        } else if (error.$metadata?.httpStatusCode === 403) {
+            console.warn(`Bucket ${bucketName} exists but access is forbidden (403). Attempting upload anyway...`);
         } else {
             throw error;
         }
@@ -59,7 +61,7 @@ export async function POST(req) {
             Key: fileKey,
             Body: buffer,
             ContentType: file.type,
-            ACL: 'public-read', 
+            // ACL: 'public-read', // Removed ACL to prevent 403s on restricted buckets
         };
 
         await s3Client.send(new PutObjectCommand(uploadParams));
@@ -73,6 +75,6 @@ export async function POST(req) {
 
     } catch (error) {
         console.error("Error uploading to S3:", error);
-        return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to upload file: " + (error.message || "Unknown error") }, { status: 500 });
     }
 }

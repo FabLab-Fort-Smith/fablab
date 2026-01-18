@@ -91,7 +91,7 @@ export default class BountyService {
                     type: 'info',
                     title: 'New Bounty Available',
                     message: `New bounty posted: ${bounty.title}`,
-                    link: `/dashboard/bounties?highlight=${bounty.bountyID}`,
+                    link: `/dashboard/activities/bounties?highlight=${bounty.bountyID}`,
                     metadata: { bountyID: bounty.bountyID }
                 }));
 
@@ -117,7 +117,7 @@ export default class BountyService {
             try {
                 const BOUNTY_CHANNEL_ID = process.env.DISCORD_BOUNTY_CHANNEL_ID || '1351948796866854953';
                 const baseUrl = process.env.NEXT_PUBLIC_URL || 'https://the-lab.fablabfortsmith.org';
-                const bountyUrl = `${baseUrl}/dashboard/bounties/${bounty.bountyID}`;
+                const bountyUrl = `${baseUrl}/dashboard/activities/bounties/${bounty.bountyID}`;
                 
                 // Fetch badge image if applicable
                 let badgeImage = null;
@@ -289,7 +289,7 @@ export default class BountyService {
             type: 'success',
             title: 'Bounty Claimed',
             message: `You have successfully claimed the bounty: ${bounty.title}`,
-            link: `/dashboard/bounties?highlight=${bountyID}`,
+            link: `/dashboard/activities/bounties?highlight=${bountyID}`,
             metadata: { bountyID }
         });
 
@@ -301,7 +301,7 @@ export default class BountyService {
                 type: 'info',
                 title: 'Bounty Claimed',
                 message: `${assignee ? assignee.firstName : 'A user'} has claimed your bounty: ${bounty.title}`,
-                link: `/dashboard/bounties?highlight=${bountyID}`,
+                link: `/dashboard/activities/bounties?highlight=${bountyID}`,
                 metadata: { bountyID, claimerID: userID }
             });
 
@@ -370,7 +370,7 @@ export default class BountyService {
                 type: 'info',
                 title: 'Bounty Submitted',
                 message: `Work has been submitted for your bounty: ${bounty.title}`,
-                link: `/dashboard/bounties?highlight=${bountyID}`,
+                link: `/dashboard/activities/bounties?highlight=${bountyID}`,
                 metadata: { bountyID, submitterID: userID }
             });
 
@@ -542,7 +542,7 @@ export default class BountyService {
                     type: 'success',
                     title: 'Bounty Verified!',
                     message: `Your work on "${bounty.title}" has been verified. You received ${bounty.stakeValue} Stake and ${bounty.rewardValue} ${bounty.rewardType === 'hours' ? 'Hours' : ''}.`,
-                    link: `/dashboard/bounties?highlight=${bountyID}`,
+                    link: `/dashboard/activities/bounties?highlight=${bountyID}`,
                     metadata: { bountyID }
                 });
 
@@ -709,7 +709,7 @@ export default class BountyService {
                         type: 'info',
                         title: 'New Like',
                         message: `${likerName} liked your bounty "${bounty.title}"`,
-                        link: `/dashboard/bounties?highlight=${bountyID}`,
+                        link: `/dashboard/activities/bounties?highlight=${bountyID}`,
                         metadata: { bountyID: bountyID, type: 'bounty_like' }
                     });
                 } catch (error) {
@@ -748,7 +748,7 @@ export default class BountyService {
                     type: 'info',
                     title: 'New Comment',
                     message: `${user.firstName} ${user.lastName} commented on your bounty "${bounty.title}"`,
-                    link: `/dashboard/bounties?highlight=${bountyID}`,
+                    link: `/dashboard/activities/bounties?highlight=${bountyID}`,
                     metadata: { bountyID: bountyID, type: 'bounty_comment' }
                 });
             }
@@ -774,13 +774,13 @@ export default class BountyService {
             type: 'info',
             title: 'Bounty Shared',
             message: `${sender.firstName} shared a bounty with you: ${bounty.title}`,
-            link: `/dashboard/bounties?highlight=${bountyID}`,
+            link: `/dashboard/activities/bounties?highlight=${bountyID}`,
             metadata: { bountyID, senderID }
         });
 
         // 2. Send Discord DM (if recipient has linked Discord)
         if (recipient.discordId) {
-            const message = `👋 **${sender.firstName}** thought you'd be interested in this bounty!\n\n**${bounty.title}**\n${bounty.description}\n\nCheck it out here: ${process.env.NEXT_PUBLIC_URL}/dashboard/bounties?highlight=${bountyID}`;
+            const message = `👋 **${sender.firstName}** thought you'd be interested in this bounty!\n\n**${bounty.title}**\n${bounty.description}\n\nCheck it out here: ${process.env.NEXT_PUBLIC_URL}/dashboard/activities/bounties?highlight=${bountyID}`;
             await DiscordService.sendDirectMessage(recipient.discordId, message);
         }
 

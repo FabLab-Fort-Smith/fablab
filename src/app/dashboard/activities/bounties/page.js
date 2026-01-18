@@ -388,7 +388,7 @@ export default function BountiesPage() {
                     <Button 
                         variant="outlined" 
                         component={Link}
-                        href="/dashboard/bounties/feed"
+                        href="/dashboard/activities/bounties/feed"
                         sx={{ mr: 2, display: { xs: 'none', md: 'inline-flex' } }}
                     >
                         Feed View
@@ -501,7 +501,7 @@ export default function BountiesPage() {
                                                 )}
                                             </Box>
                                         </Box>
-                                        <Link href={`/dashboard/bounties/${bounty.bountyID}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                                        <Link href={`/dashboard/activities/bounties/${bounty.bountyID}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                                             <Typography variant="h6" gutterBottom sx={{ 
                                                 fontWeight: 'bold',
                                                 fontSize: { xs: '1.1rem', md: '1.25rem' },
@@ -555,7 +555,7 @@ export default function BountiesPage() {
                                                 size="medium" 
                                                 variant="outlined" 
                                                 component={Link} 
-                                                href={`/dashboard/bounties/${bounty.bountyID}`}
+                                                href={`/dashboard/activities/bounties/${bounty.bountyID}`}
                                                 fullWidth
                                                 sx={{ borderRadius: 2 }}
                                             >
@@ -961,7 +961,7 @@ export default function BountiesPage() {
                     color="secondary" 
                     aria-label="feed" 
                     sx={{ position: 'fixed', bottom: 16, right: 16, display: { xs: 'flex', md: 'none' } }}
-                    onClick={() => router.push('/dashboard/bounties/feed')}
+                    onClick={() => router.push('/dashboard/activities/bounties/feed')}
                 >
                     <WhatshotIcon />
                 </Fab>

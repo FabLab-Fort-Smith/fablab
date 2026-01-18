@@ -485,7 +485,7 @@ export default class UserService {
 
                     if (hoursNeeded > 0) {
                         step = 'Volunteer Hours Needed';
-                        actionLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/bounties`;
+                        actionLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/activities/bounties`;
                         actionText = 'View Bounties';
 
                         if (status === 'probation') {

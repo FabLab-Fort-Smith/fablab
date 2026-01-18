@@ -81,7 +81,7 @@ export async function sendPasswordResetEmail(email, token) {
  * @param {Object} bounty - The bounty details
  */
 export async function sendBountyNotificationEmail(email, firstName, bounty) {
-    const bountyLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/bounties?highlight=${bounty.bountyID}`;
+    const bountyLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/activities/bounties?highlight=${bounty.bountyID}`;
     const rewardText = bounty.rewardType === 'hours' 
         ? `${bounty.rewardValue} Hours` 
         : (bounty.rewardType === 'cash' ? `$${bounty.rewardValue}` : bounty.rewardValue);
@@ -125,7 +125,7 @@ export async function sendBountyNotificationEmail(email, firstName, bounty) {
  * ✅ Send email to bounty creator when their bounty is claimed
  */
 export async function sendBountyClaimedEmail(email, creatorName, bounty, claimerName) {
-    const bountyLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/bounties?highlight=${bounty.bountyID}`;
+    const bountyLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/activities/bounties?highlight=${bounty.bountyID}`;
     
     const mailOptions = {
         from: `"The Lab" <${process.env.EMAIL_USER}>`,
@@ -158,7 +158,7 @@ export async function sendBountyClaimedEmail(email, creatorName, bounty, claimer
  * ✅ Send email to bounty creator when work is submitted
  */
 export async function sendBountySubmittedEmail(email, creatorName, bounty, submitterName) {
-    const bountyLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/bounties?highlight=${bounty.bountyID}`;
+    const bountyLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/activities/bounties?highlight=${bounty.bountyID}`;
     
     const mailOptions = {
         from: `"The Lab" <${process.env.EMAIL_USER}>`,
@@ -192,7 +192,7 @@ export async function sendBountySubmittedEmail(email, creatorName, bounty, submi
  * ✅ Send email to assignee when bounty is verified
  */
 export async function sendBountyVerifiedEmail(email, assigneeName, bounty) {
-    const bountyLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/bounties?highlight=${bounty.bountyID}`;
+    const bountyLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/activities/bounties?highlight=${bounty.bountyID}`;
     const rewardText = bounty.rewardType === 'hours' 
         ? `${bounty.rewardValue} Hours` 
         : (bounty.rewardType === 'cash' ? `$${bounty.rewardValue}` : bounty.rewardValue);
@@ -265,8 +265,8 @@ export async function sendStatusChangeEmail(email, firstName, newStatus) {
         case 'contacted':
             subject = 'Action Required: Schedule Orientation 📅';
             message = 'Your application has been reviewed! The next step is to schedule your safety orientation.';
-            actionLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/appointments`;
-            actionText = 'Schedule Orientation';
+            actionLink = `${process.env.NEXT_PUBLIC_URL}/dashboard`;
+            actionText = 'Go to Dashboard';
             break;
         case 'onboarding':
             subject = 'Orientation Complete! ✅';
