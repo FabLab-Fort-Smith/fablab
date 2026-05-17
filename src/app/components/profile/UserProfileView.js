@@ -1,737 +1,259 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { 
-    Box, Typography, Avatar, Grid, Chip, Paper, IconButton, 
-    Stack, Divider, Button, Container, Link,
-    Tabs, Tab, ImageList, ImageListItem, Card, CardContent, CardMedia,
-    Dialog, DialogTitle, DialogContent, Snackbar, useTheme, Tooltip, Alert, TextField
-} from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
 import { useSession } from 'next-auth/react';
-import GitHubIcon from '@mui/icons-material/GitHub';
-import LinkedInIcon from '@mui/icons-material/LinkedIn';
-import TwitterIcon from '@mui/icons-material/Twitter';
-import LanguageIcon from '@mui/icons-material/Language';
-import InstagramIcon from '@mui/icons-material/Instagram';
-import CollectionsIcon from '@mui/icons-material/Collections';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
-import SchoolIcon from '@mui/icons-material/School';
-import PaletteIcon from '@mui/icons-material/Palette';
-import FavoriteIcon from '@mui/icons-material/Favorite';
-import CloseIcon from '@mui/icons-material/Close';
-import StarIcon from '@mui/icons-material/Star';
-import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
-import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
-import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { useRouter } from 'next/navigation';
-import Constants from '@/lib/constants';
 import StakeLedger from './tabs/StakeLedger';
+
+const SOCIAL_ICONS = { github: '⌥', linkedin: 'in', twitter: '𝕏', instagram: '◎' };
+
+const TABS = [
+    { icon: '⊞', label: 'Showcase' },
+    { icon: '◈', label: 'Bounties' },
+    { icon: '★', label: 'Badges' },
+    { icon: '✦', label: 'Interests' },
+];
 
 export default function UserProfileView({ user, isPublicView = false }) {
     const router = useRouter();
-    const theme = useTheme();
     const { data: session } = useSession();
     const [tabValue, setTabValue] = useState(0);
     const [showcaseItems, setShowcaseItems] = useState([]);
     const [bounties, setBounties] = useState([]);
-    const [selectedShowcaseItem, setSelectedShowcaseItem] = useState(null);
+    const [selectedItem, setSelectedItem] = useState(null);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
-    const [loadingData, setLoadingData] = useState(false);
     const [badges, setBadges] = useState({});
-    
-    // Tipping State
-    const [tipDialogOpen, setTipDialogOpen] = useState(false);
+    const [tipModal, setTipModal] = useState(false);
     const [tipAmount, setTipAmount] = useState(10);
     const [tipLoading, setTipLoading] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const [toast, setToast] = useState(null);
+
+    const showToast = (message, type = 'success') => { setToast({ message, type }); setTimeout(() => setToast(null), 4000); };
 
     const handleTip = async () => {
         setTipLoading(true);
         try {
-            const res = await fetch('/api/v1/transactions/tip', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ receiverId: user.userID, amount: parseInt(tipAmount) })
-            });
+            const res = await fetch('/api/v1/transactions/tip', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ receiverId: user.userID, amount: parseInt(tipAmount) }) });
             const data = await res.json();
             if (data.error) throw new Error(data.error);
-            
-            setSnackbar({ open: true, message: `Successfully tipped ${tipAmount} stake!`, severity: 'success' });
-            setTipDialogOpen(false);
-        } catch (err) {
-            setSnackbar({ open: true, message: err.message, severity: 'error' });
-        } finally {
-            setTipLoading(false);
-        }
+            showToast(`Successfully tipped ${tipAmount} stake!`, 'success');
+            setTipModal(false);
+        } catch (err) { showToast(err.message, 'error'); }
+        finally { setTipLoading(false); }
     };
 
     useEffect(() => {
-        // Fetch Badges
-        fetch('/api/v1/badges')
-            .then(res => res.json())
-            .then(data => {
-                const badgeMap = {};
-                (data.badges || []).forEach(b => badgeMap[b.id] = b);
-                setBadges(badgeMap);
-            })
-            .catch(err => console.error("Failed to fetch badges", err));
+        fetch('/api/v1/badges').then(res => res.json()).then(data => {
+            const map = {};
+            (data.badges || []).forEach(b => { map[b.id] = b; });
+            setBadges(map);
+        }).catch(() => {});
 
         if (user?.userID) {
-            setLoadingData(true);
-            // Fetch Showcase Items
-            fetch(`/api/v1/portfolio?userID=${user.userID}`)
-                .then(res => res.json())
-                .then(data => setShowcaseItems(Array.isArray(data) ? data : []))
-                .catch(err => console.error("Failed to fetch showcase items", err));
-
-            // Fetch Bounties
-            fetch(`/api/v1/bounties?creatorID=${user.userID}`)
-                .then(res => res.json())
-                .then(data => {
-                    const userBounties = (data.bounties || []).filter(b => b.creatorID === user.userID);
-                    setBounties(userBounties);
-                })
-                .catch(err => console.error("Failed to fetch bounties", err))
-                .finally(() => setLoadingData(false));
+            fetch(`/api/v1/portfolio?userID=${user.userID}`).then(res => res.json()).then(data => setShowcaseItems(Array.isArray(data) ? data : [])).catch(() => {});
+            fetch(`/api/v1/bounties?creatorID=${user.userID}`).then(res => res.json()).then(data => {
+                setBounties((data.bounties || []).filter(b => b.creatorID === user.userID));
+            }).catch(() => {});
         }
     }, [user]);
 
     if (!user) return null;
 
-    // Helper to get badge details
     const getBadgeDetails = (badgeEntry) => {
-        // Handle both string IDs and legacy object storage
-        const badgeId = typeof badgeEntry === 'object' ? badgeEntry.id : badgeEntry;
-        return badges[badgeId] || null;
-    };
-
-    const SocialLink = ({ icon, url }) => {
-        if (!url) return null;
-        // Ensure URL has protocol
-        const href = url.startsWith('http') ? url : `https://${url}`;
-        return (
-            <IconButton component={Link} href={href} target="_blank" rel="noopener noreferrer" color="primary">
-                {icon}
-            </IconButton>
-        );
+        const id = typeof badgeEntry === 'object' ? badgeEntry.id : badgeEntry;
+        return badges[id] || null;
     };
 
     const isOwnProfile = session?.user?.userID === user.userID;
 
+    const overlayStyle = { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', opacity: 0, transition: 'opacity 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', gap: 8 };
+
+    const EmptyState = ({ icon, title, desc }) => (
+        <div style={{ padding: '64px 0', textAlign: 'center' }}>
+            <div style={{ width: 60, height: 60, borderRadius: '50%', border: '2px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 24, color: 'var(--text-dim)' }}>{icon}</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-bright)', marginBottom: 4 }}>{title}</div>
+            <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{desc}</div>
+        </div>
+    );
+
     return (
-        <Box sx={{ width: '100%', minHeight: '100vh', bgcolor: 'background.default' }}>
-            {/* Header Section */}
-            <Box sx={{ p: 2, maxWidth: 935, mx: 'auto' }}>
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                    {/* Avatar */}
-                    <Avatar 
-                        src={user.image} 
-                        alt={user.username}
-                        sx={{ 
-                            width: { xs: 77, md: 150 }, 
-                            height: { xs: 77, md: 150 },
-                            mr: { xs: 2, md: 4 },
-                            border: '1px solid rgba(255,255,255,0.1)'
-                        }}
-                    />
-                    
-                    {/* Info Section */}
-                    <Box sx={{ flex: 1, mt: { xs: 1, md: 0 } }}>
-                        <Stack direction={{ xs: 'column', md: 'row' }} alignItems={{ xs: 'flex-start', md: 'center' }} spacing={2} sx={{ mb: 2 }}>
-                            <Typography variant="h6" fontWeight="bold" sx={{ fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-                                {user.username}
-                            </Typography>
-                            
-                            {/* Desktop Action Buttons */}
-                            <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-                                {isOwnProfile ? (
-                                    <Button 
-                                        variant="contained" 
-                                        size="small" 
-                                        onClick={() => router.push(`/dashboard/${user.userID}/profile`)}
-                                        sx={{ 
-                                            bgcolor: 'rgba(255,255,255,0.1)', 
-                                            color: 'white',
-                                            textTransform: 'none',
-                                            fontWeight: 600,
-                                            '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' }
-                                        }}
-                                    >
-                                        Edit Profile
-                                    </Button>
-                                ) : isPublicView && session ? (
-                                    <Button 
-                                        variant="contained" 
-                                        size="small" 
-                                        onClick={() => setTipDialogOpen(true)}
-                                        startIcon={<StarIcon />}
-                                        sx={{ 
-                                            bgcolor: 'primary.main', 
-                                            color: 'white',
-                                            textTransform: 'none',
-                                            fontWeight: 600,
-                                            '&:hover': { bgcolor: 'primary.dark' }
-                                        }}
-                                    >
-                                        Tip Stake
-                                    </Button>
-                                ) : isPublicView && (
-                                    <Button variant="contained" size="small" href="/login">
-                                        Connect
-                                    </Button>
-                                )}
-                            </Box>
-                        </Stack>
+        <div style={{ width: '100%', minHeight: '100vh', background: 'var(--bg)' }}>
+            {toast && (
+                <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 9999, border: `1px solid ${toast.type === 'error' ? 'var(--red)' : 'var(--green)'}`, color: toast.type === 'error' ? 'var(--red)' : 'var(--green)', background: 'var(--bg-card)', padding: '10px 20px', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                    {toast.message}
+                </div>
+            )}
 
-                        {/* Desktop Bio */}
-                        <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                                <Typography variant="subtitle1" fontWeight="bold">
-                                    {user.firstName} {user.lastName}
-                                </Typography>
-                                {user.membership?.type && (
-                                    <Chip 
-                                        label={user.membership.type === 'co-op' ? "Co-op Member" : "Community Member"} 
-                                        color={user.membership.type === 'co-op' ? "primary" : "default"} 
-                                        size="small" 
-                                        variant="outlined"
-                                        sx={{ height: 20, fontSize: '0.7rem' }}
-                                    />
-                                )}
-                            </Box>
-                            {user.bio && (
-                                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mb: 1 }}>
-                                    {user.bio}
-                                </Typography>
-                            )}
-                            {user.socials?.website && (
-                                <Link href={user.socials.website} target="_blank" rel="noopener noreferrer" underline="hover" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.875rem', fontWeight: 600 }}>
-                                    <LanguageIcon fontSize="small" /> {user.socials.website.replace(/^https?:\/\//, '')}
-                                </Link>
-                            )}
-                        </Box>
-                    </Box>
-                </Box>
+            {/* Header */}
+            <div style={{ padding: '20px 24px', maxWidth: 935, margin: '0 auto' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 24, marginBottom: 16 }}>
+                    <div style={{ width: 'clamp(77px, 15vw, 150px)', height: 'clamp(77px, 15vw, 150px)', borderRadius: '50%', overflow: 'hidden', border: '1px solid var(--bd)', flexShrink: 0, background: 'var(--bg-1)' }}>
+                        <img src={user.image || '/default-avatar.png'} alt={user.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
 
-                {/* Mobile Bio Section */}
-                <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                        <Typography variant="subtitle1" fontWeight="bold">
-                            {user.firstName} {user.lastName}
-                        </Typography>
-                        {user.membership?.type && (
-                            <Chip 
-                                label={user.membership.type === 'co-op' ? "Co-op Member" : "Community Member"} 
-                                color={user.membership.type === 'co-op' ? "primary" : "default"} 
-                                size="small" 
-                                variant="outlined"
-                                sx={{ height: 20, fontSize: '0.7rem' }}
-                            />
+                    <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                            <div style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.1rem, 3vw, 1.5rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)' }}>{user.username}</div>
+                            {isOwnProfile ? (
+                                <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => router.push(`/dashboard/${user.userID}/profile`)}>edit profile</button>
+                            ) : isPublicView && session ? (
+                                <button className="btn btn--sm btn--filled" style={{ fontSize: 10 }} onClick={() => setTipModal(true)}>★ tip stake</button>
+                            ) : isPublicView && (
+                                <a href="/login"><button className="btn btn--filled btn--sm" style={{ fontSize: 10 }}>connect</button></a>
+                            )}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-bright)' }}>{user.firstName} {user.lastName}</span>
+                            {user.membership?.type && (
+                                <span style={{ fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.1em', color: user.membership.type === 'co-op' ? 'var(--cyan)' : 'var(--text-dim)', border: `1px solid ${user.membership.type === 'co-op' ? 'var(--cyan)' : 'var(--bd)'}`, padding: '2px 6px' }}>
+                                    {user.membership.type === 'co-op' ? 'CO-OP MEMBER' : 'COMMUNITY MEMBER'}
+                                </span>
+                            )}
+                        </div>
+                        {user.boardPosition && <div style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, marginBottom: 6 }}>{user.boardPosition}</div>}
+                        {user.bio && <div style={{ fontSize: 13, color: 'var(--text-mid)', whiteSpace: 'pre-wrap', marginBottom: 8, lineHeight: 1.6 }}>{user.bio}</div>}
+                        {user.socials?.website && (
+                            <a href={user.socials.website.startsWith('http') ? user.socials.website : `https://${user.socials.website}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)', fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                ⊕ {user.socials.website.replace(/^https?:\/\//, '')}
+                            </a>
                         )}
-                    </Box>
-                    {user.boardPosition && (
-                        <Typography variant="subtitle2" color="primary" sx={{ mb: 1, fontWeight: 'bold' }}>
-                            {user.boardPosition}
-                        </Typography>
-                    )}
-                    {user.bio && (
-                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mb: 1 }}>
-                            {user.bio}
-                        </Typography>
-                    )}
-                    {user.socials?.website && (
-                        <Link href={user.socials.website} target="_blank" rel="noopener noreferrer" underline="hover" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.875rem', fontWeight: 600 }}>
-                            <LanguageIcon fontSize="small" /> {user.socials.website.replace(/^https?:\/\//, '')}
-                        </Link>
-                    )}
-                </Box>
+                    </div>
+                </div>
 
-                {/* Mobile Action Buttons */}
-                <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 2 }}>
-                    {isOwnProfile ? (
-                        <Button 
-                            fullWidth 
-                            variant="contained" 
-                            onClick={() => router.push(`/dashboard/${user.userID}/profile`)}
-                            sx={{ 
-                                bgcolor: 'rgba(255,255,255,0.1)', 
-                                color: 'white',
-                                textTransform: 'none',
-                                fontWeight: 600,
-                                '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' }
-                            }}
-                        >
-                            Edit Profile
-                        </Button>
-                    ) : isPublicView && session ? (
-                        <Button 
-                            fullWidth 
-                            variant="contained" 
-                            onClick={() => setTipDialogOpen(true)}
-                            startIcon={<StarIcon />}
-                            sx={{ 
-                                bgcolor: 'primary.main', 
-                                color: 'white',
-                                textTransform: 'none',
-                                fontWeight: 600,
-                                '&:hover': { bgcolor: 'primary.dark' }
-                            }}
-                        >
-                            Tip Stake
-                        </Button>
-                    ) : isPublicView && (
-                        <Button fullWidth variant="contained" href="/login">
-                            Connect
-                        </Button>
-                    )}
-                </Box>
+                {/* Social icons row */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                    {Object.entries(SOCIAL_ICONS).map(([platform, icon]) => {
+                        const url = user.socials?.[platform];
+                        if (!url) return null;
+                        const href = url.startsWith('http') ? url : `https://${url}`;
+                        return (
+                            <a key={platform} href={href} target="_blank" rel="noopener noreferrer" style={{ width: 36, height: 36, border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-mid)', textDecoration: 'none', fontSize: 14, transition: 'color 0.2s, border-color 0.2s' }}
+                                onMouseEnter={e => { e.currentTarget.style.color = 'var(--green)'; e.currentTarget.style.borderColor = 'var(--green)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-mid)'; e.currentTarget.style.borderColor = 'var(--bd)'; }}>
+                                {icon}
+                            </a>
+                        );
+                    })}
+                </div>
+            </div>
 
-                {/* Social Icons Row */}
-                <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-                    <SocialLink icon={<GitHubIcon />} url={user.socials?.github} />
-                    <SocialLink icon={<LinkedInIcon />} url={user.socials?.linkedin} />
-                    <SocialLink icon={<TwitterIcon />} url={user.socials?.twitter} />
-                    <SocialLink icon={<InstagramIcon />} url={user.socials?.instagram} />
-                </Stack>
-            </Box>
+            <div style={{ borderTop: '1px solid var(--bd)' }} />
 
-            <Divider />
-
-            {/* Tabs for Showcase and Bounties */}
-            <Box sx={{ maxWidth: 935, mx: 'auto' }}>
-                <Tabs 
-                    value={tabValue} 
-                    onChange={(e, v) => setTabValue(v)} 
-                    centered 
-                    textColor="primary" 
-                    indicatorColor="primary"
-                    sx={{ 
-                        '& .MuiTab-root': { minHeight: 48, minWidth: 0, flex: 1 } 
-                    }}
-                >
-                    <Tab icon={<CollectionsIcon />} aria-label="posts" />
-                    <Tab icon={<AssignmentIcon />} aria-label="bounties" />
-                    <Tab icon={<EmojiEventsIcon />} aria-label="badges" />
-                    <Tab icon={<AutoAwesomeIcon />} aria-label="interests" />
-                    {isOwnProfile && <Tab icon={<ReceiptLongIcon />} aria-label="ledger" />}
-                </Tabs>
-            </Box>
+            {/* Tab Nav */}
+            <div style={{ maxWidth: 935, margin: '0 auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', borderBottom: '1px solid var(--bd)' }}>
+                    {[...TABS, ...(isOwnProfile ? [{ icon: '◑', label: 'Ledger' }] : [])].map((tab, i) => (
+                        <button key={i} onClick={() => setTabValue(i)} style={{ flex: 1, background: 'none', border: 'none', borderTop: `2px solid ${tabValue === i ? 'var(--green)' : 'transparent'}`, color: tabValue === i ? 'var(--green)' : 'var(--text-dim)', padding: '12px 8px', cursor: 'pointer', fontSize: 18, transition: 'color 0.2s' }} title={tab.label}>
+                            {tab.icon}
+                        </button>
+                    ))}
+                </div>
+            </div>
 
             {/* Showcase Grid */}
             {tabValue === 0 && (
-                <Box sx={{ maxWidth: 935, mx: 'auto' }}>
+                <div style={{ maxWidth: 935, margin: '0 auto' }}>
                     {showcaseItems.length > 0 ? (
-                        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: { xs: 0.5, md: 3 } }}>
-                            {showcaseItems.map((item) => (
-                                <Box 
-                                    key={item.id} 
-                                    sx={{ 
-                                        aspectRatio: '1/1', 
-                                        position: 'relative', 
-                                        cursor: 'pointer',
-                                        '&:hover .overlay': { opacity: 1 }
-                                    }}
-                                    onClick={() => {
-                                        setSelectedShowcaseItem(item);
-                                        setActiveImageIndex(0);
-                                    }}
-                                >
-                                    {item.imageUrls && item.imageUrls.length > 0 ? (
-                                        <img
-                                            src={item.imageUrls[0]}
-                                            alt={item.title}
-                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                        />
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3 }}>
+                            {showcaseItems.map(item => (
+                                <div key={item.id} style={{ aspectRatio: '1/1', position: 'relative', cursor: 'pointer', overflow: 'hidden', background: 'var(--bg-1)' }} onClick={() => { setSelectedItem(item); setActiveImageIndex(0); }}
+                                    onMouseEnter={e => e.currentTarget.querySelector('.overlay').style.opacity = 1}
+                                    onMouseLeave={e => e.currentTarget.querySelector('.overlay').style.opacity = 0}>
+                                    {item.imageUrls?.[0] ? (
+                                        <img src={item.imageUrls[0]} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                     ) : (
-                                        <Box sx={{ 
-                                            width: '100%', 
-                                            height: '100%', 
-                                            display: 'flex', 
-                                            alignItems: 'center', 
-                                            justifyContent: 'center',
-                                            bgcolor: 'rgba(255,255,255,0.05)'
-                                        }}>
-                                            <CollectionsIcon sx={{ fontSize: 40, opacity: 0.5 }} />
-                                        </Box>
+                                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dim)', fontSize: 32 }}>⊞</div>
                                     )}
-                                    {/* Hover Overlay */}
-                                    <Box 
-                                        className="overlay"
-                                        sx={{ 
-                                            position: 'absolute', 
-                                            top: 0, 
-                                            left: 0, 
-                                            width: '100%', 
-                                            height: '100%', 
-                                            bgcolor: 'rgba(0,0,0,0.3)', 
-                                            opacity: 0, 
-                                            transition: 'opacity 0.2s',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            color: 'white',
-                                            gap: 2
-                                        }}
-                                    >
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                            <StarIcon fontSize="small" /> {item.likes?.length || 0}
-                                        </Box>
-                                    </Box>
-                                </Box>
+                                    <div className="overlay" style={{ ...overlayStyle }}><span>★ {item.likes?.length || 0}</span></div>
+                                </div>
                             ))}
-                        </Box>
-                    ) : (
-                        <Box sx={{ py: 8, textAlign: 'center' }}>
-                            <Box sx={{ 
-                                width: 60, 
-                                height: 60, 
-                                borderRadius: '50%', 
-                                border: '2px solid', 
-                                borderColor: 'text.secondary',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                mx: 'auto',
-                                mb: 2
-                            }}>
-                                <CollectionsIcon fontSize="large" color="action" />
-                            </Box>
-                            <Typography variant="h6">Share Photos</Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                When you share photos, they will appear on your profile.
-                            </Typography>
-                        </Box>
-                    )}
-                </Box>
+                        </div>
+                    ) : <EmptyState icon="⊞" title="Share Photos" desc="When you share photos, they will appear on your profile." />}
+                </div>
             )}
 
             {/* Bounties Grid */}
             {tabValue === 1 && (
-                <Box sx={{ maxWidth: 935, mx: 'auto' }}>
+                <div style={{ maxWidth: 935, margin: '0 auto' }}>
                     {bounties.length > 0 ? (
-                        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: { xs: 0.5, md: 3 } }}>
-                            {bounties.map((bounty) => (
-                                <Box 
-                                    key={bounty.bountyID} 
-                                    sx={{ 
-                                        aspectRatio: '1/1', 
-                                        position: 'relative', 
-                                        cursor: 'pointer',
-                                        bgcolor: 'rgba(255,255,255,0.03)',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        textAlign: 'center',
-                                        '&:hover .overlay': { opacity: 1 }
-                                    }}
-                                    onClick={() => router.push(`/dashboard/activities/bounties/${bounty.bountyID}`)}
-                                >
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3 }}>
+                            {bounties.map(bounty => (
+                                <div key={bounty.bountyID} style={{ aspectRatio: '1/1', position: 'relative', cursor: 'pointer', overflow: 'hidden', background: 'var(--bg-1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 8 }} onClick={() => router.push(`/dashboard/activities/bounties/${bounty.bountyID}`)}
+                                    onMouseEnter={e => e.currentTarget.querySelector('.overlay').style.opacity = 1}
+                                    onMouseLeave={e => e.currentTarget.querySelector('.overlay').style.opacity = 0}>
                                     {bounty.imageUrl ? (
-                                        <img
-                                            src={bounty.imageUrl}
-                                            alt={bounty.title}
-                                            style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }}
-                                        />
+                                        <img src={bounty.imageUrl} alt={bounty.title} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                                     ) : (
-                                        <Box sx={{ 
-                                            width: '100%', 
-                                            height: '100%', 
-                                            display: 'flex', 
-                                            flexDirection: 'column', 
-                                            alignItems: 'center', 
-                                            justifyContent: 'center',
-                                            p: 1
-                                        }}>
-                                            <AssignmentIcon fontSize="large" color="primary" sx={{ mb: 1, opacity: 0.8 }} />
-                                            <Typography variant="caption" fontWeight="bold" noWrap sx={{ width: '90%', textAlign: 'center', color: 'text.primary' }}>
-                                                {bounty.title}
-                                            </Typography>
-                                            <Chip 
-                                                label={`${bounty.rewardValue}`} 
-                                                size="small" 
-                                                variant="outlined"
-                                                sx={{ height: 20, fontSize: '0.6rem', mt: 1, borderColor: 'rgba(255,255,255,0.2)' }}
-                                            />
-                                        </Box>
+                                        <>
+                                            <div style={{ fontSize: 28, color: 'var(--green)', marginBottom: 8, opacity: 0.8 }}>◈</div>
+                                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-bright)', width: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bounty.title}</div>
+                                            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-dim)', border: '1px solid var(--bd)', padding: '2px 6px', marginTop: 6 }}>{bounty.rewardValue}</span>
+                                        </>
                                     )}
-                                    
-                                    {/* Hover Overlay */}
-                                    <Box 
-                                        className="overlay"
-                                        sx={{ 
-                                            position: 'absolute', 
-                                            top: 0, 
-                                            left: 0, 
-                                            width: '100%', 
-                                            height: '100%', 
-                                            bgcolor: 'rgba(0,0,0,0.6)', 
-                                            opacity: 0, 
-                                            transition: 'opacity 0.2s',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            color: 'white',
-                                            p: 1,
-                                            zIndex: 2
-                                        }}
-                                    >
-                                        <Typography variant="body2" fontWeight="bold" align="center" sx={{ mb: 1 }}>
-                                            {bounty.title}
-                                        </Typography>
-                                        <Chip 
-                                            label={bounty.status.toUpperCase()} 
-                                            color={bounty.status === 'open' ? 'success' : 'default'} 
-                                            size="small" 
-                                        />
-                                    </Box>
-                                </Box>
+                                    <div className="overlay" style={{ ...overlayStyle, flexDirection: 'column', gap: 6 }}>
+                                        <div style={{ fontSize: 12, fontWeight: 600 }}>{bounty.title}</div>
+                                        <span style={{ fontFamily: 'var(--mono)', fontSize: 9, border: `1px solid ${bounty.status === 'open' ? 'var(--green)' : 'var(--bd)'}`, color: bounty.status === 'open' ? 'var(--green)' : 'var(--text-dim)', padding: '2px 8px' }}>{bounty.status.toUpperCase()}</span>
+                                    </div>
+                                </div>
                             ))}
-                        </Box>
-                    ) : (
-                        <Box sx={{ py: 8, textAlign: 'center' }}>
-                            <Box sx={{ 
-                                width: 60, 
-                                height: 60, 
-                                borderRadius: '50%', 
-                                border: '2px solid', 
-                                borderColor: 'text.secondary',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                mx: 'auto',
-                                mb: 2
-                            }}>
-                                <AssignmentIcon fontSize="large" color="action" />
-                            </Box>
-                            <Typography variant="h6">No Bounties</Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                This user hasn't posted any bounties yet.
-                            </Typography>
-                        </Box>
-                    )}
-                </Box>
+                        </div>
+                    ) : <EmptyState icon="◈" title="No Bounties" desc="This user hasn't posted any bounties yet." />}
+                </div>
             )}
 
             {/* Badges Grid */}
             {tabValue === 2 && (
-                <Box sx={{ maxWidth: 935, mx: 'auto' }}>
+                <div style={{ maxWidth: 935, margin: '0 auto' }}>
                     {user.badges && user.badges.length > 0 ? (
-                        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: { xs: 0.5, md: 3 } }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3 }}>
                             {user.badges.map((badgeEntry, index) => {
                                 const badge = getBadgeDetails(badgeEntry);
                                 if (!badge) return null;
-                                
-                                // Ensure unique key even if badgeEntry is an object or duplicate
-                                const badgeId = typeof badgeEntry === 'object' ? (badgeEntry.id || index) : badgeEntry;
-                                const key = `${badgeId}-${index}`;
-
+                                const key = `${typeof badgeEntry === 'object' ? badgeEntry.id : badgeEntry}-${index}`;
                                 return (
-                                    <Box 
-                                        key={key} 
-                                        sx={{ 
-                                            aspectRatio: '1/1', 
-                                            position: 'relative', 
-                                            cursor: 'pointer',
-                                            bgcolor: 'rgba(255,255,255,0.03)',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            textAlign: 'center',
-                                            '&:hover .overlay': { opacity: 1 }
-                                        }}
-                                    >
+                                    <div key={key} style={{ aspectRatio: '1/1', position: 'relative', overflow: 'hidden', background: 'var(--bg-1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        onMouseEnter={e => e.currentTarget.querySelector('.overlay').style.opacity = 1}
+                                        onMouseLeave={e => e.currentTarget.querySelector('.overlay').style.opacity = 0}>
                                         {badge.imageUrl ? (
-                                            <Box 
-                                                component="img"
-                                                src={badge.imageUrl}
-                                                alt={badge.name}
-                                                sx={{ 
-                                                    width: '60%', 
-                                                    height: '60%', 
-                                                    objectFit: 'contain' 
-                                                }}
-                                            />
+                                            <img src={badge.imageUrl} alt={badge.name} style={{ width: '60%', height: '60%', objectFit: 'contain' }} />
                                         ) : (
-                                            <Box sx={{ fontSize: '4rem' }}>
-                                                {badge.icon}
-                                            </Box>
+                                            <div style={{ fontSize: '4rem' }}>{badge.icon}</div>
                                         )}
-                                        
-                                        {/* Hover Overlay */}
-                                        <Box 
-                                            className="overlay"
-                                            sx={{ 
-                                                position: 'absolute', 
-                                                top: 0, 
-                                                left: 0, 
-                                                width: '100%', 
-                                                height: '100%', 
-                                                bgcolor: 'rgba(0,0,0,0.6)', 
-                                                opacity: 0, 
-                                                transition: 'opacity 0.2s',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                color: 'white',
-                                                p: 1,
-                                                zIndex: 2
-                                            }}
-                                        >
-                                            <Typography variant="body2" fontWeight="bold" align="center">
-                                                {badge.name}
-                                            </Typography>
-                                            <Typography variant="caption" align="center" sx={{ mt: 1, display: { xs: 'none', sm: 'block' } }}>
-                                                {badge.description}
-                                            </Typography>
-                                        </Box>
-                                    </Box>
+                                        <div className="overlay" style={{ ...overlayStyle, flexDirection: 'column', gap: 4, padding: 8 }}>
+                                            <div style={{ fontSize: 12, fontWeight: 600, textAlign: 'center' }}>{badge.name}</div>
+                                            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', textAlign: 'center' }}>{badge.description}</div>
+                                        </div>
+                                    </div>
                                 );
                             })}
-                        </Box>
-                    ) : (
-                        <Box sx={{ py: 8, textAlign: 'center' }}>
-                            <Box sx={{ 
-                                width: 60, 
-                                height: 60, 
-                                borderRadius: '50%', 
-                                border: '2px solid', 
-                                borderColor: 'text.secondary',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                mx: 'auto',
-                                mb: 2
-                            }}>
-                                <EmojiEventsIcon fontSize="large" color="action" />
-                            </Box>
-                            <Typography variant="h6">No Badges Yet</Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                This user hasn't earned any badges yet.
-                            </Typography>
-                        </Box>
-                    )}
-                </Box>
+                        </div>
+                    ) : <EmptyState icon="★" title="No Badges Yet" desc="This user hasn't earned any badges yet." />}
+                </div>
             )}
 
-            {/* Interests/Skills Grid */}
+            {/* Interests Grid */}
             {tabValue === 3 && (
-                <Box sx={{ maxWidth: 935, mx: 'auto' }}>
-                    {(() => {
-                        const interests = user.interests || [];
-                        const allItems = [
-                            ...interests.map(i => ({ type: 'INTEREST', label: i, icon: <AutoAwesomeIcon fontSize="large" /> }))
-                        ];
-
-                        if (allItems.length === 0) {
-                            return (
-                                <Box sx={{ py: 8, textAlign: 'center' }}>
-                                    <Box sx={{ 
-                                        width: 60, 
-                                        height: 60, 
-                                        borderRadius: '50%', 
-                                        border: '2px solid', 
-                                        borderColor: 'text.secondary',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        mx: 'auto',
-                                        mb: 2
-                                    }}>
-                                        <AutoAwesomeIcon fontSize="large" color="action" />
-                                    </Box>
-                                    <Typography variant="h6">No Interests Yet</Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        This user hasn't added any interests yet.
-                                    </Typography>
-                                </Box>
-                            );
-                        }
-
-                        return (
-                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: { xs: 0.5, md: 3 } }}>
-                                {allItems.map((item, index) => (
-                                    <Box 
-                                        key={index} 
-                                        sx={{ 
-                                            aspectRatio: '1/1', 
-                                            position: 'relative', 
-                                            cursor: 'default',
-                                            bgcolor: 'rgba(255,255,255,0.03)',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            textAlign: 'center',
-                                            p: 1,
-                                            '&:hover .overlay': { opacity: 1 }
-                                        }}
-                                    >
-                                        <Box sx={{ mb: 1, opacity: 0.7 }}>
-                                            {item.icon}
-                                        </Box>
-                                        <Typography variant="body2" fontWeight="bold" noWrap sx={{ width: '90%' }}>
-                                            {item.label}
-                                        </Typography>
-                                        
-                                        {/* Hover Overlay */}
-                                        <Box 
-                                            className="overlay"
-                                            sx={{ 
-                                                position: 'absolute', 
-                                                top: 0, 
-                                                left: 0, 
-                                                width: '100%', 
-                                                height: '100%', 
-                                                bgcolor: 'rgba(0,0,0,0.8)', 
-                                                opacity: 0, 
-                                                transition: 'opacity 0.2s',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                color: 'white',
-                                                p: 1,
-                                                zIndex: 2
-                                            }}
-                                        >
-                                            <Typography variant="caption" sx={{ letterSpacing: 1, mb: 1, opacity: 0.8 }}>
-                                                {item.type}
-                                            </Typography>
-                                            <Typography variant="body1" fontWeight="bold" align="center">
-                                                {item.label}
-                                            </Typography>
-                                            
-                                            {/* Tip Button on Overlay */}
-                                            {isPublicView && session && (
-                                                <IconButton 
-                                                    size="small" 
-                                                    sx={{ 
-                                                        color: 'white', 
-                                                        mt: 1, 
-                                                        bgcolor: 'rgba(255,255,255,0.2)',
-                                                        '&:hover': { bgcolor: 'rgba(255,255,255,0.4)' }
-                                                    }}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setTipDialogOpen(true);
-                                                    }}
-                                                >
-                                                    <StarIcon />
-                                                </IconButton>
-                                            )}
-                                        </Box>
-                                    </Box>
-                                ))}
-                            </Box>
-                        );
-                    })()}
-                </Box>
+                <div style={{ maxWidth: 935, margin: '0 auto' }}>
+                    {(user.interests || []).length > 0 ? (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3 }}>
+                            {(user.interests || []).map((interest, index) => (
+                                <div key={index} style={{ aspectRatio: '1/1', position: 'relative', overflow: 'hidden', background: 'var(--bg-1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 8 }}
+                                    onMouseEnter={e => e.currentTarget.querySelector('.overlay').style.opacity = 1}
+                                    onMouseLeave={e => e.currentTarget.querySelector('.overlay').style.opacity = 0}>
+                                    <div style={{ fontSize: 24, color: 'var(--text-dim)', marginBottom: 8, opacity: 0.7 }}>✦</div>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)', width: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{interest}</div>
+                                    <div className="overlay" style={{ ...overlayStyle, flexDirection: 'column', gap: 8, background: 'rgba(0,0,0,0.8)' }}>
+                                        <div style={{ fontSize: 9, letterSpacing: '0.1em', opacity: 0.8 }}>INTEREST</div>
+                                        <div style={{ fontSize: 13, fontWeight: 600 }}>{interest}</div>
+                                        {isPublicView && session && (
+                                            <button style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px 12px', fontSize: 11 }} onClick={e => { e.stopPropagation(); setTipModal(true); }}>★ tip</button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : <EmptyState icon="✦" title="No Interests Yet" desc="This user hasn't added any interests yet." />}
+                </div>
             )}
 
             {/* Ledger Tab */}
@@ -739,137 +261,66 @@ export default function UserProfileView({ user, isPublicView = false }) {
                 <StakeLedger stakeHistory={user.stakeHistory} currentStake={user.stake} />
             )}
 
-            {/* Showcase Item Dialog */}
-            <Dialog 
-                open={!!selectedShowcaseItem} 
-                onClose={() => setSelectedShowcaseItem(null)}
-                maxWidth="md"
-                fullWidth
-            >
-                {selectedShowcaseItem && (
-                    <>
-                        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            {selectedShowcaseItem.title}
-                            <IconButton onClick={() => setSelectedShowcaseItem(null)}>
-                                <CloseIcon />
-                            </IconButton>
-                        </DialogTitle>
-                        <DialogContent>
-                            <Box sx={{ mb: 2, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'black', borderRadius: 2, overflow: 'hidden', minHeight: '300px' }}>
-                                {selectedShowcaseItem.imageUrls && selectedShowcaseItem.imageUrls.length > 0 ? (
-                                    <>
-                                        <img 
-                                            src={selectedShowcaseItem.imageUrls[activeImageIndex]} 
-                                            alt={selectedShowcaseItem.title} 
-                                            style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain' }} 
-                                        />
-                                        
-                                        {/* Navigation Arrows */}
-                                        {selectedShowcaseItem.imageUrls.length > 1 && (
-                                            <>
-                                                {activeImageIndex > 0 && (
-                                                    <IconButton 
-                                                        onClick={() => setActiveImageIndex(prev => prev - 1)}
-                                                        sx={{ position: 'absolute', left: 8, color: 'white', bgcolor: 'rgba(0,0,0,0.5)', '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' } }}
-                                                    >
-                                                        <ArrowBackIosNewIcon />
-                                                    </IconButton>
-                                                )}
-                                                {activeImageIndex < selectedShowcaseItem.imageUrls.length - 1 && (
-                                                    <IconButton 
-                                                        onClick={() => setActiveImageIndex(prev => prev + 1)}
-                                                        sx={{ position: 'absolute', right: 8, color: 'white', bgcolor: 'rgba(0,0,0,0.5)', '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' } }}
-                                                    >
-                                                        <ArrowForwardIosIcon />
-                                                    </IconButton>
-                                                )}
-                                                
-                                                {/* Dots Indicator */}
-                                                <Box sx={{ position: 'absolute', bottom: 8, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 1 }}>
-                                                    {selectedShowcaseItem.imageUrls.map((_, idx) => (
-                                                        <Box 
-                                                            key={idx} 
-                                                            onClick={() => setActiveImageIndex(idx)}
-                                                            sx={{ 
-                                                                width: 8, 
-                                                                height: 8, 
-                                                                borderRadius: '50%', 
-                                                                bgcolor: idx === activeImageIndex ? 'white' : 'rgba(255,255,255,0.5)',
-                                                                cursor: 'pointer'
-                                                            }}
-                                                        />
-                                                    ))}
-                                                </Box>
-                                            </>
-                                        )}
-                                    </>
-                                ) : (
-                                    <Box sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                        <CollectionsIcon sx={{ fontSize: 60, opacity: 0.5, mb: 1, color: 'rgba(255,255,255,0.5)' }} />
-                                        <Typography color="rgba(255,255,255,0.7)">No images available</Typography>
-                                    </Box>
-                                )}
-                            </Box>
-                            <Typography variant="body1" paragraph>
-                                {selectedShowcaseItem.description}
-                            </Typography>
-                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                <Chip 
-                                    icon={<StarIcon />} 
-                                    label={`${selectedShowcaseItem.likes?.length || 0} Likes`} 
-                                    color="primary" 
-                                    variant="outlined" 
-                                />
-                                <Typography variant="caption" color="text.secondary">
-                                    Posted on {new Date(selectedShowcaseItem.createdAt).toLocaleDateString()}
-                                </Typography>
-                            </Box>
-                        </DialogContent>
-                    </>
-                )}
-            </Dialog>
+            {/* Showcase Item Modal */}
+            {selectedItem && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)', maxWidth: 700, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid var(--bd)' }}>
+                            <div style={{ fontFamily: 'var(--display)', fontSize: '1rem', letterSpacing: '-0.03em', color: 'var(--text-bright)' }}>{selectedItem.title}</div>
+                            <button onClick={() => setSelectedItem(null)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
+                        </div>
+                        <div style={{ padding: '20px' }}>
+                            {selectedItem.imageUrls?.length > 0 ? (
+                                <div style={{ position: 'relative', background: '#000', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
+                                    <img src={selectedItem.imageUrls[activeImageIndex]} alt={selectedItem.title} style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain' }} />
+                                    {selectedItem.imageUrls.length > 1 && (
+                                        <>
+                                            {activeImageIndex > 0 && (
+                                                <button onClick={() => setActiveImageIndex(p => p - 1)} style={{ position: 'absolute', left: 8, background: 'rgba(0,0,0,0.5)', border: 'none', color: '#fff', cursor: 'pointer', width: 36, height: 36, fontSize: 16 }}>‹</button>
+                                            )}
+                                            {activeImageIndex < selectedItem.imageUrls.length - 1 && (
+                                                <button onClick={() => setActiveImageIndex(p => p + 1)} style={{ position: 'absolute', right: 8, background: 'rgba(0,0,0,0.5)', border: 'none', color: '#fff', cursor: 'pointer', width: 36, height: 36, fontSize: 16 }}>›</button>
+                                            )}
+                                            <div style={{ position: 'absolute', bottom: 8, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 6 }}>
+                                                {selectedItem.imageUrls.map((_, idx) => (
+                                                    <div key={idx} onClick={() => setActiveImageIndex(idx)} style={{ width: 8, height: 8, borderRadius: '50%', background: idx === activeImageIndex ? '#fff' : 'rgba(255,255,255,0.4)', cursor: 'pointer' }} />
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            ) : (
+                                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-dim)', marginBottom: 16 }}>No images available</div>
+                            )}
+                            <div style={{ fontSize: 14, color: 'var(--text)', marginBottom: 12, lineHeight: 1.6 }}>{selectedItem.description}</div>
+                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--green)', border: '1px solid var(--green)', padding: '3px 10px' }}>★ {selectedItem.likes?.length || 0} Likes</span>
+                                <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>Posted {new Date(selectedItem.createdAt).toLocaleDateString()}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
-            {/* Tip Dialog */}
-            <Dialog open={tipDialogOpen} onClose={() => setTipDialogOpen(false)}>
-                <DialogTitle>Tip Stake to {user.username}</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body2" sx={{ mb: 2 }}>
-                        Send some of your stake to show appreciation!
-                    </Typography>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        id="amount"
-                        label="Stake Amount"
-                        type="number"
-                        fullWidth
-                        variant="outlined"
-                        value={tipAmount}
-                        onChange={(e) => setTipAmount(e.target.value)}
-                        InputProps={{ inputProps: { min: 1 } }}
-                    />
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
-                        <Button onClick={() => setTipDialogOpen(false)}>Cancel</Button>
-                        <Button 
-                            variant="contained" 
-                            onClick={handleTip} 
-                            disabled={tipLoading || !tipAmount || parseInt(tipAmount) <= 0}
-                        >
-                            {tipLoading ? "Sending..." : `Send ${tipAmount || 0} Stake`}
-                        </Button>
-                    </Box>
-                </DialogContent>
-            </Dialog>
-
-            <Snackbar 
-                open={snackbar.open} 
-                autoHideDuration={6000} 
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-            >
-                <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
-        </Box>
+            {/* Tip Modal */}
+            {tipModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+                    <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)', padding: '24px 28px', maxWidth: 380, width: '100%' }}>
+                        <div style={{ fontFamily: 'var(--display)', fontSize: '1.1rem', letterSpacing: '-0.04em', color: 'var(--text-bright)', marginBottom: 8 }}>Tip Stake to {user.username}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-mid)', marginBottom: 20 }}>Send some of your stake to show appreciation!</div>
+                        <div style={{ marginBottom: 20 }}>
+                            <label style={{ display: 'block', fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 6 }}>STAKE AMOUNT</label>
+                            <input className="input" type="number" style={{ width: '100%', boxSizing: 'border-box', fontSize: 14 }} value={tipAmount} onChange={e => setTipAmount(e.target.value)} min="1" />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                            <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setTipModal(false)}>cancel</button>
+                            <button className="btn btn--filled btn--sm" style={{ fontSize: 10 }} onClick={handleTip} disabled={tipLoading || !tipAmount || parseInt(tipAmount) <= 0}>
+                                {tipLoading ? 'sending...' : `$ send ${tipAmount || 0} stake`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }

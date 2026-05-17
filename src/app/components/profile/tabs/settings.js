@@ -1,24 +1,9 @@
 import React, { useState } from 'react';
-import { 
-    Box, Typography, Button, Divider, Grid, Paper, useTheme, Alert, 
-    Dialog, DialogTitle, DialogContent, DialogActions, TextField, Snackbar, 
-    Switch, FormControlLabel, Radio, RadioGroup, FormControl, FormLabel, Stack 
-} from '@mui/material';
 import { signIn } from 'next-auth/react';
-import SecurityIcon from '@mui/icons-material/Security';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions';
-import MergeTypeIcon from '@mui/icons-material/MergeType';
-import NotificationsIcon from '@mui/icons-material/Notifications';
 
 const SettingsTab = ({ user }) => {
-    const theme = useTheme();
-    const [openPasswordDialog, setOpenPasswordDialog] = useState(false);
-    const [passwordForm, setPasswordForm] = useState({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-    });
+    const [passwordModal, setPasswordModal] = useState(false);
+    const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
     const [privacySettings, setPrivacySettings] = useState({
         showEmail: user.privacy?.showEmail ?? true,
         showDiscord: user.privacy?.showDiscord ?? true,
@@ -28,499 +13,223 @@ const SettingsTab = ({ user }) => {
         email: user.notificationPreferences?.email ?? false,
         discord: user.notificationPreferences?.discord ?? false
     });
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: '',
-        severity: 'info'
-    });
-
-    // Merge State
-    const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+    const [mergeModal, setMergeModal] = useState(false);
     const [legacyEmail, setLegacyEmail] = useState('');
     const [legacyPassword, setLegacyPassword] = useState('');
     const [legacyUser, setLegacyUser] = useState(null);
-    const [mergeStep, setMergeStep] = useState(0); // 0: Login, 1: Conflict Resolution
+    const [mergeStep, setMergeStep] = useState(0);
     const [mergeOverrides, setMergeOverrides] = useState({});
     const [verifying, setVerifying] = useState(false);
     const [merging, setMerging] = useState(false);
+    const [toast, setToast] = useState(null);
 
-    const handleVerifyLegacyUser = async () => {
-        if (!legacyEmail || !legacyPassword) {
-            setSnackbar({ open: true, message: "Please enter email and password.", severity: 'error' });
-            return;
-        }
-        
-        if (legacyEmail === user.email) {
-             setSnackbar({ open: true, message: "You cannot merge your current account into itself.", severity: 'error' });
-             return;
-        }
-
-        setVerifying(true);
-        try {
-            const res = await fetch('/api/v1/users/verify-credentials', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: legacyEmail, password: legacyPassword })
-            });
-            const data = await res.json();
-
-            if (data.success) {
-                setLegacyUser(data.user);
-                setMergeStep(1);
-                // Initialize overrides with 'target' (current user) as default
-                const initialOverrides = {};
-                ['firstName', 'lastName', 'bio', 'image'].forEach(field => {
-                    initialOverrides[field] = 'target';
-                });
-                setMergeOverrides(initialOverrides);
-            } else {
-                setSnackbar({ open: true, message: data.error || "Verification failed.", severity: 'error' });
-            }
-        } catch (error) {
-            console.error(error);
-            setSnackbar({ open: true, message: "Error verifying account.", severity: 'error' });
-        } finally {
-            setVerifying(false);
-        }
-    };
-
-    const handleMergeSubmit = async () => {
-        if (!legacyUser) return;
-
-        if (!confirm(`Are you sure you want to merge ${legacyUser.email} into your current account? The legacy account will be deleted.`)) {
-            return;
-        }
-
-        setMerging(true);
-        try {
-            const res = await fetch('/api/v1/users/merge', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    targetUserID: user.userID,
-                    sourceUserID: legacyUser.userID,
-                    overrides: mergeOverrides
-                })
-            });
-            const data = await res.json();
-
-            if (data.success) {
-                setSnackbar({ open: true, message: "Accounts merged successfully! Reloading...", severity: 'success' });
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1500);
-            } else {
-                setSnackbar({ open: true, message: data.error || "Merge failed.", severity: 'error' });
-            }
-        } catch (error) {
-            console.error(error);
-            setSnackbar({ open: true, message: "Error merging accounts.", severity: 'error' });
-        } finally {
-            setMerging(false);
-        }
-    };
-
-    const handleConnectGoogle = () => {
-        signIn('google', { callbackUrl: `/dashboard/${user.userID}/profile?tab=3` });
-    };
-
-    const handleConnectDiscord = () => {
-        // Initiate Discord Sign-in to link account
-        signIn('discord', { callbackUrl: `/dashboard/${user.userID}/profile?tab=3` });
-    };
+    const showToast = (message, type = 'info') => { setToast({ message, type }); setTimeout(() => setToast(null), 4000); };
 
     const handlePrivacyChange = async (setting) => {
         const newSettings = { ...privacySettings, [setting]: !privacySettings[setting] };
         setPrivacySettings(newSettings);
-
-        try {
-            const res = await fetch(`/api/v1/users?userID=${user.userID}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    privacy: newSettings
-                })
-            });
-            
-            if (res.ok) {
-                setSnackbar({ open: true, message: "Privacy settings updated.", severity: 'success' });
-            } else {
-                setSnackbar({ open: true, message: "Failed to update privacy settings.", severity: 'error' });
-                setPrivacySettings(privacySettings); // Revert
-            }
-        } catch (error) {
-            console.error(error);
-            setSnackbar({ open: true, message: "Error updating settings.", severity: 'error' });
-            setPrivacySettings(privacySettings); // Revert
-        }
+        const res = await fetch(`/api/v1/users?userID=${user.userID}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ privacy: newSettings }) });
+        if (res.ok) showToast("Privacy settings updated.", 'success');
+        else { showToast("Failed to update privacy settings.", 'error'); setPrivacySettings(privacySettings); }
     };
 
     const handleNotificationChange = async (setting) => {
         const newSettings = { ...notificationSettings, [setting]: !notificationSettings[setting] };
         setNotificationSettings(newSettings);
-
-        try {
-            const res = await fetch(`/api/v1/users?userID=${user.userID}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    notificationPreferences: newSettings
-                })
-            });
-            
-            if (res.ok) {
-                setSnackbar({ open: true, message: "Notification preferences updated.", severity: 'success' });
-            } else {
-                setSnackbar({ open: true, message: "Failed to update notification preferences.", severity: 'error' });
-                setNotificationSettings(notificationSettings); // Revert
-            }
-        } catch (error) {
-            console.error(error);
-            setSnackbar({ open: true, message: "Error updating settings.", severity: 'error' });
-            setNotificationSettings(notificationSettings); // Revert
-        }
-    };
-
-    const handlePasswordChange = (e) => {
-        setPasswordForm({ ...passwordForm, [e.target.name]: e.target.value });
+        const res = await fetch(`/api/v1/users?userID=${user.userID}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notificationPreferences: newSettings }) });
+        if (res.ok) showToast("Notification preferences updated.", 'success');
+        else { showToast("Failed to update notification preferences.", 'error'); setNotificationSettings(notificationSettings); }
     };
 
     const handleSubmitPasswordChange = async () => {
-        if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-            setSnackbar({ open: true, message: "New passwords do not match.", severity: 'error' });
-            return;
-        }
-
-        try {
-            const res = await fetch('/api/v1/users/change-password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userID: user.userID,
-                    currentPassword: passwordForm.currentPassword,
-                    newPassword: passwordForm.newPassword
-                })
-            });
-
-            const data = await res.json();
-
-            if (res.ok) {
-                setSnackbar({ open: true, message: "Password updated successfully!", severity: 'success' });
-                setOpenPasswordDialog(false);
-                setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-            } else {
-                setSnackbar({ open: true, message: data.error || "Failed to update password.", severity: 'error' });
-            }
-        } catch (error) {
-            setSnackbar({ open: true, message: "An error occurred.", severity: 'error' });
-        }
+        if (passwordForm.newPassword !== passwordForm.confirmPassword) { showToast("New passwords do not match.", 'error'); return; }
+        const res = await fetch('/api/v1/users/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userID: user.userID, currentPassword: passwordForm.currentPassword, newPassword: passwordForm.newPassword }) });
+        const data = await res.json();
+        if (res.ok) { showToast("Password updated successfully!", 'success'); setPasswordModal(false); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }
+        else showToast(data.error || "Failed to update password.", 'error');
     };
 
+    const handleVerifyLegacyUser = async () => {
+        if (!legacyEmail || !legacyPassword) { showToast("Please enter email and password.", 'error'); return; }
+        if (legacyEmail === user.email) { showToast("You cannot merge your current account into itself.", 'error'); return; }
+        setVerifying(true);
+        const res = await fetch('/api/v1/users/verify-credentials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: legacyEmail, password: legacyPassword }) });
+        const data = await res.json();
+        if (data.success) {
+            setLegacyUser(data.user);
+            setMergeStep(1);
+            const init = {};
+            ['firstName', 'lastName', 'bio', 'image'].forEach(f => { init[f] = 'target'; });
+            setMergeOverrides(init);
+        } else showToast(data.error || "Verification failed.", 'error');
+        setVerifying(false);
+    };
+
+    const handleMergeSubmit = async () => {
+        if (!legacyUser) return;
+        if (!confirm(`Are you sure you want to merge ${legacyUser.email} into your current account? The legacy account will be deleted.`)) return;
+        setMerging(true);
+        const res = await fetch('/api/v1/users/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetUserID: user.userID, sourceUserID: legacyUser.userID, overrides: mergeOverrides }) });
+        const data = await res.json();
+        if (data.success) { showToast("Accounts merged successfully! Reloading...", 'success'); setTimeout(() => window.location.reload(), 1500); }
+        else showToast(data.error || "Merge failed.", 'error');
+        setMerging(false);
+    };
+
+    const Toggle = ({ checked, onChange }) => (
+        <div onClick={onChange} style={{ width: 36, height: 20, background: checked ? 'var(--green)' : 'var(--bg-1)', border: '1px solid var(--bd)', borderRadius: 10, cursor: 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+            <div style={{ position: 'absolute', top: 2, left: checked ? 18 : 2, width: 14, height: 14, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
+        </div>
+    );
+
+    const Section = ({ title, children }) => (
+        <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--green)', marginBottom: 12 }}>{title}</div>
+            <div style={{ border: '1px solid var(--bd)', padding: '16px 20px' }}>{children}</div>
+        </div>
+    );
+
+    const labelStyle = { display: 'block', fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 6 };
+
     return (
-        <Box sx={{ padding: { xs: 2, md: 3 }, backgroundColor: theme.palette.background.paper, color: theme.palette.text.primary }}>
-            <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <SecurityIcon /> Security Settings
-            </Typography>
-            <Paper sx={{ p: 2, mb: 4, border: `1px solid ${theme.palette.divider}`, backgroundColor: 'transparent' }}>
-                <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} sm={8}>
-                        <Typography variant="subtitle1" sx={{ color: theme.palette.text.primary }}>Password</Typography>
-                        <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
-                            Change your password to keep your account secure.
-                        </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={4} sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
-                        <Button variant="outlined" color="primary" onClick={() => setOpenPasswordDialog(true)}>
-                            Change Password
-                        </Button>
-                    </Grid>
-                </Grid>
-            </Paper>
+        <div style={{ padding: '20px 24px' }}>
+            {toast && (
+                <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 9999, border: `1px solid ${toast.type === 'error' ? 'var(--red)' : toast.type === 'success' ? 'var(--green)' : 'var(--cyan)'}`, color: toast.type === 'error' ? 'var(--red)' : toast.type === 'success' ? 'var(--green)' : 'var(--cyan)', background: 'var(--bg-card)', padding: '10px 20px', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                    {toast.message}
+                </div>
+            )}
 
-            <Divider sx={{ my: 4, borderColor: theme.palette.divider }} />
+            <Section title="// SECURITY SETTINGS">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                    <div>
+                        <div style={{ fontSize: 13, color: 'var(--text-bright)', marginBottom: 4 }}>Password</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Change your password to keep your account secure.</div>
+                    </div>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setPasswordModal(true)}>Change Password</button>
+                </div>
+            </Section>
 
-            <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <VisibilityIcon /> Privacy Settings
-            </Typography>
-            <Paper sx={{ p: 2, mb: 4, border: `1px solid ${theme.palette.divider}`, backgroundColor: 'transparent' }}>
-                <Grid container spacing={2}>
-                    <Grid item xs={12}>
-                        <Typography variant="body2" sx={{ color: theme.palette.text.secondary, mb: 2 }}>
-                            Control what contact information is visible on your public profile.
-                        </Typography>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                            <FormControlLabel
-                                control={<Switch checked={privacySettings.showEmail} onChange={() => handlePrivacyChange('showEmail')} />}
-                                label="Show Email Address"
-                            />
-                            <FormControlLabel
-                                control={<Switch checked={privacySettings.showDiscord} onChange={() => handlePrivacyChange('showDiscord')} />}
-                                label="Show Discord Handle"
-                            />
-                            <FormControlLabel
-                                control={<Switch checked={privacySettings.showPhone} onChange={() => handlePrivacyChange('showPhone')} />}
-                                label="Show Phone Number"
-                            />
-                        </Box>
-                    </Grid>
-                </Grid>
-            </Paper>
+            <Section title="// PRIVACY SETTINGS">
+                <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 16 }}>Control what contact information is visible on your public profile.</div>
+                {[['showEmail', 'Show Email Address'], ['showDiscord', 'Show Discord Handle'], ['showPhone', 'Show Phone Number']].map(([key, label]) => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                        <Toggle checked={privacySettings[key]} onChange={() => handlePrivacyChange(key)} />
+                        <span style={{ fontSize: 13, color: 'var(--text)' }}>{label}</span>
+                    </div>
+                ))}
+            </Section>
 
-            <Divider sx={{ my: 4, borderColor: theme.palette.divider }} />
+            <Section title="// NOTIFICATION PREFERENCES">
+                <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 16 }}>Manage how you receive notifications from The Lab.</div>
+                {[['email', 'Email Notifications'], ['discord', 'Discord DM Notifications']].map(([key, label]) => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                        <Toggle checked={notificationSettings[key]} onChange={() => handleNotificationChange(key)} />
+                        <span style={{ fontSize: 13, color: 'var(--text)' }}>{label}</span>
+                    </div>
+                ))}
+            </Section>
 
-            <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <NotificationsIcon /> Notification Preferences
-            </Typography>
-            <Paper sx={{ p: 2, mb: 4, border: `1px solid ${theme.palette.divider}`, backgroundColor: 'transparent' }}>
-                <Grid container spacing={2}>
-                    <Grid item xs={12}>
-                        <Typography variant="body2" sx={{ color: theme.palette.text.secondary, mb: 2 }}>
-                            Manage how you receive notifications from The Lab.
-                        </Typography>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                            <FormControlLabel
-                                control={<Switch checked={notificationSettings.email} onChange={() => handleNotificationChange('email')} />}
-                                label="Email Notifications"
-                            />
-                            <FormControlLabel
-                                control={<Switch checked={notificationSettings.discord} onChange={() => handleNotificationChange('discord')} />}
-                                label="Discord DM Notifications"
-                            />
-                        </Box>
-                    </Grid>
-                </Grid>
-            </Paper>
+            <Section title="// INTEGRATIONS">
+                {[
+                    { name: 'Discord', desc: 'Link your Discord account to access the FabLab bot and community features.', connected: !!user.discordHandle, handle: user.discordHandle, onConnect: () => signIn('discord', { callbackUrl: `/dashboard/${user.userID}/profile?tab=3` }) },
+                    { name: 'Google', desc: 'Link your Google account for easier login.', connected: !!user.googleId, handle: null, onConnect: () => signIn('google', { callbackUrl: `/dashboard/${user.userID}/profile?tab=3` }) },
+                ].map(({ name, desc, connected, handle, onConnect }, i) => (
+                    <div key={name}>
+                        {i > 0 && <div style={{ borderTop: '1px solid var(--bd)', margin: '16px 0' }} />}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                            <div>
+                                <div style={{ fontSize: 13, color: 'var(--text-bright)', marginBottom: 4 }}>{name}</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>{desc}</div>
+                                {connected && <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--green)', border: '1px solid var(--green)', padding: '2px 8px', display: 'inline-block' }}>✓ {handle ? `Connected as: ${handle}` : 'Connected'}</div>}
+                            </div>
+                            <button className="btn btn--sm" style={{ fontSize: 10, borderColor: connected ? 'var(--bd)' : 'var(--green)', color: connected ? 'var(--text-dim)' : 'var(--green)' }} disabled={connected} onClick={onConnect}>
+                                {connected ? 'Disconnect' : `Connect ${name}`}
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </Section>
 
-            <Divider sx={{ my: 4, borderColor: theme.palette.divider }} />
+            <Section title="// MERGE LEGACY ACCOUNT">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                    <div>
+                        <div style={{ fontSize: 13, color: 'var(--text-bright)', marginBottom: 4 }}>Merge Old Account</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Have an old account you want to merge into this one? This will move your history, hours, and items here.</div>
+                    </div>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={() => setMergeModal(true)}>Merge Account</button>
+                </div>
+            </Section>
 
-            <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <IntegrationInstructionsIcon /> Integrations
-            </Typography>
-            <Paper sx={{ p: 2, border: `1px solid ${theme.palette.divider}`, backgroundColor: 'transparent' }}>
-                <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} sm={8}>
-                        <Typography variant="subtitle1" sx={{ color: theme.palette.text.primary }}>Discord</Typography>
-                        <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
-                            Link your Discord account to access the FabLab bot and community features.
-                        </Typography>
-                        {user.discordHandle && (
-                            <Alert severity="success" sx={{ mt: 1, backgroundColor: 'rgba(0, 255, 0, 0.1)', color: theme.palette.success.main }}>
-                                Connected as: {user.discordHandle}
-                            </Alert>
-                        )}
-                    </Grid>
-                    <Grid item xs={12} sm={4} sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
-                        {user.discordHandle ? (
-                            <Button variant="outlined" color="error" disabled>
-                                Disconnect
-                            </Button>
+            {/* Change Password Modal */}
+            {passwordModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+                    <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)', padding: '24px 28px', maxWidth: 440, width: '100%' }}>
+                        <div style={{ fontFamily: 'var(--display)', fontSize: '1.1rem', letterSpacing: '-0.04em', color: 'var(--green)', marginBottom: 20 }}>Change Password</div>
+                        {[['currentPassword', 'CURRENT PASSWORD'], ['newPassword', 'NEW PASSWORD'], ['confirmPassword', 'CONFIRM NEW PASSWORD']].map(([key, label]) => (
+                            <div key={key} style={{ marginBottom: 16 }}>
+                                <label style={labelStyle}>{label}</label>
+                                <input className="input" type="password" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} value={passwordForm[key]} onChange={e => setPasswordForm({ ...passwordForm, [key]: e.target.value })} />
+                            </div>
+                        ))}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                            <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setPasswordModal(false)}>cancel</button>
+                            <button className="btn btn--filled btn--sm" style={{ fontSize: 10 }} onClick={handleSubmitPasswordChange}>$ update password</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Merge Modal */}
+            {mergeModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+                    <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)', padding: '24px 28px', maxWidth: 560, width: '100%', maxHeight: '80vh', overflowY: 'auto' }}>
+                        <div style={{ fontFamily: 'var(--display)', fontSize: '1.1rem', letterSpacing: '-0.04em', color: 'var(--text-bright)', marginBottom: 20 }}>Merge Legacy Account</div>
+                        {mergeStep === 0 ? (
+                            <>
+                                <div style={{ fontSize: 13, color: 'var(--text-mid)', marginBottom: 20 }}>Enter the credentials of the <strong>OLD</strong> account you want to merge. The old account will be deleted after the merge.</div>
+                                <div style={{ marginBottom: 16 }}>
+                                    <label style={labelStyle}>EMAIL OF OLD ACCOUNT</label>
+                                    <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} value={legacyEmail} onChange={e => setLegacyEmail(e.target.value)} />
+                                </div>
+                                <div style={{ marginBottom: 20 }}>
+                                    <label style={labelStyle}>PASSWORD OF OLD ACCOUNT</label>
+                                    <input className="input" type="password" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} value={legacyPassword} onChange={e => setLegacyPassword(e.target.value)} />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setMergeModal(false)}>cancel</button>
+                                    <button className="btn btn--filled btn--sm" style={{ fontSize: 10 }} onClick={handleVerifyLegacyUser} disabled={verifying}>{verifying ? 'verifying...' : '$ verify & continue'}</button>
+                                </div>
+                            </>
                         ) : (
-                            <Button variant="contained" color="primary" onClick={handleConnectDiscord}>
-                                Connect Discord
-                            </Button>
-                        )}
-                    </Grid>
-                </Grid>
-                <Divider sx={{ my: 2, borderColor: theme.palette.divider }} />
-                <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} sm={8}>
-                        <Typography variant="subtitle1" sx={{ color: theme.palette.text.primary }}>Google</Typography>
-                        <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
-                            Link your Google account for easier login.
-                        </Typography>
-                        {user.googleId && (
-                            <Alert severity="success" sx={{ mt: 1, backgroundColor: 'rgba(0, 255, 0, 0.1)', color: theme.palette.success.main }}>
-                                Connected
-                            </Alert>
-                        )}
-                    </Grid>
-                    <Grid item xs={12} sm={4} sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
-                        {user.googleId ? (
-                            <Button variant="outlined" color="error" disabled>
-                                Disconnect
-                            </Button>
-                        ) : (
-                            <Button variant="contained" color="primary" onClick={handleConnectGoogle}>
-                                Connect Google
-                            </Button>
-                        )}
-                    </Grid>
-                </Grid>
-            </Paper>
-
-            <Divider sx={{ my: 4, borderColor: theme.palette.divider }} />
-
-            <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <MergeTypeIcon /> Merge Legacy Account
-            </Typography>
-            <Paper sx={{ p: 2, border: `1px solid ${theme.palette.divider}`, backgroundColor: 'transparent' }}>
-                <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} sm={8}>
-                        <Typography variant="subtitle1" sx={{ color: theme.palette.text.primary }}>Merge Old Account</Typography>
-                        <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
-                            Have an old account (e.g., created with email) that you want to merge into this one? 
-                            This will move your history, hours, and items to this account.
-                        </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={4} sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
-                        <Button variant="outlined" color="warning" onClick={() => setMergeDialogOpen(true)}>
-                            Merge Account
-                        </Button>
-                    </Grid>
-                </Grid>
-            </Paper>
-
-            {/* Merge Dialog */}
-            <Dialog open={mergeDialogOpen} onClose={() => setMergeDialogOpen(false)} maxWidth="md" fullWidth>
-                <DialogTitle>Merge Legacy Account</DialogTitle>
-                <DialogContent>
-                    {mergeStep === 0 ? (
-                        <Box sx={{ pt: 1 }}>
-                            <Typography variant="body1" paragraph>
-                                Enter the credentials of the <strong>OLD</strong> account you want to merge into this one.
-                                <br />
-                                <small>Note: The old account will be deleted after the merge.</small>
-                            </Typography>
-                            <TextField
-                                label="Email of Old Account"
-                                fullWidth
-                                margin="normal"
-                                value={legacyEmail}
-                                onChange={(e) => setLegacyEmail(e.target.value)}
-                            />
-                            <TextField
-                                label="Password of Old Account"
-                                type="password"
-                                fullWidth
-                                margin="normal"
-                                value={legacyPassword}
-                                onChange={(e) => setLegacyPassword(e.target.value)}
-                            />
-                        </Box>
-                    ) : (
-                        <Box sx={{ pt: 1 }}>
-                            <Alert severity="warning" sx={{ mb: 2 }}>
-                                Conflict Resolution: Choose which data to keep. 
-                                <br/>
-                                <strong>Target (Current):</strong> {user.email}
-                                <br/>
-                                <strong>Source (Legacy):</strong> {legacyUser.email}
-                            </Alert>
-                            
-                            <Stack spacing={3}>
-                                {['firstName', 'lastName', 'bio'].map((field) => (
-                                    <Box key={field} sx={{ p: 2, border: '1px solid #eee', borderRadius: 1 }}>
-                                        <Typography variant="subtitle2" sx={{ mb: 1, textTransform: 'capitalize' }}>
-                                            {field.replace(/([A-Z])/g, ' $1').trim()}
-                                        </Typography>
-                                        <FormControl>
-                                            <RadioGroup
-                                                row
-                                                value={mergeOverrides[field] || 'target'}
-                                                onChange={(e) => setMergeOverrides({ ...mergeOverrides, [field]: e.target.value })}
-                                            >
-                                                <FormControlLabel 
-                                                    value="target" 
-                                                    control={<Radio />} 
-                                                    label={
-                                                        <Box>
-                                                            <Typography variant="body2" fontWeight="bold">Keep Current</Typography>
-                                                            <Typography variant="caption" color="text.secondary">{user[field] || '(Empty)'}</Typography>
-                                                        </Box>
-                                                    } 
-                                                    sx={{ mr: 4 }}
-                                                />
-                                                <FormControlLabel 
-                                                    value="source" 
-                                                    control={<Radio />} 
-                                                    label={
-                                                        <Box>
-                                                            <Typography variant="body2" fontWeight="bold">Use Legacy</Typography>
-                                                            <Typography variant="caption" color="text.secondary">{legacyUser[field] || '(Empty)'}</Typography>
-                                                        </Box>
-                                                    } 
-                                                />
-                                            </RadioGroup>
-                                        </FormControl>
-                                    </Box>
+                            <>
+                                <div style={{ border: '1px solid var(--amber)', color: 'var(--amber)', padding: '10px 14px', fontSize: 12, fontFamily: 'var(--mono)', marginBottom: 20 }}>
+                                    ⚠ Conflict Resolution — choose which data to keep.<br />
+                                    <strong>Current:</strong> {user.email} | <strong>Legacy:</strong> {legacyUser.email}
+                                </div>
+                                {['firstName', 'lastName', 'bio'].map(field => (
+                                    <div key={field} style={{ border: '1px solid var(--bd)', padding: '12px 16px', marginBottom: 12 }}>
+                                        <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 8, letterSpacing: '0.1em' }}>{field.replace(/([A-Z])/g, ' $1').trim().toUpperCase()}</div>
+                                        {[['target', 'Keep Current', user[field]], ['source', 'Use Legacy', legacyUser[field]]].map(([val, label, preview]) => (
+                                            <label key={val} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8, cursor: 'pointer' }}>
+                                                <input type="radio" style={{ marginTop: 2 }} checked={mergeOverrides[field] === val} onChange={() => setMergeOverrides({ ...mergeOverrides, [field]: val })} />
+                                                <div>
+                                                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)' }}>{label}</div>
+                                                    <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{preview || '(Empty)'}</div>
+                                                </div>
+                                            </label>
+                                        ))}
+                                    </div>
                                 ))}
-                            </Stack>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setMergeDialogOpen(false)}>Cancel</Button>
-                    {mergeStep === 0 ? (
-                        <Button onClick={handleVerifyLegacyUser} variant="contained" disabled={verifying}>
-                            {verifying ? 'Verifying...' : 'Verify & Continue'}
-                        </Button>
-                    ) : (
-                        <Button onClick={handleMergeSubmit} variant="contained" color="error" disabled={merging}>
-                            {merging ? 'Merging...' : 'Confirm Merge'}
-                        </Button>
-                    )}
-                </DialogActions>
-            </Dialog>
-
-            {/* Change Password Dialog */}
-            <Dialog open={openPasswordDialog} onClose={() => setOpenPasswordDialog(false)}>
-                <DialogTitle sx={{ color: theme.palette.primary.main }}>Change Password</DialogTitle>
-                <DialogContent>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        name="currentPassword"
-                        label="Current Password"
-                        type="password"
-                        fullWidth
-                        variant="outlined"
-                        value={passwordForm.currentPassword}
-                        onChange={handlePasswordChange}
-                        sx={{ mb: 2 }}
-                    />
-                    <TextField
-                        margin="dense"
-                        name="newPassword"
-                        label="New Password"
-                        type="password"
-                        fullWidth
-                        variant="outlined"
-                        value={passwordForm.newPassword}
-                        onChange={handlePasswordChange}
-                        sx={{ mb: 2 }}
-                    />
-                    <TextField
-                        margin="dense"
-                        name="confirmPassword"
-                        label="Confirm New Password"
-                        type="password"
-                        fullWidth
-                        variant="outlined"
-                        value={passwordForm.confirmPassword}
-                        onChange={handlePasswordChange}
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpenPasswordDialog(false)} color="inherit">Cancel</Button>
-                    <Button onClick={handleSubmitPasswordChange} color="primary" variant="contained">Update Password</Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Snackbar for notifications */}
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                message={snackbar.message}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-                ContentProps={{
-                    sx: {
-                        backgroundColor: snackbar.severity === 'success' ? theme.palette.success.main : theme.palette.error.main,
-                        color: theme.palette.background.default
-                    }
-                }}
-            />
-        </Box>
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setMergeModal(false)}>cancel</button>
+                                    <button className="btn btn--sm" style={{ fontSize: 10, borderColor: 'var(--red)', color: 'var(--red)' }} onClick={handleMergeSubmit} disabled={merging}>{merging ? 'merging...' : '$ confirm merge'}</button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
     );
 };
 
