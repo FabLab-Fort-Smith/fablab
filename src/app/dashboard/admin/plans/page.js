@@ -62,6 +62,8 @@ export default function PlansPage() {
   const [cancelSubs, setCancelSubs] = useState(false);
   const [subAction, setSubAction] = useState(null);
   const [planTab, setPlanTab] = useState('active');
+  const [migrateSubId, setMigrateSubId] = useState(null);
+  const [migrateTargetVarId, setMigrateTargetVarId] = useState('');
 
   const [addForm, setAddForm] = useState({
     name: '',
@@ -121,6 +123,30 @@ export default function PlansPage() {
       const d = await res.json();
       if (!res.ok) { showToast(d.error || 'Failed.', 'error'); return; }
       showToast(`Subscription ${action}d.`);
+      const res2 = await fetch(`/api/v1/admin/plans?subscribers=${subscribersPlan.id}`);
+      if (res2.ok) setSubscribers(await res2.json());
+      fetchPlans();
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      setSubAction(null);
+    }
+  };
+
+  const handleMigrate = async (subscriptionId) => {
+    if (!migrateTargetVarId) return;
+    setSubAction({ subscriptionId, action: 'migrate' });
+    try {
+      const res = await fetch('/api/v1/admin/plans', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptionId, action: 'migrate', newPlanVariationId: migrateTargetVarId }),
+      });
+      const d = await res.json();
+      if (!res.ok) { showToast(d.error || 'Migration failed.', 'error'); return; }
+      showToast('Subscription migrated.');
+      setMigrateSubId(null);
+      setMigrateTargetVarId('');
       const res2 = await fetch(`/api/v1/admin/plans?subscribers=${subscribersPlan.id}`);
       if (res2.ok) setSubscribers(await res2.json());
       fetchPlans();
@@ -630,17 +656,45 @@ export default function PlansPage() {
                         </td>
                         <td style={{ padding: '8px 8px', color: 'var(--text-dim)', fontSize: 10 }}>{s.chargedThroughDate || '—'}</td>
                         <td style={{ padding: '8px 8px' }}>
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            {s.status === 'ACTIVE' && (
-                              <button className="btn btn--sm" style={{ fontSize: 8, padding: '2px 6px', borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={() => handleSubAction(s.id, 'pause')} disabled={isPending}>pause</button>
-                            )}
-                            {s.status === 'PAUSED' && (
-                              <button className="btn btn--sm" style={{ fontSize: 8, padding: '2px 6px', borderColor: 'var(--green)', color: 'var(--green)' }} onClick={() => handleSubAction(s.id, 'resume')} disabled={isPending}>resume</button>
-                            )}
-                            {(s.status === 'ACTIVE' || s.status === 'PAUSED') && (
-                              <button className="btn btn--sm" style={{ fontSize: 8, padding: '2px 6px', borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => handleSubAction(s.id, 'cancel')} disabled={isPending}>cancel</button>
-                            )}
-                          </div>
+                          {migrateSubId === s.id ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 220 }}>
+                              <select
+                                value={migrateTargetVarId}
+                                onChange={e => setMigrateTargetVarId(e.target.value)}
+                                style={{ ...inputStyle, fontSize: 10, padding: '4px 6px' }}
+                              >
+                                <option value="">— select new plan —</option>
+                                {plans.filter(p => !p.hidden).flatMap(p =>
+                                  (p.variations || [])
+                                    .filter(v => v.id !== s.planVariationId)
+                                    .map(v => (
+                                      <option key={v.id} value={v.id}>
+                                        {p.name} · {v.name || v.cadence} {v.priceCents != null ? `(${formatPrice(v.priceCents)}/${cadenceLabel(v.cadence)})` : ''}
+                                      </option>
+                                    ))
+                                )}
+                              </select>
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <button className="btn btn--sm" style={{ fontSize: 8, padding: '2px 6px', borderColor: 'var(--cyan)', color: 'var(--cyan)' }} onClick={() => handleMigrate(s.id)} disabled={!migrateTargetVarId || isPending}>confirm</button>
+                                <button className="btn btn--sm" style={{ fontSize: 8, padding: '2px 6px' }} onClick={() => { setMigrateSubId(null); setMigrateTargetVarId(''); }}>cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              {s.status === 'ACTIVE' && (
+                                <button className="btn btn--sm" style={{ fontSize: 8, padding: '2px 6px', borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={() => handleSubAction(s.id, 'pause')} disabled={isPending}>pause</button>
+                              )}
+                              {s.status === 'PAUSED' && (
+                                <button className="btn btn--sm" style={{ fontSize: 8, padding: '2px 6px', borderColor: 'var(--green)', color: 'var(--green)' }} onClick={() => handleSubAction(s.id, 'resume')} disabled={isPending}>resume</button>
+                              )}
+                              {(s.status === 'ACTIVE' || s.status === 'PAUSED') && (
+                                <>
+                                  <button className="btn btn--sm" style={{ fontSize: 8, padding: '2px 6px', borderColor: 'var(--cyan)', color: 'var(--cyan)' }} onClick={() => { setMigrateSubId(s.id); setMigrateTargetVarId(''); }} disabled={isPending}>migrate</button>
+                                  <button className="btn btn--sm" style={{ fontSize: 8, padding: '2px 6px', borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => handleSubAction(s.id, 'cancel')} disabled={isPending}>cancel</button>
+                                </>
+                              )}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );

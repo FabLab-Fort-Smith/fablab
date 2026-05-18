@@ -413,7 +413,7 @@ export async function PATCH(request) {
     if (!session || session.user.role !== "admin")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { action, subscriptionId } = await request.json();
+    const { action, subscriptionId, newPlanVariationId } = await request.json();
     if (!action || !subscriptionId)
       return NextResponse.json({ error: "action and subscriptionId are required." }, { status: 400 });
 
@@ -423,8 +423,12 @@ export async function PATCH(request) {
       await subscriptionsApi.resumeSubscription(subscriptionId, {});
     } else if (action === "cancel") {
       await subscriptionsApi.cancelSubscription(subscriptionId);
+    } else if (action === "migrate") {
+      if (!newPlanVariationId)
+        return NextResponse.json({ error: "newPlanVariationId is required." }, { status: 400 });
+      await subscriptionsApi.swapPlan(subscriptionId, { newPlanVariationId });
     } else {
-      return NextResponse.json({ error: "Invalid action. Use pause, resume, or cancel." }, { status: 400 });
+      return NextResponse.json({ error: "Invalid action. Use pause, resume, cancel, or migrate." }, { status: 400 });
     }
 
     return NextResponse.json({ success: true }, { status: 200 });
