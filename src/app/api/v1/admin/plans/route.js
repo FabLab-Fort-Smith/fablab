@@ -273,14 +273,24 @@ export async function PUT(request) {
         .filter(v => v.id !== removeVariationId);
       if (!remaining.length)
         return NextResponse.json({ error: "Cannot remove the only variation." }, { status: 400 });
-      await catalogApi.upsertCatalogObject({
-        idempotencyKey: uuidv4(),
-        object: {
-          ...existing,
-          subscriptionPlanData: { ...existing.subscriptionPlanData, subscriptionPlanVariations: remaining },
-        },
-      });
-      return NextResponse.json({ success: true, variationRemoved: true }, { status: 200 });
+      try {
+        const { result: upsertResult } = await catalogApi.upsertCatalogObject({
+          idempotencyKey: uuidv4(),
+          object: {
+            ...existing,
+            subscriptionPlanData: { ...existing.subscriptionPlanData, subscriptionPlanVariations: remaining },
+          },
+        });
+        if (upsertResult.errors?.length) {
+          const msg = upsertResult.errors[0]?.detail || "Square rejected the variation removal.";
+          return NextResponse.json({ error: msg }, { status: 400 });
+        }
+        return NextResponse.json({ success: true, variationRemoved: true }, { status: 200 });
+      } catch (squareErr) {
+        const msg = squareErr?.errors?.[0]?.detail || squareErr?.message || "Square rejected the variation removal.";
+        console.error("❌ Remove variation error:", msg);
+        return NextResponse.json({ error: msg }, { status: 400 });
+      }
     }
 
     const { result: current } = await catalogApi.retrieveCatalogObject(planId, true);
