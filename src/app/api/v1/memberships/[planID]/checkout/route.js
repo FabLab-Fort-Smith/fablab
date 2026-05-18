@@ -60,9 +60,9 @@ export async function POST(request, context) {
         customerId: squareCustomerId,
         lineItems: [{
           quantity: "1",
-          name: variationName,
           itemType: "CUSTOM_AMOUNT",
           basePriceMoney: { amount: BigInt(priceCents), currency },
+          note: variationName,
         }],
       },
       checkoutOptions: {
