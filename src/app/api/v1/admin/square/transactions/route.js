@@ -17,14 +17,15 @@ export async function GET(request) {
     const endTime = searchParams.get("endTime") || undefined;
 
     const { result } = await squareClient.paymentsApi.listPayments(
-      beginTime,
-      endTime,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      100
+      beginTime,   // beginTime
+      endTime,     // endTime
+      undefined,   // sortOrder
+      undefined,   // cursor
+      undefined,   // locationId
+      undefined,   // total
+      undefined,   // last4
+      undefined,   // cardBrand
+      100          // limit
     );
 
     const payments = result.payments || [];
