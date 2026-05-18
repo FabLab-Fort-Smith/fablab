@@ -38,16 +38,21 @@ export async function POST(request, context) {
       await usersCollection.updateOne({ userID }, { $set: { "membership.squareCustomerId": squareCustomerId } });
     }
 
-    const redirectUrl = `${appUrl}/api/v1/memberships/confirm?userID=${userID}&planVariationId=${planID}`;
+    // Fetch plan variation name
+    let variationName = "Membership";
+    try {
+      const { result: varResult } = await squareClient.catalogApi.retrieveCatalogObject(planID);
+      variationName = varResult.object?.subscriptionPlanVariationData?.name || variationName;
+    } catch { /* non-fatal */ }
 
-    // ── Coupon path: calculate discount, use CUSTOM_AMOUNT checkout ──────────
+    let priceCents = Math.round(price * 100);
+    if (priceCents <= 0) {
+      return NextResponse.json({ error: "Invalid price." }, { status: 400 });
+    }
+
+    // Apply coupon discount if provided
+    let discountLabel = "";
     if (couponCode) {
-      let priceCents = Math.round(price * 100);
-      if (priceCents <= 0) {
-        return NextResponse.json({ error: "Invalid price." }, { status: 400 });
-      }
-
-      // Validate coupon against Square catalog discounts
       const { result: searchResult } = await squareClient.catalogApi.searchCatalogObjects({
         objectTypes: ["DISCOUNT"],
         query: { exactQuery: { attributeName: "name", attributeValue: couponCode.toUpperCase() } },
@@ -57,7 +62,6 @@ export async function POST(request, context) {
         return NextResponse.json({ error: `Coupon "${couponCode}" not found.` }, { status: 400 });
       }
       const dd = discount.discountData;
-      let discountLabel = "";
       if (dd.discountType === "FIXED_PERCENTAGE") {
         const pct = parseFloat(dd.percentage || "0") / 100;
         priceCents = Math.max(1, priceCents - Math.round(priceCents * pct));
@@ -66,60 +70,24 @@ export async function POST(request, context) {
         priceCents = Math.max(1, priceCents - Number(dd.amountMoney.amount));
         discountLabel = ` ($${(Number(dd.amountMoney.amount) / 100).toFixed(2)} off)`;
       }
-
-      let variationName = "Membership";
-      try {
-        const { result: varResult } = await squareClient.catalogApi.retrieveCatalogObject(planID);
-        variationName = varResult.object?.subscriptionPlanVariationData?.name || variationName;
-      } catch { /* non-fatal */ }
-
-      const { result: checkoutResult } = await checkoutApi.createPaymentLink({
-        idempotencyKey: uuidv4(),
-        description: `${variationName}${discountLabel}`,
-        order: {
-          locationId: process.env.SQUARE_LOCATION_ID,
-          customerId: squareCustomerId,
-          lineItems: [{
-            quantity: "1",
-            itemType: "CUSTOM_AMOUNT",
-            basePriceMoney: { amount: BigInt(priceCents), currency },
-            note: `${variationName}${discountLabel}`,
-          }],
-        },
-        checkoutOptions: {
-          redirectUrl,
-          askForShippingAddress: false,
-        },
-      });
-
-      if (!checkoutResult.paymentLink?.url) {
-        return NextResponse.json({ error: "Failed to create checkout link." }, { status: 500 });
-      }
-      return NextResponse.json({ url: checkoutResult.paymentLink.url }, { status: 200 });
     }
 
-    // ── Standard path: native subscription plan checkout ─────────────────────
-    // Retrieve the variation to get its parent subscription plan ID
-    let parentPlanId = null;
-    try {
-      const { result: varResult } = await squareClient.catalogApi.retrieveCatalogObject(planID);
-      parentPlanId = varResult.object?.subscriptionPlanVariationData?.subscriptionPlanId || null;
-    } catch { /* fall through */ }
+    const itemName = `${variationName}${discountLabel}`;
+    const redirectUrl = `${appUrl}/api/v1/memberships/confirm?userID=${userID}&planVariationId=${planID}`;
 
-    if (!parentPlanId) {
-      return NextResponse.json({ error: "Could not resolve subscription plan." }, { status: 500 });
-    }
-
+    // Use quickPay — shows the plan name on checkout, no line items needed.
+    // The confirm endpoint creates the subscription after payment completes.
     const { result: checkoutResult } = await checkoutApi.createPaymentLink({
       idempotencyKey: uuidv4(),
-      order: {
+      quickPay: {
+        name: itemName,
+        priceMoney: { amount: BigInt(priceCents), currency },
         locationId: process.env.SQUARE_LOCATION_ID,
       },
       prePopulatedData: {
         buyerEmail: user.email || undefined,
       },
       checkoutOptions: {
-        subscriptionPlanId: parentPlanId,
         redirectUrl,
         askForShippingAddress: false,
       },
