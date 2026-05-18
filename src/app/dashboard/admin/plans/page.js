@@ -97,15 +97,29 @@ export default function PlansPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ planId: archivePlan.id }),
             });
+            const d = await res.json();
             if (res.ok) {
-                showToast('Plan archived.');
+                showToast(d.hidden
+                    ? 'Plan has active subscribers — hidden from member selection instead.'
+                    : 'Plan deleted from Square.');
                 setArchivePlan(null);
                 fetchPlans();
             } else {
-                const d = await res.json();
                 showToast(d.error || 'Failed to archive.', 'error');
             }
         } finally { setSubmitting(false); }
+    };
+
+    const handleRestore = async (plan) => {
+        try {
+            const res = await fetch('/api/v1/admin/plans', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ planId: plan.id, restore: true }),
+            });
+            if (res.ok) { showToast('Plan restored.'); fetchPlans(); }
+            else { const d = await res.json(); showToast(d.error || 'Failed to restore.', 'error'); }
+        } catch { showToast('Failed to restore.', 'error'); }
     };
 
     if (status !== 'authenticated') return null;
@@ -151,8 +165,11 @@ export default function PlansPage() {
                         <span>ACTIONS</span>
                     </div>
                     {plans.map((plan, i) => (
-                        <div key={plan.id} style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 120px', padding: '12px 14px', borderBottom: i < plans.length - 1 ? '1px solid var(--bd)' : 'none', alignItems: 'center', gap: 8 }}>
-                            <div style={{ fontSize: 12, color: 'var(--text-bright)', fontFamily: 'var(--mono)', fontWeight: 600 }}>{plan.name}</div>
+                        <div key={plan.id} style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 160px', padding: '12px 14px', borderBottom: i < plans.length - 1 ? '1px solid var(--bd)' : 'none', alignItems: 'center', gap: 8, opacity: plan.hidden ? 0.45 : 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontSize: 12, color: plan.hidden ? 'var(--text-dim)' : 'var(--text-bright)', fontFamily: 'var(--mono)', fontWeight: 600, textDecoration: plan.hidden ? 'line-through' : 'none' }}>{plan.name}</span>
+                                {plan.hidden && <span style={{ fontSize: 8, border: '1px solid var(--amber)', color: 'var(--amber)', padding: '1px 5px', letterSpacing: '0.1em' }}>HIDDEN</span>}
+                            </div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                 {(plan.variations || []).map(v => (
                                     <span key={v.id} style={{ fontSize: 9, border: '1px solid var(--bd-1)', color: 'var(--cyan)', padding: '2px 6px', letterSpacing: '0.08em' }}>
@@ -166,12 +183,20 @@ export default function PlansPage() {
                                 )}
                             </div>
                             <div style={{ display: 'flex', gap: 6 }}>
-                                <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px' }} onClick={() => { setEditName(plan.name); setEditPlan(plan); }}>
-                                    edit
-                                </button>
-                                <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px', borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => setArchivePlan(plan)}>
-                                    archive
-                                </button>
+                                {plan.hidden ? (
+                                    <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px', borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={() => handleRestore(plan)}>
+                                        restore
+                                    </button>
+                                ) : (
+                                    <>
+                                        <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px' }} onClick={() => { setEditName(plan.name); setEditPlan(plan); }}>
+                                            edit
+                                        </button>
+                                        <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px', borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => setArchivePlan(plan)}>
+                                            archive
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </div>
                     ))}
