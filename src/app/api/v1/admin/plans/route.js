@@ -41,17 +41,24 @@ function shapePlan(plan, hidden, subscriberCount = 0) {
     name: plan.subscriptionPlanData?.name || "Unnamed Plan",
     hidden: hidden.has(plan.id),
     subscriberCount,
-    variations: (plan.subscriptionPlanData?.subscriptionPlanVariations || []).map((v) => ({
-      id: v.id,
-      name: v.subscriptionPlanVariationData?.name || "",
-      cadence: v.subscriptionPlanVariationData?.phases?.[0]?.cadence || "UNKNOWN",
-      priceCents: Number(v.subscriptionPlanVariationData?.phases?.[0]?.pricing?.priceMoney?.amount ?? 0),
-      trialDays: (() => {
-        const phases = v.subscriptionPlanVariationData?.phases || [];
-        const trial = phases.find(p => p.ordinal === 0 && Number(p.priceMoney?.amount ?? p.pricing?.priceMoney?.amount ?? -1) === 0 && phases.length > 1);
-        return trial ? Number(trial.periods ?? 0) : 0;
-      })(),
-    })),
+    variations: (plan.subscriptionPlanData?.subscriptionPlanVariations || []).map((v) => {
+      const phases = v.subscriptionPlanVariationData?.phases || [];
+      // Billing phase = highest ordinal (trial is ordinal 0 when present)
+      const billingPhase = phases.reduce(
+        (best, p) => (Number(p.ordinal) > Number(best?.ordinal ?? -1) ? p : best),
+        phases[0]
+      );
+      const trialPhase = phases.length > 1
+        ? phases.find(p => Number(p.ordinal) === 0 && Number(p.pricing?.priceMoney?.amount ?? p.priceMoney?.amount ?? -1) === 0)
+        : null;
+      return {
+        id: v.id,
+        name: v.subscriptionPlanVariationData?.name || "",
+        cadence: billingPhase?.cadence || "UNKNOWN",
+        priceCents: Number(billingPhase?.pricing?.priceMoney?.amount ?? 0),
+        trialDays: trialPhase ? Number(trialPhase.periods ?? 0) : 0,
+      };
+    }),
   };
 }
 

@@ -491,9 +491,11 @@ export default function PlansPage() {
                         <td style={{ padding: '8px 8px', color: 'var(--text-bright)' }}>
                           {s.customer ? `${s.customer.firstName} ${s.customer.lastName}` : <span style={{ color: 'var(--text-dim)' }}>unknown</span>}
                         </td>
-                        <td style={{ padding: '8px 8px', color: 'var(--text-mid)' }}>{s.customer?.email || '—'}</td>
+                        <td style={{ padding: '8px 8px', color: 'var(--text-mid)' }}>
+                          {s.customer?.email?.includes('@') ? s.customer.email : '—'}
+                        </td>
                         <td style={{ padding: '8px 8px', color: 'var(--cyan)' }}>
-                          {variation ? `${formatPrice(variation.priceCents)}/${cadenceLabel(variation.cadence)}` : s.planVariationId?.slice(-6) || '—'}
+                          {variation ? `${formatPrice(variation.priceCents)}/${cadenceLabel(variation.cadence)}` : '—'}
                         </td>
                         <td style={{ padding: '8px 8px' }}>
                           <span style={{ fontSize: 9, border: `1px solid ${statusColor}`, color: statusColor, padding: '1px 5px', letterSpacing: '0.08em' }}>
