@@ -19,6 +19,7 @@ const ADMIN_LINKS = [
     { sym: '✉', label: 'email templates', desc: 'notification types', path: '/dashboard/admin/emails', color: 'var(--magenta)' },
     { sym: '◉', label: 'membership plans', desc: 'manage square plans', path: '/dashboard/admin/plans', color: 'var(--cyan)' },
     { sym: '⟁', label: 'square txns', desc: 'payment history', path: '/dashboard/admin/square-transactions', color: 'var(--green)' },
+    { sym: '%', label: 'coupons', desc: 'discount codes', path: '/dashboard/admin/coupons', color: 'var(--magenta)' },
 ];
 
 export default function AdminHomePage() {
