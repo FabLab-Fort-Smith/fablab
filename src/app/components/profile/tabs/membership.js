@@ -23,6 +23,7 @@ const MembershipTab = ({ user, onUpdateMembership, membershipApplied = false }) 
     const [billingType, setBillingType] = useState("MONTHLY");
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
     const [successDismissed, setSuccessDismissed] = useState(false);
+    const [couponCode, setCouponCode] = useState('');
     const router = useRouter();
 
     const membershipStatus = user?.membership || {};
@@ -92,7 +93,7 @@ const MembershipTab = ({ user, onUpdateMembership, membershipApplied = false }) 
             const res = await fetch(`/api/v1/memberships/${planID}/checkout`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userID: user.userID, price, currency: "USD" }),
+                body: JSON.stringify({ userID: user.userID, price, currency: "USD", couponCode: couponCode.trim() || undefined }),
             });
             const data = await res.json();
             if (!res.ok) {
@@ -245,6 +246,20 @@ const MembershipTab = ({ user, onUpdateMembership, membershipApplied = false }) 
                         {type}
                     </button>
                 ))}
+            </div>
+
+            {/* Coupon Code */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 24, maxWidth: 340 }}>
+                <input
+                    type="text"
+                    placeholder="coupon code (optional)"
+                    value={couponCode}
+                    onChange={e => setCouponCode(e.target.value.toUpperCase())}
+                    style={{ flex: 1, background: 'var(--bg-1)', border: '1px solid var(--bd)', color: 'var(--text)', padding: '7px 10px', fontSize: 12, fontFamily: 'var(--mono)', outline: 'none', letterSpacing: '0.06em' }}
+                />
+                {couponCode && (
+                    <button className="btn btn--sm" onClick={() => setCouponCode('')} style={{ fontSize: 10, padding: '6px 10px' }}>×</button>
+                )}
             </div>
 
             {/* Plan Cards */}

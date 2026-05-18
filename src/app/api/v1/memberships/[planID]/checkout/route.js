@@ -10,7 +10,7 @@ export async function POST(request, context) {
   try {
     const { params } = context;
     const { planID } = await params;
-    const { userID, price, currency } = await request.json();
+    const { userID, price, currency, couponCode } = await request.json();
 
     if (!userID || price == null || !currency) {
       return NextResponse.json({ error: "Missing required parameters." }, { status: 400 });
@@ -53,6 +53,32 @@ export async function POST(request, context) {
       variationName = catResult.object?.subscriptionPlanVariationData?.name || variationName;
     } catch { /* non-fatal */ }
 
+    // Resolve coupon against Square catalog discounts
+    let orderDiscounts = undefined;
+    if (couponCode) {
+      try {
+        const { result: searchResult } = await squareClient.catalogApi.searchCatalogObjects({
+          objectTypes: ["DISCOUNT"],
+          query: { exactQuery: { attributeName: "name", attributeValue: couponCode.toUpperCase() } },
+        });
+        const discount = (searchResult.objects || [])[0];
+        if (!discount) {
+          return NextResponse.json({ error: `Coupon code "${couponCode}" not found.` }, { status: 400 });
+        }
+        const dd = discount.discountData;
+        orderDiscounts = [{
+          uid: "coupon",
+          name: dd.name,
+          discountType: dd.discountType,
+          ...(dd.percentage != null ? { percentage: dd.percentage } : {}),
+          ...(dd.amountMoney != null ? { amountMoney: dd.amountMoney } : {}),
+          scope: "ORDER",
+        }];
+      } catch (err) {
+        return NextResponse.json({ error: "Failed to validate coupon." }, { status: 500 });
+      }
+    }
+
     const { result: checkoutResult } = await checkoutApi.createPaymentLink({
       idempotencyKey: uuidv4(),
       order: {
@@ -64,6 +90,7 @@ export async function POST(request, context) {
           basePriceMoney: { amount: BigInt(priceCents), currency },
           note: variationName,
         }],
+        ...(orderDiscounts ? { discounts: orderDiscounts } : {}),
       },
       checkoutOptions: {
         // Pass planVariationId so the confirm endpoint can create the subscription
