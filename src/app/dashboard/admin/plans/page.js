@@ -64,6 +64,7 @@ export default function PlansPage() {
   const [planTab, setPlanTab] = useState('active');
   const [migrateSubId, setMigrateSubId] = useState(null);
   const [migrateTargetVarId, setMigrateTargetVarId] = useState('');
+  const [pendingMigrations, setPendingMigrations] = useState({});
 
   const [addForm, setAddForm] = useState({
     name: '',
@@ -144,12 +145,16 @@ export default function PlansPage() {
       });
       const d = await res.json();
       if (!res.ok) { showToast(d.error || 'Migration failed.', 'error'); return; }
-      showToast('Subscription migrated.');
+      const targetVar = plans.flatMap(p => p.variations || []).find(v => v.id === migrateTargetVarId);
+      const targetPlan = plans.find(p => (p.variations || []).some(v => v.id === migrateTargetVarId));
+      const label = targetPlan && targetVar ? `${targetPlan.name} · ${targetVar.name || targetVar.cadence}` : 'new plan';
+      const msg = d.effectiveDate
+        ? `Migration to ${label} scheduled for ${d.effectiveDate} — no double charge.`
+        : `Migration to ${label} scheduled for next billing cycle — no double charge.`;
+      showToast(msg);
+      setPendingMigrations(prev => ({ ...prev, [subscriptionId]: { label, effectiveDate: d.effectiveDate } }));
       setMigrateSubId(null);
       setMigrateTargetVarId('');
-      const res2 = await fetch(`/api/v1/admin/plans?subscribers=${subscribersPlan.id}`);
-      if (res2.ok) setSubscribers(await res2.json());
-      fetchPlans();
     } catch (e) {
       showToast(e.message, 'error');
     } finally {
@@ -643,11 +648,19 @@ export default function PlansPage() {
                           {s.customer ? `${s.customer.firstName} ${s.customer.lastName}` : <span style={{ color: 'var(--text-dim)' }}>unknown</span>}
                         </td>
                         <td style={{ padding: '8px 8px', color: 'var(--cyan)' }}>
-                          {s.priceCents != null
-                            ? `${formatPrice(s.priceCents)}/${cadenceLabel(variation?.cadence || 'mo')}`
-                            : variation
-                              ? cadenceLabel(variation.cadence)
-                              : '—'}
+                          <div>
+                            {s.priceCents != null
+                              ? `${formatPrice(s.priceCents)}/${cadenceLabel(variation?.cadence || 'mo')}`
+                              : variation
+                                ? cadenceLabel(variation.cadence)
+                                : '—'}
+                            {pendingMigrations[s.id] && (
+                              <div style={{ fontSize: 8, color: 'var(--amber)', marginTop: 2, letterSpacing: '0.06em' }}>
+                                → {pendingMigrations[s.id].label}
+                                {pendingMigrations[s.id].effectiveDate ? ` (${pendingMigrations[s.id].effectiveDate})` : ' (next cycle)'}
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td style={{ padding: '8px 8px' }}>
                           <span style={{ fontSize: 9, border: `1px solid ${statusColor}`, color: statusColor, padding: '1px 5px', letterSpacing: '0.08em' }}>
@@ -704,7 +717,7 @@ export default function PlansPage() {
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-            <button className="btn btn--sm" style={{ fontSize: 10 }} onClick={() => { setSubscribersPlan(null); setSubscribers([]); }}>close</button>
+            <button className="btn btn--sm" style={{ fontSize: 10 }} onClick={() => { setSubscribersPlan(null); setSubscribers([]); setPendingMigrations({}); }}>close</button>
           </div>
         </Modal>
       )}

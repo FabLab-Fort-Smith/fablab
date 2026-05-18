@@ -426,7 +426,11 @@ export async function PATCH(request) {
     } else if (action === "migrate") {
       if (!newPlanVariationId)
         return NextResponse.json({ error: "newPlanVariationId is required." }, { status: 400 });
-      await subscriptionsApi.swapPlan(subscriptionId, { newPlanVariationId });
+      const { result: swapResult } = await subscriptionsApi.swapPlan(subscriptionId, { newPlanVariationId });
+      // Square queues the swap for the next billing cycle — find the pending action's effective date
+      const pendingAction = (swapResult.subscription?.actions || []).find(a => a.type === "SWAP_PLAN");
+      const effectiveDate = pendingAction?.effectiveDate || swapResult.subscription?.chargedThroughDate || null;
+      return NextResponse.json({ success: true, pending: true, effectiveDate }, { status: 200 });
     } else {
       return NextResponse.json({ error: "Invalid action. Use pause, resume, cancel, or migrate." }, { status: 400 });
     }
