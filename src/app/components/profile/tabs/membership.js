@@ -78,6 +78,10 @@ const MembershipTab = ({ user, onUpdateMembership }) => {
                 showToast("Selected billing option not available.", 'error');
                 return;
             }
+            if (variation.priceCents == null) {
+                showToast("Pricing unavailable. Please contact us to subscribe.", 'error');
+                return;
+            }
             planID = variation.id;
             price = variation.priceCents / 100;
         } else {
@@ -261,16 +265,19 @@ const MembershipTab = ({ user, onUpdateMembership }) => {
                 {filteredPlans.map(plan => {
                     const variation = plan.variations?.find(v => v.cadence === billingType);
                     const isCurrentPlan = currentMembership?.squareSubscriptionId && currentMembership?.planName === plan.name;
+                    const hasPrice = variation?.priceCents != null;
                     return (
                         <div key={plan.id} style={{ border: '2px solid var(--green)', background: isCurrentPlan ? 'rgba(57,255,20,0.05)' : 'var(--bg-card)', padding: '20px 20px' }}>
                             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-bright)', marginBottom: 8 }}>{plan.name}</div>
                             <div style={{ fontSize: 12, color: 'var(--text-mid)', marginBottom: 12 }}>
-                                {variation ? `$${(variation.priceCents / 100).toFixed(2)} / ${billingType === 'MONTHLY' ? 'mo' : 'yr'}` : 'Contact us for pricing'}
+                                {variation && hasPrice
+                                    ? `$${(variation.priceCents / 100).toFixed(2)} / ${billingType === 'MONTHLY' ? 'mo' : 'yr'}`
+                                    : 'Contact us for pricing'}
                             </div>
                             <button
                                 className="btn btn--filled btn--sm"
                                 style={{ width: '100%', fontSize: 10 }}
-                                disabled={isCurrentPlan || !variation}
+                                disabled={isCurrentPlan || !variation || !hasPrice}
                                 onClick={() => handleCheckout(plan)}
                             >
                                 {isCurrentPlan ? "Current Plan" : "$ subscribe"}
