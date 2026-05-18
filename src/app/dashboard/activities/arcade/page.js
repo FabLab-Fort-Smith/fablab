@@ -32,7 +32,7 @@ const ArcadePage = () => {
 
     return (
         <div style={{ minHeight: '100vh', background: 'var(--bg)', paddingTop: 32, paddingBottom: 64 }}>
-            <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
+            <div style={{ margin: '0 auto', padding: '0 24px' }}>
                 <div style={{ border: '4px solid var(--bd)', background: 'var(--bg)', overflow: 'hidden', position: 'relative' }}>
                     {/* Bezel bar */}
                     <div style={{ background: 'var(--bg-1)', padding: '8px 14px', borderBottom: '2px solid var(--bd)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

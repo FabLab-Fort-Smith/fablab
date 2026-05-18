@@ -123,7 +123,7 @@ export default function MembersPage() {
     const totalPages = Math.ceil(rowCount / PAGE_SIZE);
 
     return (
-        <div style={{ padding: '20px 24px', maxWidth: 1200 }}>
+        <div style={{ padding: '20px 24px' }}>
             {toast && <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 400, background: 'var(--bg-card)', border: `1px solid ${toast.color}`, color: toast.color, padding: '12px 18px', fontFamily: 'var(--mono)', fontSize: 12 }}>{toast.msg}</div>}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 28 }}>

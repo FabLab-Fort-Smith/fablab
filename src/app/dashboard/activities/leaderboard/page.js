@@ -30,7 +30,7 @@ export default function LeaderboardPage() {
     );
 
     return (
-        <div style={{ padding: '20px 24px', maxWidth: 1100 }}>
+        <div style={{ padding: '20px 24px' }}>
             <div style={{ marginBottom: 28 }}>
                 <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}><span style={{ color: 'var(--green)' }}>$</span> ./leaderboard --all</div>
                 <h1 style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.4rem, 3vw, 2rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)', margin: 0 }}>leaderboards</h1>

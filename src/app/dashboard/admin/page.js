@@ -33,7 +33,7 @@ export default function AdminHomePage() {
     if (status !== 'authenticated') return null;
 
     return (
-        <div style={{ padding: '20px 24px', maxWidth: 1100 }}>
+        <div style={{ padding: '20px 24px' }}>
             <div style={{ marginBottom: 28 }}>
                 <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}>
                     <span style={{ color: 'var(--magenta)' }}>$</span> sudo ./admin --panel

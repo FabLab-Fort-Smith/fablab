@@ -93,7 +93,7 @@ export default function BountyDetailPage() {
     const statusColor = STATUS_COLOR[bounty.status] || 'var(--text-dim)';
 
     return (
-        <div style={{ padding: '20px 24px', maxWidth: 900, margin: '0 auto' }}>
+        <div style={{ padding: '20px 24px', margin: '0 auto' }}>
             {/* Breadcrumb */}
             <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--mono)', marginBottom: 12 }}>
                 <Link href="/dashboard" style={{ color: 'var(--text-dim)', textDecoration: 'none' }}>dashboard</Link>

@@ -123,7 +123,7 @@ export default function SquareTransactionsPage() {
     }
 
     return (
-        <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 1400 }}>
+        <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
                 <div>

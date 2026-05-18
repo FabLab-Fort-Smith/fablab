@@ -64,7 +64,7 @@ export default function StakePage() {
     const spent = history.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0);
 
     return (
-        <div style={{ padding: '20px 24px', maxWidth: 860 }}>
+        <div style={{ padding: '20px 24px' }}>
             {/* Header */}
             <div style={{ marginBottom: 24 }}>
                 <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}>

@@ -126,7 +126,7 @@ export default function DashboardPage({ params }) {
     const menu = MENU(uid, role);
 
     return (
-        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 1200 }}>
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
             <Announcements />
 
             {/* Membership status banner */}

@@ -69,7 +69,7 @@ export default function ContactSubmissionsPage() {
     const newCount = submissions.filter(s => s.status === 'new').length;
 
     return (
-        <div style={{ padding: '20px 24px', maxWidth: 900 }}>
+        <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 28 }}>
                 <div>
                     <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}>

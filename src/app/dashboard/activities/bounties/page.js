@@ -192,7 +192,7 @@ export default function BountiesPage() {
     );
 
     return (
-        <div style={{ padding: '20px 24px', maxWidth: 1200 }}>
+        <div style={{ padding: '20px 24px' }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
                 <div>

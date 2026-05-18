@@ -77,7 +77,7 @@ export default function RepairQueuePage() {
     const totalPages = Math.ceil(total / PAGE_SIZE);
 
     return (
-        <div style={{ padding: '20px 24px', maxWidth: 1100 }}>
+        <div style={{ padding: '20px 24px' }}>
             {/* Detail modal */}
             {selected && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setSelected(null)}>

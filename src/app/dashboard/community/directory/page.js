@@ -138,7 +138,7 @@ export default function MembersDirectory() {
     );
 
     return (
-        <div style={{ padding: '20px 24px', maxWidth: 1200 }}>
+        <div style={{ padding: '20px 24px' }}>
             <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}>
                 <span style={{ color: 'var(--green)' }}>$</span> ./directory --list --public
             </div>

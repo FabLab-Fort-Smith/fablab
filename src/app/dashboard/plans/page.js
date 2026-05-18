@@ -17,7 +17,7 @@ export default function PlansPage() {
     }, []);
 
     return (
-        <div style={{ padding: '28px 24px', maxWidth: 1100 }}>
+        <div style={{ padding: '28px 24px' }}>
             <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}>
                 <span style={{ color: 'var(--green)' }}>$</span> ls ./membership/plans/
             </div>

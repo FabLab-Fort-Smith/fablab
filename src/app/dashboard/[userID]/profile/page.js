@@ -99,7 +99,7 @@ function ProfileContent() {
     if (loading) return <LoadingTerminal steps={LOADING_STEPS} />;
 
     return (
-        <div style={{ padding: '20px 24px', maxWidth: 1100 }}>
+        <div style={{ padding: '20px 24px' }}>
             {/* Breadcrumb */}
             <div style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.12em', marginBottom: 16, display: 'flex', gap: 8 }}>
                 <span

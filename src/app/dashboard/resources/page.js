@@ -52,7 +52,7 @@ export default function ResourcesPage() {
     const { data: session } = useSession();
 
     return (
-        <div style={{ padding: '20px 24px', maxWidth: 900 }}>
+        <div style={{ padding: '20px 24px' }}>
             <div style={{ marginBottom: 28 }}>
                 <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}>
                     <span style={{ color: 'var(--green)' }}>$</span> ls ./resources
