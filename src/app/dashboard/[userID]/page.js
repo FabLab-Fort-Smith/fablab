@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import LoadingTerminal from '@/app/components/LoadingTerminal';
 import WaysToEarnStake from '@/app/components/dashboard/WaysToEarnStake';
 import Announcements from '@/app/components/dashboard/Announcements';
@@ -32,13 +32,38 @@ const MENU = (uid, role) => [
     ] : []),
 ];
 
+const STATUS_BANNERS = {
+    registered: {
+        msg: 'Complete your application to start the membership process.',
+        label: '$ ./apply',
+        color: 'var(--cyan)',
+    },
+    applicant: {
+        msg: "Application received — we'll reach out within 3-5 business days.",
+        label: '$ view status',
+        color: 'var(--cyan)',
+    },
+    contacted: {
+        msg: 'A team member has been in touch. Your next step is the in-person orientation.',
+        label: '$ view status',
+        color: 'var(--green)',
+    },
+    onboarding: {
+        msg: 'Orientation done! Select a membership plan to get your access key.',
+        label: '$ select plan',
+        color: 'var(--green)',
+    },
+};
+
 export default function DashboardPage({ params }) {
     const { data: session, status } = useSession();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [userData, setUserData] = useState(null);
     const [loadingUser, setLoadingUser] = useState(true);
     const [isCheckedIn, setIsCheckedIn] = useState(false);
     const [checkInLoading, setCheckInLoading] = useState(false);
+    const [bannerDismissed, setBannerDismissed] = useState(false);
 
     useEffect(() => {
         if (!session?.user?.userID) return;
@@ -101,6 +126,38 @@ export default function DashboardPage({ params }) {
     return (
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 1200 }}>
             <Announcements />
+
+            {/* Membership status banner */}
+            {!bannerDismissed && userData && (() => {
+                const memberStatus = userData.membership?.status;
+                const applied = searchParams.get('membershipStatus') === 'applied';
+                if (applied) {
+                    return (
+                        <div style={{ border: '1px solid var(--green)', color: 'var(--green)', background: 'rgba(57,255,20,0.05)', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                            <span>✓ Application submitted! We'll reach out within 3-5 business days.</span>
+                            <button onClick={() => setBannerDismissed(true)} style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', fontSize: 14, padding: 0 }}>×</button>
+                        </div>
+                    );
+                }
+                const banner = STATUS_BANNERS[memberStatus];
+                if (!banner) return null;
+                const ctaPath = memberStatus === 'registered'
+                    ? `/dashboard/${uid}/onboarding`
+                    : memberStatus === 'onboarding'
+                    ? `/dashboard/${uid}/profile?tab=1`
+                    : `/dashboard/${uid}/profile?tab=1`;
+                return (
+                    <div style={{ border: `1px solid ${banner.color}`, color: banner.color, background: `color-mix(in srgb, ${banner.color} 5%, transparent)`, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                        <span>&gt; {banner.msg}</span>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <button className="btn btn--sm" style={{ fontSize: 10, borderColor: banner.color, color: banner.color }} onClick={() => router.push(ctaPath)}>
+                                {banner.label}
+                            </button>
+                            <button onClick={() => setBannerDismissed(true)} style={{ background: 'none', border: 'none', color: banner.color, cursor: 'pointer', fontSize: 16, padding: 0, lineHeight: 1 }}>×</button>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* Header */}
             <div>
