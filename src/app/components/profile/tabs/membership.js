@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import UsersService from '@/services/users';
 import LoadingTerminal from "@/app/components/LoadingTerminal";
 import VolunteerLog from "./VolunteerLog";
@@ -15,7 +15,7 @@ const STEPS = [
     { label: 'Select Membership', description: 'Choose a plan — your access key is issued immediately after payment.' },
 ];
 
-const MembershipTab = ({ user, onUpdateMembership }) => {
+const MembershipTab = ({ user, onUpdateMembership, membershipApplied = false }) => {
     const [plans, setPlans] = useState([]);
     const [currentMembership, setCurrentMembership] = useState(user?.membership || null);
     const [loading, setLoading] = useState(false);
@@ -24,12 +24,11 @@ const MembershipTab = ({ user, onUpdateMembership }) => {
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
     const [successDismissed, setSuccessDismissed] = useState(false);
     const router = useRouter();
-    const searchParams = useSearchParams();
 
     const membershipStatus = user?.membership || {};
     const isReadyForPayment = membershipStatus.applicationDate && membershipStatus.contacted && membershipStatus.onboardingComplete;
 
-    const showApplicationSuccess = searchParams.get("membershipStatus") === "applied" && !successDismissed;
+    const showApplicationSuccess = membershipApplied && !successDismissed;
 
     const activeStep = (() => {
         if (!membershipStatus.applicationDate) return 0;

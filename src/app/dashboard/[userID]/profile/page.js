@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import UserHeader from '@/app/components/profile/header';
@@ -35,6 +35,14 @@ function StatusToast({ status, onClose }) {
 }
 
 export default function ViewUserPage() {
+  return (
+    <Suspense fallback={<LoadingTerminal steps={LOADING_STEPS} />}>
+      <ProfileContent />
+    </Suspense>
+  );
+}
+
+function ProfileContent() {
     const { data: session } = useSession();
     const params = useParams();
     const searchParams = useSearchParams();
@@ -132,7 +140,7 @@ export default function ViewUserPage() {
                         </div>
                     </div>
                 )}
-                {activeTab === 1 && <MembershipTab user={user} onUpdateMembership={handleMembershipUpdate} />}
+                {activeTab === 1 && <MembershipTab user={user} onUpdateMembership={handleMembershipUpdate} membershipApplied={searchParams.get("membershipStatus") === "applied"} />}
                 {activeTab === 2 && <PublicProfileTab user={updatedUser} onEdit={handleEditChange} setActiveTab={setActiveTab} />}
                 {activeTab === 3 && <SettingsTab user={updatedUser} />}
             </div>
