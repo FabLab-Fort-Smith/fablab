@@ -10,9 +10,9 @@ export async function POST(request, context) {
   try {
     const { params } = context;
     const { planID } = await params;
-    const { userID, price, currency, couponCode } = await request.json();
+    const { userID, price, currency = "USD", couponCode } = await request.json();
 
-    if (!userID || price == null || !currency) {
+    if (!userID || price == null) {
       return NextResponse.json({ error: "Missing required parameters." }, { status: 400 });
     }
 
@@ -31,32 +31,23 @@ export async function POST(request, context) {
         idempotencyKey: uuidv4(),
         givenName: user.firstName || "Unknown",
         familyName: user.lastName || "User",
+        emailAddress: user.email,
         referenceId: userID,
       });
       squareCustomerId = result.customer.id;
       await usersCollection.updateOne({ userID }, { $set: { "membership.squareCustomerId": squareCustomerId } });
     }
 
-    // Square's order line items only accept CATALOG_ITEM_VARIATION objects (not
-    // SUBSCRIPTION_PLAN_VARIATION), so we use CUSTOM_AMOUNT to collect the first
-    // payment. The confirm endpoint creates the actual subscription after payment.
-    let priceCents = Math.round(price * 100);
-    if (priceCents <= 0) {
-      return NextResponse.json({ error: "Invalid price — cannot create a $0 checkout." }, { status: 400 });
-    }
+    const redirectUrl = `${appUrl}/api/v1/memberships/confirm?userID=${userID}&planVariationId=${planID}`;
 
-    // Fetch plan variation name for display
-    let variationName = "Membership";
-    try {
-      const { result: catResult } = await squareClient.catalogApi.retrieveCatalogObject(planID);
-      variationName = catResult.object?.subscriptionPlanVariationData?.name || variationName;
-    } catch { /* non-fatal */ }
-
-    // Validate coupon and calculate discounted price on our side.
-    // Square's order-level discount API is unreliable with CUSTOM_AMOUNT items,
-    // so we apply the discount ourselves and pass the final price to Square.
-    let discountLabel = null;
+    // ── Coupon path: calculate discount, use CUSTOM_AMOUNT checkout ──────────
     if (couponCode) {
+      let priceCents = Math.round(price * 100);
+      if (priceCents <= 0) {
+        return NextResponse.json({ error: "Invalid price." }, { status: 400 });
+      }
+
+      // Validate coupon against Square catalog discounts
       const { result: searchResult } = await squareClient.catalogApi.searchCatalogObjects({
         objectTypes: ["DISCOUNT"],
         query: { exactQuery: { attributeName: "name", attributeValue: couponCode.toUpperCase() } },
@@ -66,37 +57,68 @@ export async function POST(request, context) {
         return NextResponse.json({ error: `Coupon "${couponCode}" not found.` }, { status: 400 });
       }
       const dd = discount.discountData;
+      let discountLabel = "";
       if (dd.discountType === "FIXED_PERCENTAGE") {
         const pct = parseFloat(dd.percentage || "0") / 100;
-        const savings = Math.round(priceCents * pct);
-        priceCents = Math.max(1, priceCents - savings); // min $0.01
-        discountLabel = `${dd.percentage}% off`;
+        priceCents = Math.max(1, priceCents - Math.round(priceCents * pct));
+        discountLabel = ` (${dd.percentage}% off)`;
       } else if (dd.discountType === "FIXED_AMOUNT" && dd.amountMoney) {
-        const savings = Number(dd.amountMoney.amount);
-        priceCents = Math.max(1, priceCents - savings);
-        discountLabel = `$${(savings / 100).toFixed(2)} off`;
+        priceCents = Math.max(1, priceCents - Number(dd.amountMoney.amount));
+        discountLabel = ` ($${(Number(dd.amountMoney.amount) / 100).toFixed(2)} off)`;
       }
+
+      let variationName = "Membership";
+      try {
+        const { result: varResult } = await squareClient.catalogApi.retrieveCatalogObject(planID);
+        variationName = varResult.object?.subscriptionPlanVariationData?.name || variationName;
+      } catch { /* non-fatal */ }
+
+      const { result: checkoutResult } = await checkoutApi.createPaymentLink({
+        idempotencyKey: uuidv4(),
+        description: `${variationName}${discountLabel}`,
+        order: {
+          locationId: process.env.SQUARE_LOCATION_ID,
+          customerId: squareCustomerId,
+          lineItems: [{
+            quantity: "1",
+            itemType: "CUSTOM_AMOUNT",
+            basePriceMoney: { amount: BigInt(priceCents), currency },
+            note: `${variationName}${discountLabel}`,
+          }],
+        },
+        checkoutOptions: {
+          redirectUrl,
+          askForShippingAddress: false,
+        },
+      });
+
+      if (!checkoutResult.paymentLink?.url) {
+        return NextResponse.json({ error: "Failed to create checkout link." }, { status: 500 });
+      }
+      return NextResponse.json({ url: checkoutResult.paymentLink.url }, { status: 200 });
     }
 
-    const lineItemNote = discountLabel
-      ? `${variationName} (${discountLabel})`
-      : variationName;
+    // ── Standard path: native subscription plan checkout ─────────────────────
+    // Retrieve the variation to get its parent subscription plan ID
+    let parentPlanId = null;
+    try {
+      const { result: varResult } = await squareClient.catalogApi.retrieveCatalogObject(planID);
+      parentPlanId = varResult.object?.subscriptionPlanVariationData?.subscriptionPlanId || null;
+    } catch { /* fall through */ }
+
+    if (!parentPlanId) {
+      return NextResponse.json({ error: "Could not resolve subscription plan." }, { status: 500 });
+    }
 
     const { result: checkoutResult } = await checkoutApi.createPaymentLink({
       idempotencyKey: uuidv4(),
-      description: lineItemNote,
       order: {
         locationId: process.env.SQUARE_LOCATION_ID,
         customerId: squareCustomerId,
-        lineItems: [{
-          quantity: "1",
-          itemType: "CUSTOM_AMOUNT",
-          basePriceMoney: { amount: BigInt(priceCents), currency },
-          note: lineItemNote,
-        }],
       },
       checkoutOptions: {
-        redirectUrl: `${appUrl}/api/v1/memberships/confirm?userID=${userID}&planVariationId=${planID}`,
+        subscriptionPlanId: parentPlanId,
+        redirectUrl,
         askForShippingAddress: false,
       },
     });
@@ -104,8 +126,8 @@ export async function POST(request, context) {
     if (!checkoutResult.paymentLink?.url) {
       return NextResponse.json({ error: "Failed to create checkout link." }, { status: 500 });
     }
-
     return NextResponse.json({ url: checkoutResult.paymentLink.url }, { status: 200 });
+
   } catch (error) {
     const msg = error?.errors?.[0]?.detail || error?.message || "Failed to create checkout link.";
     console.error("❌ Checkout error:", msg);
