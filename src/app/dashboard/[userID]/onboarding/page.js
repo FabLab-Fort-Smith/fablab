@@ -1,322 +1,209 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import {
-  TextField,
-  Button,
-  Typography,
-  Container,
-  Box,
-  Grid,
-  Paper,
-  Alert,
-  FormControl,
-  FormLabel,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  Checkbox,
-  FormGroup,
-  Autocomplete,
-  Chip
-} from "@mui/material";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useParams } from "next/navigation";
 import LoadingTerminal from "@/app/components/LoadingTerminal";
 
-const commonInterests = [
+const COMMON_INTERESTS = [
     "3D Printing", "Laser Cutting", "CNC Machining", "Woodworking", "Metalworking",
     "Electronics", "Arduino", "Raspberry Pi", "Programming", "Web Development",
     "Graphic Design", "CAD/CAM", "Sewing", "Embroidery", "Vinyl Cutting",
-    "Gaming", "Reading", "Hiking", "Cooking", "Traveling", "Photography", 
-    "Music", "Art", "Gardening", "DIY", "Robotics", "Cosplay", "Board Games"
+    "Gaming", "Reading", "Hiking", "Cooking", "Traveling", "Photography",
+    "Music", "Art", "Gardening", "DIY", "Robotics", "Cosplay", "Board Games",
 ];
+const CREATOR_TYPES = ['Maker', 'Crafter', 'Artist', 'Hacker', 'Other'];
 
 const OnboardingPage = () => {
-  const { data: session, status } = useSession();
-  const router = useRouter();
-  const params = useParams();
-  const [loading, setLoading] = useState(true);
-  const [fetchedUser, setFetchedUser] = useState(null);
-  const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    phoneNumber: "",
-    discordHandle: "",
-    bio: "",
-    creatorType: [],
-    interests: [],
-    cityChange: "",
-    knownMembers: "",
-    questions: "",
-  });
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
+    const { data: session, status } = useSession();
+    const router = useRouter();
+    const params = useParams();
+    const [loading, setLoading] = useState(true);
+    const [fetchedUser, setFetchedUser] = useState(null);
+    const [form, setForm] = useState({ firstName: "", lastName: "", phoneNumber: "", discordHandle: "", bio: "", creatorType: [], interests: [], cityChange: "", knownMembers: "", questions: "" });
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState(false);
+    const [interestInput, setInterestInput] = useState("");
+    const [showSuggestions, setShowSuggestions] = useState(false);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      if (session?.user?.userID) {
-        try {
-          const res = await fetch(`/api/v1/users?userID=${session.user.userID}`);
-          if (res.ok) {
-            const data = await res.json();
-            const userData = data.user;
-            setFetchedUser(userData);
-            setForm((prev) => ({
-              ...prev,
-              firstName: userData.firstName || "",
-              lastName: userData.lastName || "",
-              phoneNumber: userData.phoneNumber || "",
-              discordHandle: userData.discordHandle || (userData.provider === 'discord' ? userData.username : ""),
-              bio: userData.bio || "",
-              creatorType: Array.isArray(userData.creatorType) ? userData.creatorType : (userData.creatorType ? [userData.creatorType] : []),
-              interests: Array.isArray(userData.interests) ? userData.interests : [],
-              cityChange: userData.cityChange || "",
-              knownMembers: userData.knownMembers || "",
-              questions: userData.questions || "",
-            }));
-          }
-        } catch (error) {
-          console.error("Failed to fetch user data", error);
-        } finally {
-          setLoading(false);
-        }
-      }
+    useEffect(() => {
+        if (status === "unauthenticated") { router.push("/auth/signin"); return; }
+        if (status !== "authenticated" || !session?.user?.userID) return;
+        fetch(`/api/v1/users?userID=${session.user.userID}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                const u = data.user;
+                setFetchedUser(u);
+                setForm(prev => ({
+                    ...prev,
+                    firstName: u.firstName || "",
+                    lastName: u.lastName || "",
+                    phoneNumber: u.phoneNumber || "",
+                    discordHandle: u.discordHandle || (u.provider === 'discord' ? u.username : ""),
+                    bio: u.bio || "",
+                    creatorType: Array.isArray(u.creatorType) ? u.creatorType : (u.creatorType ? [u.creatorType] : []),
+                    interests: Array.isArray(u.interests) ? u.interests : [],
+                    cityChange: u.cityChange || "",
+                    knownMembers: u.knownMembers || "",
+                    questions: u.questions || "",
+                }));
+            })
+            .catch(() => {})
+            .finally(() => setLoading(false));
+    }, [session, status, router]);
+
+    const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+
+    const toggleCreatorType = (type) => {
+        setForm(prev => ({
+            ...prev,
+            creatorType: prev.creatorType.includes(type)
+                ? prev.creatorType.filter(t => t !== type)
+                : [...prev.creatorType, type],
+        }));
     };
 
-    if (status === "authenticated") {
-      fetchUser();
-    } else if (status === "unauthenticated") {
-        router.push("/auth/signin");
-    }
-  }, [session, status, router]);
+    const addInterest = (val) => {
+        const v = val.trim();
+        if (v && !form.interests.includes(v)) setForm(f => ({ ...f, interests: [...f.interests, v] }));
+        setInterestInput("");
+        setShowSuggestions(false);
+    };
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
+    const removeInterest = (val) => setForm(f => ({ ...f, interests: f.interests.filter(i => i !== val) }));
 
-  const handleCreatorTypeChange = (event) => {
-     const { value, checked } = event.target;
-     setForm((prev) => {
-         const currentTypes = prev.creatorType || [];
-         if (checked) {
-             return { ...prev, creatorType: [...currentTypes, value] };
-         } else {
-             return { ...prev, creatorType: currentTypes.filter((type) => type !== value) };
-         }
-     });
-  };
+    const filteredSuggestions = COMMON_INTERESTS.filter(i => i.toLowerCase().includes(interestInput.toLowerCase()) && !form.interests.includes(i));
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setError("");
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError("");
+        try {
+            const updatedMembership = { ...fetchedUser?.membership, applicationDate: fetchedUser?.membership?.applicationDate || new Date().toISOString() };
+            const res = await fetch(`/api/v1/users?userID=${params.userID}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ...form, membership: updatedMembership }),
+            });
+            if (res.ok) {
+                setSuccess(true);
+                setTimeout(() => router.push(`/dashboard/${params.userID}`), 2000);
+            } else {
+                const data = await res.json();
+                setError(data.message || "Update failed.");
+            }
+        } catch { setError("Something went wrong."); }
+    };
 
-    try {
-      const updatedMembership = {
-          ...fetchedUser?.membership,
-          // onboardingComplete is NOT set here. It is set by Admin after in-person orientation.
-          applicationDate: fetchedUser?.membership?.applicationDate || new Date().toISOString()
-      };
+    if (loading || status === "loading") return <LoadingTerminal />;
 
-      const res = await fetch(`/api/v1/users?userID=${params.userID}`, {
-        method: "PUT",
-        body: JSON.stringify({
-            ...form,
-            membership: updatedMembership
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+    const labelStyle = { display: 'block', fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 6 };
+    const fieldWrap = { marginBottom: 20 };
 
-      if (res.ok) {
-        setSuccess(true);
-        setTimeout(() => {
-            router.push(`/dashboard/${params.userID}`);
-        }, 2000);
-      } else {
-        const errorData = await res.json();
-        setError(errorData.message || "Update failed.");
-      }
-    } catch (err) {
-      setError("Something went wrong.");
-    }
-  };
+    return (
+        <div style={{ padding: '20px 24px', maxWidth: 680, margin: '0 auto' }}>
+            <div style={{ marginBottom: 28 }}>
+                <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}><span style={{ color: 'var(--green)' }}>$</span> ./onboarding --questionnaire</div>
+                <h1 style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.4rem, 3vw, 2rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)', margin: 0 }}>onboarding questionnaire</h1>
+                <p style={{ color: 'var(--text-mid)', fontSize: 12, marginTop: 6 }}>complete your profile to continue the membership process.</p>
+            </div>
 
-  if (loading || status === "loading") {
-      return <LoadingTerminal />;
-  }
+            {error && <div style={{ border: '1px solid var(--red)', color: 'var(--red)', padding: '10px 14px', marginBottom: 20, fontSize: 12, fontFamily: 'var(--mono)' }}>✕ {error}</div>}
+            {success && <div style={{ border: '1px solid var(--green)', color: 'var(--green)', padding: '10px 14px', marginBottom: 20, fontSize: 12, fontFamily: 'var(--mono)' }}>✓ Information saved! Redirecting...</div>}
 
-  return (
-    <Container component="main" maxWidth="md">
-      <Paper sx={{ padding: 4, marginTop: 4, border: '1px solid', borderColor: 'primary.main' }}>
-        <Typography component="h1" variant="h4" align="center" gutterBottom sx={{ color: 'primary.main' }}>
-          Onboarding Questionnaire
-        </Typography>
-        <Typography variant="body1" align="center" paragraph color="text.primary">
-          Please complete the following information to continue your membership process.
-        </Typography>
+            <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)', padding: '24px 28px' }}>
+                <form onSubmit={handleSubmit}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+                        {!fetchedUser?.firstName && (
+                            <div>
+                                <label style={labelStyle}>FIRST_NAME *</label>
+                                <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} name="firstName" value={form.firstName} onChange={handleChange} required />
+                            </div>
+                        )}
+                        {!fetchedUser?.lastName && (
+                            <div>
+                                <label style={labelStyle}>LAST_NAME *</label>
+                                <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} name="lastName" value={form.lastName} onChange={handleChange} required />
+                            </div>
+                        )}
+                        {!fetchedUser?.phoneNumber && (
+                            <div>
+                                <label style={labelStyle}>PHONE_NUMBER *</label>
+                                <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} name="phoneNumber" value={form.phoneNumber} onChange={handleChange} required />
+                            </div>
+                        )}
+                        {!fetchedUser?.discordHandle && (
+                            <div>
+                                <label style={labelStyle}>DISCORD_HANDLE *</label>
+                                <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} name="discordHandle" value={form.discordHandle} onChange={handleChange} required />
+                                <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 4 }}>Required for community access</div>
+                            </div>
+                        )}
+                    </div>
 
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-        {success && <Alert severity="success" sx={{ mb: 2 }}>Information saved! Redirecting...</Alert>}
+                    <div style={fieldWrap}>
+                        <label style={labelStyle}>ABOUT_YOU (BIO) *</label>
+                        <textarea className="input" rows={4} style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', fontSize: 12 }} name="bio" value={form.bio} onChange={handleChange} required />
+                    </div>
 
-        <form onSubmit={handleSubmit}>
-          <Grid container spacing={3}>
-            {!fetchedUser?.firstName && (
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="First Name"
-                  name="firstName"
-                  value={form.firstName}
-                  onChange={handleChange}
-                  required
-                />
-              </Grid>
-            )}
-            {!fetchedUser?.lastName && (
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Last Name"
-                  name="lastName"
-                  value={form.lastName}
-                  onChange={handleChange}
-                  required
-                />
-              </Grid>
-            )}
-            {!fetchedUser?.phoneNumber && (
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Phone Number"
-                  name="phoneNumber"
-                  value={form.phoneNumber}
-                  onChange={handleChange}
-                  required
-                />
-              </Grid>
-            )}
-            {!fetchedUser?.discordHandle && (
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Discord Handle"
-                  name="discordHandle"
-                  value={form.discordHandle}
-                  onChange={handleChange}
-                  required
-                  helperText="Required for community access"
-                />
-              </Grid>
-            )}
-            
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="About You (Bio)"
-                name="bio"
-                multiline
-                rows={4}
-                value={form.bio}
-                onChange={handleChange}
-                required
-              />
-            </Grid>
+                    <div style={fieldWrap}>
+                        <label style={labelStyle}>CREATOR_TYPE — what kind of creator are you?</label>
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            {CREATOR_TYPES.map(type => (
+                                <button key={type} type="button" onClick={() => toggleCreatorType(type)}
+                                    className={`btn btn--sm ${form.creatorType.includes(type) ? '' : 'btn--ghost'}`}
+                                    style={{ fontSize: 10, borderColor: form.creatorType.includes(type) ? 'var(--green)' : undefined, color: form.creatorType.includes(type) ? 'var(--green)' : undefined }}>
+                                    {type}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
 
-            <Grid item xs={12}>
-              <FormControl component="fieldset">
-                <FormLabel component="legend" sx={{ color: 'primary.main', '&.Mui-focused': { color: 'primary.main' } }}>What creator type are you?</FormLabel>
-                <FormGroup row>
-                  {['Maker', 'Crafter', 'Artist', 'Hacker', 'Other'].map((type) => (
-                    <FormControlLabel
-                      key={type}
-                      control={
-                        <Checkbox
-                          checked={form.creatorType.includes(type)}
-                          onChange={handleCreatorTypeChange}
-                          value={type}
-                          sx={{ color: 'primary.main', '&.Mui-checked': { color: 'primary.main' } }}
-                        />
-                      }
-                      label={type}
-                    />
-                  ))}
-                </FormGroup>
-              </FormControl>
-            </Grid>
+                    <div style={fieldWrap}>
+                        <label style={labelStyle}>INTERESTS &amp; SKILLS</label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                            {form.interests.map(i => (
+                                <span key={i} style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--green)', border: '1px solid var(--green)', padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    {i} <button type="button" onClick={() => removeInterest(i)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 10, padding: 0 }}>×</button>
+                                </span>
+                            ))}
+                        </div>
+                        <div style={{ position: 'relative' }}>
+                            <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} placeholder="Add interests... (press Enter)" value={interestInput}
+                                onChange={e => { setInterestInput(e.target.value); setShowSuggestions(true); }}
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (interestInput.trim()) addInterest(interestInput); } }}
+                                onFocus={() => setShowSuggestions(true)} onBlur={() => setTimeout(() => setShowSuggestions(false), 150)} />
+                            {showSuggestions && interestInput && filteredSuggestions.length > 0 && (
+                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-card)', border: '1px solid var(--bd)', zIndex: 100, maxHeight: 200, overflowY: 'auto' }}>
+                                    {filteredSuggestions.slice(0, 10).map(s => (
+                                        <button key={s} type="button" onMouseDown={() => addInterest(s)} style={{ display: 'block', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '8px 12px', textAlign: 'left', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text)', borderBottom: '1px solid var(--bd)' }}>
+                                            {s}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
 
-            <Grid item xs={12}>
-              <FormLabel component="legend" sx={{ color: 'primary.main', mb: 1, display: 'block' }}>What are your interests and skills?</FormLabel>
-              <Autocomplete
-                multiple
-                freeSolo
-                options={commonInterests}
-                value={form.interests || []}
-                onChange={(event, newValue) => setForm({ ...form, interests: newValue })}
-                renderTags={(value, getTagProps) =>
-                  value.map((option, index) => (
-                    <Chip variant="outlined" label={option} {...getTagProps({ index })} />
-                  ))
-                }
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    variant="outlined"
-                    placeholder="Add interests..."
-                    helperText="Press Enter to add custom interests"
-                  />
-                )}
-              />
-            </Grid>
+                    <div style={fieldWrap}>
+                        <label style={labelStyle}>CITY_CHANGE — if you could change one thing in our city, what would it be? *</label>
+                        <textarea className="input" rows={2} style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', fontSize: 12 }} name="cityChange" value={form.cityChange} onChange={handleChange} required />
+                    </div>
 
-            <Grid item xs={12}>
-              <FormLabel component="legend" sx={{ color: 'primary.main', mb: 1, display: 'block' }}>If you could change one thing in our city, what would it be?</FormLabel>
-              <TextField
-                fullWidth
-                name="cityChange"
-                multiline
-                rows={2}
-                value={form.cityChange}
-                onChange={handleChange}
-                required
-              />
-            </Grid>
+                    <div style={fieldWrap}>
+                        <label style={labelStyle}>KNOWN_MEMBERS — do you know any current co-op members?</label>
+                        <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} name="knownMembers" value={form.knownMembers} onChange={handleChange} />
+                    </div>
 
-            <Grid item xs={12}>
-              <FormLabel component="legend" sx={{ color: 'primary.main', mb: 1, display: 'block' }}>Do you know any current co-op members? If so, who?</FormLabel>
-              <TextField
-                fullWidth
-                name="knownMembers"
-                value={form.knownMembers}
-                onChange={handleChange}
-              />
-            </Grid>
+                    <div style={fieldWrap}>
+                        <label style={labelStyle}>QUESTIONS — do you have any questions for us?</label>
+                        <textarea className="input" rows={2} style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', fontSize: 12 }} name="questions" value={form.questions} onChange={handleChange} />
+                    </div>
 
-            <Grid item xs={12}>
-              <FormLabel component="legend" sx={{ color: 'primary.main', mb: 1, display: 'block' }}>Do you have any questions for us?</FormLabel>
-              <TextField
-                fullWidth
-                name="questions"
-                multiline
-                rows={2}
-                value={form.questions}
-                onChange={handleChange}
-              />
-            </Grid>
-          </Grid>
-
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            color="primary"
-            sx={{ marginTop: 4 }}
-          >
-            Submit Questionnaire
-          </Button>
-        </form>
-      </Paper>
-    </Container>
-  );
+                    <button type="submit" className="btn btn--filled" style={{ width: '100%', fontSize: 12, marginTop: 8 }}>$ submit questionnaire</button>
+                </form>
+            </div>
+        </div>
+    );
 };
 
 export default OnboardingPage;

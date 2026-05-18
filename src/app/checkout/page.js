@@ -2,15 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  Box,
-  Typography,
-  CircularProgress,
-  Card,
-  CardContent,
-  Snackbar,
-  TextField,
-} from "@mui/material";
 import { PaymentForm, CreditCard } from "react-square-web-payments-sdk";
 import { submitPayment } from "@/app/actions/actions";
 import MembershipService from "@/services/memberships";
@@ -23,17 +14,19 @@ const CheckoutPage = ({ user }) => {
 
   const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState("");
-  const [snackbarSeverity, setSnackbarSeverity] = useState("info");
+  const [toast, setToast] = useState(null);
 
-  // Billing Information State (Auto-filling Full Name)
   const [fullName, setFullName] = useState(`${user?.fName || ""} ${user?.lName || ""}`.trim());
   const [address, setAddress] = useState(user?.address || "");
   const [city, setCity] = useState(user?.city || "");
   const [state, setState] = useState(user?.state || "");
   const [zip, setZip] = useState(user?.zip || "");
   const [country, setCountry] = useState(user?.country || "US");
+
+  const showToast = (message, type = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   useEffect(() => {
     const fetchPlanDetails = async () => {
@@ -44,10 +37,7 @@ const CheckoutPage = ({ user }) => {
         if (!selectedPlan) throw new Error("Plan not found.");
         setPlan(selectedPlan);
       } catch (error) {
-        console.error("❌ Error loading plan data:", error);
-        setSnackbarMessage(error.message || "Failed to load checkout details.");
-        setSnackbarSeverity("error");
-        setSnackbarOpen(true);
+        showToast(error.message || "Failed to load checkout details.", 'error');
       } finally {
         setLoading(false);
       }
@@ -58,138 +48,96 @@ const CheckoutPage = ({ user }) => {
   const handlePaymentSuccess = async (token) => {
     try {
       setLoading(true);
-      console.log("📤 Sending Payment Request...");
-
-      const subscriptionData = {
+      const response = await submitPayment({
         planVariationId: variationId,
         paymentMethod: token.token,
-        billingAddress: {
-          fullName,
-          address,
-          city,
-          state,
-          zip,
-          country,
-        },
-      };
-
-      const response = await submitPayment(subscriptionData);
+        billingAddress: { fullName, address, city, state, zip, country },
+      });
       if (response.success) {
-        setSnackbarMessage("✅ Payment successful! Redirecting...");
-        setSnackbarSeverity("success");
+        showToast("Payment successful! Redirecting...", 'success');
         setTimeout(() => router.push("/confirmation"), 2000);
       } else {
         throw new Error(response.error);
       }
     } catch (error) {
-      console.error("❌ Payment Error:", error);
-      setSnackbarMessage("Payment failed. Please try again.");
-      setSnackbarSeverity("error");
+      showToast("Payment failed. Please try again.", 'error');
     } finally {
       setLoading(false);
-      setSnackbarOpen(true);
     }
   };
 
-  if (loading) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", my: 5 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
+  const labelStyle = { display: 'block', fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 6 };
+  const fieldWrap = { marginBottom: 16 };
 
-  if (!plan) {
-    return (
-      <Typography color="error" sx={{ textAlign: "center", mt: 3 }}>
-        Error: Plan details not found.
-      </Typography>
-    );
-  }
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+      <div style={{ color: 'var(--text-dim)', fontFamily: 'var(--mono)', fontSize: 13 }}>loading<span style={{ animation: 'blink 1s step-end infinite' }}>_</span></div>
+    </div>
+  );
+
+  if (!plan) return (
+    <div style={{ padding: '40px 24px', textAlign: 'center' }}>
+      <div style={{ color: 'var(--red)', fontFamily: 'var(--mono)', fontSize: 13 }}>✕ Plan details not found.</div>
+    </div>
+  );
 
   return (
-    <Box sx={{ mt: 3, maxWidth: 600, mx: "auto" }}>
-      <Typography variant="h5" gutterBottom>
-        Checkout
-      </Typography>
-      <Card sx={{ mt: 3, p: 3 }}>
-        <CardContent>
-          <Typography variant="h6">{plan.name}</Typography>
-          <Typography variant="body1" sx={{ mb: 2 }}>
-            Price: <strong>${plan.price}</strong> per {plan.cadence}
-          </Typography>
+    <div style={{ padding: '20px 24px', maxWidth: 600, margin: '0 auto' }}>
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 9999, border: `1px solid ${toast.type === 'error' ? 'var(--red)' : toast.type === 'success' ? 'var(--green)' : 'var(--cyan)'}`, color: toast.type === 'error' ? 'var(--red)' : toast.type === 'success' ? 'var(--green)' : 'var(--cyan)', background: 'var(--bg-card)', padding: '10px 20px', fontFamily: 'var(--mono)', fontSize: 12, whiteSpace: 'nowrap' }}>
+          {toast.message}
+        </div>
+      )}
 
-          {/* Billing Information Form */}
-          <TextField
-            label="Full Name"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            required
-          />
-          <TextField
-            label="Address"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            required
-          />
-          <TextField
-            label="City"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            required
-          />
-          <TextField
-            label="State"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={state}
-            onChange={(e) => setState(e.target.value)}
-            required
-          />
-          <TextField
-            label="ZIP Code"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={zip}
-            onChange={(e) => setZip(e.target.value)}
-            required
-          />
-          <TextField
-            label="Country"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={country}
-            onChange={(e) => setCountry(e.target.value)}
-            required
-          />
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}><span style={{ color: 'var(--green)' }}>$</span> ./checkout --plan</div>
+        <h1 style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.4rem, 3vw, 2rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)', margin: 0 }}>checkout</h1>
+      </div>
 
-          {/* Square Payment Form (Only Includes the Pay Button) */}
-          <PaymentForm
-            applicationId={process.env.NEXT_PUBLIC_SQUARE_APP_ID}
-            locationId={process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID}
-            cardTokenizeResponseReceived={handlePaymentSuccess}
-          >
-            <CreditCard />
-          </PaymentForm>
+      <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)', padding: '24px 28px', marginBottom: 20 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-bright)', marginBottom: 4 }}>{plan.name}</div>
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--green)', marginBottom: 20 }}>
+          ${plan.price} / {plan.cadence}
+        </div>
 
-        </CardContent>
-      </Card>
+        <div style={fieldWrap}>
+          <label style={labelStyle}>FULL_NAME</label>
+          <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} value={fullName} onChange={e => setFullName(e.target.value)} required />
+        </div>
+        <div style={fieldWrap}>
+          <label style={labelStyle}>ADDRESS</label>
+          <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} value={address} onChange={e => setAddress(e.target.value)} required />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+          <div>
+            <label style={labelStyle}>CITY</label>
+            <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} value={city} onChange={e => setCity(e.target.value)} required />
+          </div>
+          <div>
+            <label style={labelStyle}>STATE</label>
+            <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} value={state} onChange={e => setState(e.target.value)} required />
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+          <div>
+            <label style={labelStyle}>ZIP_CODE</label>
+            <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} value={zip} onChange={e => setZip(e.target.value)} required />
+          </div>
+          <div>
+            <label style={labelStyle}>COUNTRY</label>
+            <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} value={country} onChange={e => setCountry(e.target.value)} required />
+          </div>
+        </div>
 
-      {/* Snackbar Notifications */}
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={4000}
-        onClose={() => setSnackbarOpen(false)}
-        message={snackbarMessage}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      />
-    </Box>
+        <PaymentForm
+          applicationId={process.env.NEXT_PUBLIC_SQUARE_APP_ID}
+          locationId={process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID}
+          cardTokenizeResponseReceived={handlePaymentSuccess}
+        >
+          <CreditCard />
+        </PaymentForm>
+      </div>
+    </div>
   );
 };
 

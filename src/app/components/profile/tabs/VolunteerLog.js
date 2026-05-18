@@ -1,241 +1,114 @@
 "use client";
 import React, { useState } from 'react';
-import { 
-    Box, Typography, Paper, Table, TableBody, TableCell, 
-    TableContainer, TableHead, TableRow, Button, 
-    Dialog, DialogTitle, DialogContent, DialogActions, 
-    TextField, Chip, Alert, Card, CardContent, Fab, useTheme
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import EventIcon from '@mui/icons-material/Event';
+
+const STATUS_COLOR = { pending: 'var(--amber)', rejected: 'var(--red)', approved: 'var(--green)' };
 
 export default function VolunteerLog({ user, onUpdate }) {
-    const theme = useTheme();
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [formData, setFormData] = useState({
-        date: new Date().toISOString().split('T')[0],
-        hours: '',
-        description: ''
-    });
+    const [formData, setFormData] = useState({ date: new Date().toISOString().split('T')[0], hours: '', description: '' });
 
     const logs = user?.membership?.volunteerLog || [];
-    
-    // Sort logs by date desc
     const sortedLogs = [...logs].sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    // Calculate total hours
-    const totalHours = logs.reduce((acc, log) => acc + (Number(log.hours) || 0), 0);
-    const pendingHours = logs.filter(l => l.status === 'pending').reduce((acc, log) => acc + (Number(log.hours) || 0), 0);
-    const approvedHours = logs.filter(l => !l.status || l.status === 'approved').reduce((acc, log) => acc + (Number(log.hours) || 0), 0);
+    const approvedHours = logs.filter(l => !l.status || l.status === 'approved').reduce((acc, l) => acc + (Number(l.hours) || 0), 0);
+    const pendingHours = logs.filter(l => l.status === 'pending').reduce((acc, l) => acc + (Number(l.hours) || 0), 0);
 
     const handleSubmit = async () => {
         if (!formData.hours || !formData.description) return;
         setLoading(true);
-
         try {
-            const newLog = {
-                id: crypto.randomUUID(),
-                date: formData.date,
-                hours: Number(formData.hours),
-                description: formData.description,
-                status: 'pending', // Default to pending
-                verifiedBy: null
-            };
-
-            const updatedLogs = [newLog, ...logs];
-
-            const response = await fetch(`/api/v1/users?userID=${user.userID}`, {
+            const newLog = { id: crypto.randomUUID(), date: formData.date, hours: Number(formData.hours), description: formData.description, status: 'pending', verifiedBy: null };
+            const res = await fetch(`/api/v1/users?userID=${user.userID}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    membership: {
-                        ...user.membership,
-                        volunteerLog: updatedLogs
-                    }
-                })
+                body: JSON.stringify({ membership: { ...user.membership, volunteerLog: [newLog, ...logs] } })
             });
-
-            if (response.ok) {
-                const data = await response.json();
+            if (res.ok) {
+                const data = await res.json();
                 onUpdate(data.user);
                 setOpen(false);
-                setFormData({
-                    date: new Date().toISOString().split('T')[0],
-                    hours: '',
-                    description: ''
-                });
+                setFormData({ date: new Date().toISOString().split('T')[0], hours: '', description: '' });
             }
-        } catch (error) {
-            console.error("Failed to log hours", error);
-        } finally {
-            setLoading(false);
-        }
+        } catch (error) { console.error("Failed to log hours", error); }
+        finally { setLoading(false); }
     };
 
+    const labelStyle = { display: 'block', fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 6 };
+
     return (
-        <Box sx={{ mt: 4 }}>
-            {/* Summary Cards */}
-            <Box sx={{ display: 'flex', gap: 2, mb: 4, flexWrap: 'wrap' }}>
-                <Paper sx={{ p: 2, flex: 1, minWidth: '140px', textAlign: 'center', bgcolor: theme.palette.primary.main, color: theme.palette.primary.contrastText }}>
-                    <Typography variant="h4" fontWeight="bold">{approvedHours}</Typography>
-                    <Typography variant="body2">Approved Hours</Typography>
-                </Paper>
-                <Paper sx={{ p: 2, flex: 1, minWidth: '140px', textAlign: 'center', bgcolor: theme.palette.background.paper }}>
-                    <Typography variant="h4" fontWeight="bold" color="warning.main">{pendingHours}</Typography>
-                    <Typography variant="body2" color="text.secondary">Pending Hours</Typography>
-                </Paper>
-            </Box>
+        <div style={{ marginTop: 32 }}>
+            {/* Summary */}
+            <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 120, padding: '16px 20px', background: 'var(--green)', color: '#000', textAlign: 'center' }}>
+                    <div style={{ fontSize: 28, fontWeight: 700, fontFamily: 'var(--mono)' }}>{approvedHours}</div>
+                    <div style={{ fontSize: 11, marginTop: 4 }}>Approved Hours</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 120, padding: '16px 20px', background: 'var(--bg-card)', border: '1px solid var(--bd)', textAlign: 'center' }}>
+                    <div style={{ fontSize: 28, fontWeight: 700, fontFamily: 'var(--mono)', color: 'var(--amber)' }}>{pendingHours}</div>
+                    <div style={{ fontSize: 11, marginTop: 4, color: 'var(--text-dim)' }}>Pending Hours</div>
+                </div>
+            </div>
 
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h6">History</Typography>
-                <Button 
-                    variant="contained" 
-                    startIcon={<AddIcon />} 
-                    onClick={() => setOpen(true)}
-                    size="small"
-                    sx={{ display: { xs: 'none', md: 'flex' } }}
-                >
-                    Log Hours
-                </Button>
-            </Box>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-bright)' }}>History</div>
+                <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setOpen(true)}>+ Log Hours</button>
+            </div>
 
-            {/* Mobile View: Cards */}
-            <Box sx={{ display: { xs: 'block', md: 'none' }, pb: 10 }}>
-                {sortedLogs.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary" align="center">No volunteer hours logged.</Typography>
-                ) : (
-                    sortedLogs.map((log) => (
-                        <Card key={log.id} variant="outlined" sx={{ mb: 2, position: 'relative', overflow: 'visible' }}>
-                            <CardContent>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <EventIcon color="action" fontSize="small" />
-                                        <Typography variant="subtitle1" fontWeight="bold">
-                                            {new Date(log.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-                                        </Typography>
-                                    </Box>
-                                    <Chip 
-                                        label={log.status || 'approved'} 
-                                        color={
-                                            log.status === 'pending' ? 'warning' : 
-                                            log.status === 'rejected' ? 'error' : 'success'
-                                        }
-                                        size="small"
-                                        variant={log.status === 'pending' ? 'outlined' : 'filled'}
-                                    />
-                                </Box>
-                                
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                                    <AccessTimeIcon color="primary" />
-                                    <Typography variant="h5" fontWeight="bold">
-                                        {log.hours} <Typography component="span" variant="body2" color="text.secondary">hrs</Typography>
-                                    </Typography>
-                                </Box>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                    <tr>
+                        {['DATE', 'HOURS', 'DESCRIPTION', 'STATUS'].map(h => (
+                            <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 9, letterSpacing: '0.12em', color: 'var(--text-dim)', borderBottom: '1px solid var(--bd)', fontWeight: 400 }}>{h}</th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {sortedLogs.length === 0 ? (
+                        <tr><td colSpan={4} style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--text-dim)', fontSize: 12 }}>No volunteer hours logged.</td></tr>
+                    ) : sortedLogs.map(log => (
+                        <tr key={log.id} style={{ borderBottom: '1px solid var(--bg-1)' }}>
+                            <td style={{ padding: '8px 12px', fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text-mid)' }}>{new Date(log.date).toLocaleDateString()}</td>
+                            <td style={{ padding: '8px 12px', fontSize: 13, fontFamily: 'var(--mono)', color: 'var(--text-bright)', fontWeight: 700 }}>{log.hours}</td>
+                            <td style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text)' }}>{log.description}</td>
+                            <td style={{ padding: '8px 12px' }}>
+                                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: STATUS_COLOR[log.status || 'approved'], border: `1px solid ${STATUS_COLOR[log.status || 'approved']}`, padding: '2px 8px' }}>
+                                    {log.status || 'approved'}
+                                </span>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
 
-                                <Typography variant="body2" sx={{ bgcolor: theme.palette.action.hover, p: 1.5, borderRadius: 1 }}>
-                                    {log.description}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    ))
-                )}
-                
-                {/* Mobile FAB */}
-                <Fab 
-                    color="primary" 
-                    aria-label="add" 
-                    sx={{ position: 'fixed', bottom: 24, right: 24 }}
-                    onClick={() => setOpen(true)}
-                >
-                    <AddIcon />
-                </Fab>
-            </Box>
-
-            {/* Desktop View: Table */}
-            <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-                <TableContainer component={Paper} variant="outlined">
-                    <Table size="small">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Date</TableCell>
-                                <TableCell>Hours</TableCell>
-                                <TableCell>Description</TableCell>
-                                <TableCell>Status</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {sortedLogs.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={4} align="center">No volunteer hours logged.</TableCell>
-                                </TableRow>
-                            ) : (
-                                sortedLogs.map((log) => (
-                                    <TableRow key={log.id}>
-                                        <TableCell>{new Date(log.date).toLocaleDateString()}</TableCell>
-                                        <TableCell>{log.hours}</TableCell>
-                                        <TableCell>{log.description}</TableCell>
-                                        <TableCell>
-                                            <Chip 
-                                                label={log.status || 'approved'} // Backwards compatibility
-                                                color={
-                                                    log.status === 'pending' ? 'warning' : 
-                                                    log.status === 'rejected' ? 'error' : 'success'
-                                                }
-                                                size="small"
-                                                variant="outlined"
-                                            />
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            </Box>
-
-            <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Log Volunteer Hours</DialogTitle>
-                <DialogContent>
-                    <Alert severity="info" sx={{ mb: 2 }}>
-                        Hours must be approved by an admin.
-                    </Alert>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-                        <TextField
-                            label="Date"
-                            type="date"
-                            value={formData.date}
-                            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                            fullWidth
-                            InputLabelProps={{ shrink: true }}
-                        />
-                        <TextField
-                            label="Hours"
-                            type="number"
-                            value={formData.hours}
-                            onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
-                            fullWidth
-                            inputProps={{ min: 0.5, step: 0.5 }}
-                        />
-                        <TextField
-                            label="Description"
-                            multiline
-                            rows={3}
-                            value={formData.description}
-                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                            fullWidth
-                            placeholder="What did you work on?"
-                        />
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpen(false)}>Cancel</Button>
-                    <Button onClick={handleSubmit} variant="contained" disabled={loading}>
-                        Submit
-                    </Button>
-                </DialogActions>
-            </Dialog>
-        </Box>
+            {/* Log Hours Modal */}
+            {open && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+                    <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)', padding: '24px 28px', maxWidth: 480, width: '100%' }}>
+                        <div style={{ fontFamily: 'var(--display)', fontSize: '1.1rem', letterSpacing: '-0.04em', color: 'var(--text-bright)', marginBottom: 4 }}>Log Volunteer Hours</div>
+                        <div style={{ border: '1px solid var(--cyan)', color: 'var(--cyan)', padding: '8px 12px', fontSize: 11, fontFamily: 'var(--mono)', marginBottom: 20 }}>
+                            ℹ Hours must be approved by an admin.
+                        </div>
+                        <div style={{ marginBottom: 16 }}>
+                            <label style={labelStyle}>DATE</label>
+                            <input className="input" type="date" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} />
+                        </div>
+                        <div style={{ marginBottom: 16 }}>
+                            <label style={labelStyle}>HOURS</label>
+                            <input className="input" type="number" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} value={formData.hours} onChange={e => setFormData({ ...formData, hours: e.target.value })} min="0.5" step="0.5" />
+                        </div>
+                        <div style={{ marginBottom: 20 }}>
+                            <label style={labelStyle}>DESCRIPTION</label>
+                            <textarea className="input" rows={3} style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', fontSize: 12 }} value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="What did you work on?" />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                            <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setOpen(false)}>cancel</button>
+                            <button className="btn btn--filled btn--sm" style={{ fontSize: 10 }} onClick={handleSubmit} disabled={loading}>
+                                {loading ? 'submitting...' : '$ submit'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }

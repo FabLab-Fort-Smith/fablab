@@ -1,263 +1,144 @@
 "use client";
-import React, { useState, useEffect } from 'react';
-import { Box, Container, Typography, Grid, Card, CardContent, CardMedia, Chip, Stack, Button, useTheme, Skeleton } from '@mui/material';
-import { motion } from 'motion/react';
-import EngineeringIcon from '@mui/icons-material/Engineering';
-import GroupsIcon from '@mui/icons-material/Groups';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 
-const ActivityCard = ({ title, description, type, tags, image }) => (
-    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
-        {image && (
-            <CardMedia
-                component="img"
-                height="140"
-                image={image}
-                alt={title}
-                sx={{ objectFit: 'cover' }}
-            />
-        )}
-        <CardContent sx={{ flexGrow: 1 }}>
-            <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-                {tags.map((tag, i) => (
-                    <Chip key={i} label={tag} size="small" color="primary" variant="outlined" />
-                ))}
-            </Stack>
-            <Typography variant="h6" gutterBottom fontWeight="bold">
-                {title}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{
-                display: '-webkit-box',
-                overflow: 'hidden',
-                WebkitBoxOrient: 'vertical',
-                WebkitLineClamp: 3,
-            }}>
-                {description}
-            </Typography>
-        </CardContent>
-    </Card>
+import { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
+
+const ActivityCard = ({ title, description, tags }) => (
+    <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)', padding: '20px', display: 'flex', flexDirection: 'column', gap: 12, height: '100%', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {tags.map((tag, i) => (
+                <span key={i} style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--cyan)', border: '1px solid var(--cyan)', padding: '2px 8px', letterSpacing: '0.08em' }}>{tag}</span>
+            ))}
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-bright)' }}>{title}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.6, overflow: 'hidden', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 3 }}>{description}</div>
+    </div>
+);
+
+const SkeletonCard = () => (
+    <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)', padding: '20px', height: 160, boxSizing: 'border-box' }}>
+        <div style={{ height: 10, width: '40%', background: 'var(--bg-1)', marginBottom: 12 }} />
+        <div style={{ height: 14, width: '75%', background: 'var(--bg-1)', marginBottom: 8 }} />
+        <div style={{ height: 10, width: '90%', background: 'var(--bg-1)', marginBottom: 6 }} />
+        <div style={{ height: 10, width: '60%', background: 'var(--bg-1)' }} />
+    </div>
+);
+
+const EmptyState = ({ label }) => (
+    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '32px 0', fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--mono)', border: '1px solid var(--bd)', background: 'var(--bg-card)' }}>
+        No {label} to display right now.
+    </div>
 );
 
 const CommunityPulse = () => {
-    const theme = useTheme();
     const [bounties, setBounties] = useState([]);
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    const staticProjects = [
-        {
-            title: "Community Garden Automated Watering",
-            description: "Designed and printed automated watering spikes for the downtown community garden using the Prusa XL.",
-            tags: ["Showcase", "Eco-Friendly"],
-            image: "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=600&auto=format&fit=crop&q=60"
-        },
-        {
-            title: "Retro Console Restoration",
-            description: "Restored a 1989 GameBoy with a new IPS screen and rechargeable battery mod.",
-            tags: ["Showcase", "Electronics"],
-            image: "https://images.unsplash.com/photo-1593118247619-e2d6f056869e?w=600&auto=format&fit=crop&q=60"
-        },
-        {
-            title: "Custom CNC Furniture",
-            description: "A parametric bench design cut on the ShopBot and assembled for the new lounge area.",
-            tags: ["Showcase", "Woodworking"],
-            image: "https://images.unsplash.com/photo-1611486212557-88be5ff6f941?w=600&auto=format&fit=crop&q=60"
-        }
-    ];
-
-    const staticBounties = [
-        {
-            title: "Teach a 'Intro to Soldering' Class",
-            description: "We need a member to lead a 1-hour workshop for beginners. Materials provided.",
-            tags: ["Bounty", "50 Stake", "Cash"],
-            image: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=600&auto=format&fit=crop&q=60"
-        },
-        {
-            title: "Fix the Laser Cutter Exhaust",
-            description: "The exhaust fan on Laser #2 is rattling. Diagnose and repair.",
-            tags: ["Bounty", "100 Stake", "Hours"],
-            image: "https://images.unsplash.com/photo-1581092921461-eab62e97a782?w=600&auto=format&fit=crop&q=60"
-        },
-        {
-            title: "Organize the Scrap Wood Bin",
-            description: "Sort usable scraps from waste and label the bins.",
-            tags: ["Bounty", "25 Stake", "Hours"],
-            image: "https://images.unsplash.com/photo-1530124566582-a618bc2615dc?w=600&auto=format&fit=crop&q=60"
-        }
-    ];
-
     useEffect(() => {
         const fetchData = async () => {
             try {
-                // Fetch Bounties and Projects in parallel
                 const [bountiesRes, projectsRes] = await Promise.all([
                     fetch('/api/v1/bounties?status=open&limit=3'),
                     fetch('/api/v1/portfolio?limit=3&sort=latest')
                 ]);
 
-                // Process Bounties
                 if (bountiesRes.ok) {
                     const data = await bountiesRes.json();
                     if (data.bounties && data.bounties.length > 0) {
                         setBounties(data.bounties.map(b => ({
                             title: b.title,
                             description: b.description,
-                            tags: ["Bounty", `${b.stakeValue} Stake`, b.rewardType === 'cash' ? '$$$' : 'Hours'],
-                            image: b.imageUrl
+                            tags: ['Bounty', `${b.stakeValue} Stake`, b.rewardType === 'cash' ? '$$$' : 'Hours'],
                         })));
-                    } else {
-                        setBounties(staticBounties);
                     }
-                } else {
-                    setBounties(staticBounties);
                 }
 
-                // Process Projects
                 if (projectsRes.ok) {
                     const data = await projectsRes.json();
                     if (Array.isArray(data) && data.length > 0) {
                         setProjects(data.map(p => ({
                             title: p.title,
                             description: p.description,
-                            tags: ["Showcase"],
-                            image: p.imageUrls?.[0]
+                            tags: ['Showcase'],
                         })));
-                    } else {
-                        setProjects(staticProjects);
                     }
-                } else {
-                    setProjects(staticProjects);
                 }
-
             } catch (error) {
-                console.error("Failed to fetch public data", error);
-                setBounties(staticBounties);
-                setProjects(staticProjects);
+                console.error("Failed to fetch community pulse data", error);
             } finally {
                 setLoading(false);
             }
         };
-
         fetchData();
     }, []);
 
+    const sectionHeader = (icon, title, subtitle) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+            <span style={{ fontSize: 20, color: 'var(--green)' }}>{icon}</span>
+            <div>
+                <div style={{ fontFamily: 'var(--display)', fontSize: '1.3rem', letterSpacing: '-0.04em', color: 'var(--text-bright)' }}>{title}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-mid)', marginTop: 2 }}>{subtitle}</div>
+            </div>
+        </div>
+    );
+
     return (
-        <Box sx={{ py: 8, bgcolor: 'background.default' }}>
-            <Container maxWidth="lg">
-                <Box sx={{ textAlign: 'center', mb: 8 }}>
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.6 }}
-                    >
-                        <Typography variant="overline" color="primary" fontWeight="bold" letterSpacing={2}>
-                            HAPPENING NOW IN FORT SMITH
-                        </Typography>
-                        <Typography variant="h3" component="h2" fontWeight="bold" sx={{ mb: 2 }}>
-                            The Pulse of The Lab
-                        </Typography>
-                        <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 700, mx: 'auto' }}>
-                            A living, breathing community of creators.
-                        </Typography>
-                    </motion.div>
-                </Box>
+        <div style={{ padding: '64px 32px', background: 'var(--bg)', maxWidth: 1100, margin: '0 auto' }}>
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6 }}
+                style={{ textAlign: 'center', marginBottom: 56 }}
+            >
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.2em', color: 'var(--green)', marginBottom: 8 }}>
+                    HAPPENING NOW IN FORT SMITH
+                </div>
+                <div style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)', marginBottom: 12 }}>
+                    The Pulse of The Lab
+                </div>
+                <div style={{ fontSize: 15, color: 'var(--text-mid)', maxWidth: 600, margin: '0 auto' }}>
+                    A living, breathing community of creators.
+                </div>
+            </motion.div>
 
-                {/* Projects Section */}
-                <Box sx={{ mb: 8 }}>
-                    <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
-                        <EngineeringIcon color="primary" fontSize="large" />
-                        <Box>
-                            <Typography variant="h4" fontWeight="bold">
-                                What We're Building
-                            </Typography>
-                            <Typography variant="body1" color="text.secondary">
-                                See what our members are working on this week.
-                            </Typography>
-                        </Box>
-                    </Stack>
-                    
-                    <Grid container spacing={4}>
-                        {loading ? (
-                            [1, 2, 3].map((i) => (
-                                <Grid item xs={12} md={4} key={i}>
-                                    <Card sx={{ height: 200 }}>
-                                        <CardContent>
-                                            <Skeleton variant="text" width="60%" height={30} />
-                                            <Skeleton variant="text" width="100%" />
-                                            <Skeleton variant="text" width="80%" />
-                                        </CardContent>
-                                    </Card>
-                                </Grid>
+            {/* Projects */}
+            <div style={{ marginBottom: 56 }}>
+                {sectionHeader('⚙', "What We're Building", "See what our members are working on this week.")}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+                    {loading ? [1, 2, 3].map(i => <SkeletonCard key={i} />) :
+                        projects.length === 0 ? <EmptyState label="projects" /> :
+                            projects.map((project, i) => (
+                                <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: i * 0.1 }}>
+                                    <ActivityCard {...project} />
+                                </motion.div>
                             ))
-                        ) : (
-                            projects.map((project, index) => (
-                                <Grid item xs={12} md={4} key={index}>
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 20 }}
-                                        whileInView={{ opacity: 1, y: 0 }}
-                                        viewport={{ once: true }}
-                                        transition={{ duration: 0.6, delay: index * 0.1 }}
-                                    >
-                                        <ActivityCard {...project} />
-                                    </motion.div>
-                                </Grid>
-                            ))
-                        )}
-                    </Grid>
-                </Box>
+                    }
+                </div>
+            </div>
 
-                {/* Bounties Section */}
-                <Box>
-                    <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
-                        <EmojiEventsIcon color="secondary" fontSize="large" />
-                        <Box>
-                            <Typography variant="h4" fontWeight="bold">
-                                Why We Need You
-                            </Typography>
-                            <Typography variant="body1" color="text.secondary">
-                                Your skills are needed. Earn Stake to build your reputation and fuel your own projects.
-                            </Typography>
-                        </Box>
-                    </Stack>
-
-                    <Grid container spacing={4}>
-                        {loading ? (
-                            [1, 2, 3].map((i) => (
-                                <Grid item xs={12} md={4} key={i}>
-                                    <Card sx={{ height: 200 }}>
-                                        <CardContent>
-                                            <Skeleton variant="text" width="60%" height={30} />
-                                            <Skeleton variant="text" width="100%" />
-                                            <Skeleton variant="text" width="80%" />
-                                        </CardContent>
-                                    </Card>
-                                </Grid>
+            {/* Bounties */}
+            <div>
+                {sectionHeader('★', "Why We Need You", "Your skills are needed. Earn Stake to build your reputation and fuel your own projects.")}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+                    {loading ? [1, 2, 3].map(i => <SkeletonCard key={i} />) :
+                        bounties.length === 0 ? <EmptyState label="open bounties" /> :
+                            bounties.map((bounty, i) => (
+                                <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: i * 0.1 }}>
+                                    <ActivityCard {...bounty} />
+                                </motion.div>
                             ))
-                        ) : (
-                            bounties.map((bounty, index) => (
-                                <Grid item xs={12} md={4} key={index}>
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 20 }}
-                                        whileInView={{ opacity: 1, y: 0 }}
-                                        viewport={{ once: true }}
-                                        transition={{ duration: 0.6, delay: index * 0.1 }}
-                                    >
-                                        <ActivityCard {...bounty} />
-                                    </motion.div>
-                                </Grid>
-                            ))
-                        )}
-                    </Grid>
-                </Box>
+                    }
+                </div>
+            </div>
 
-                <Box sx={{ mt: 8, textAlign: 'center' }}>
-                    <Button variant="contained" size="large" color="secondary" href="/auth/register">
-                        Join the Action
-                    </Button>
-                </Box>
-            </Container>
-        </Box>
+            <div style={{ marginTop: 56, textAlign: 'center' }}>
+                <a href="/auth/register">
+                    <button className="btn btn--filled" style={{ fontSize: 13, padding: '12px 36px' }}>Join the Action</button>
+                </a>
+            </div>
+        </div>
     );
 };
 

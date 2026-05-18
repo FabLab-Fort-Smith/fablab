@@ -1,34 +1,27 @@
 "use client";
 
-import { Box, Typography, Link as MuiLink } from "@mui/material";
-import Link from "next/link";
-
 const Footer = () => (
-  <Box
-    sx={{
-      textAlign: "center",
-      padding: "2rem 1rem",
-      backgroundColor: "#222",
-      color: "#fff",
-    }}
-  >
-    <Typography variant="body2" gutterBottom>
-      © 2024 Fab Lab Fort Smith. All rights reserved.
-    </Typography>
-    <Box sx={{ mt: 1 }}>
-        <MuiLink component={Link} href="/code-of-conduct" color="inherit" underline="hover" sx={{ mx: 1 }}>
-            Code of Conduct
-        </MuiLink>
-        |
-        <MuiLink component={Link} href="/board-members" color="inherit" underline="hover" sx={{ mx: 1 }}>
-            Board Members
-        </MuiLink>
-        |
-        <MuiLink component={Link} href="/about" color="inherit" underline="hover" sx={{ mx: 1 }}>
-            About Us
-        </MuiLink>
-    </Box>
-  </Box>
+    <footer style={{ textAlign: 'center', padding: '24px 16px', background: 'var(--bg-card)', borderTop: '1px solid var(--bd)', color: 'var(--text-dim)' }}>
+        <div style={{ fontSize: 11, fontFamily: 'var(--mono)', marginBottom: 8 }}>
+            © {new Date().getFullYear()} Fab Lab Fort Smith. All rights reserved.
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11, fontFamily: 'var(--mono)' }}>
+            {[
+                { label: 'Code of Conduct', href: '/code-of-conduct' },
+                { label: 'Board Members', href: '/board-members' },
+                { label: 'About Us', href: '/about' },
+            ].map(({ label, href }, i, arr) => (
+                <span key={href} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <a href={href} style={{ color: 'var(--text-dim)', textDecoration: 'none' }}
+                        onMouseEnter={e => e.target.style.color = 'var(--green)'}
+                        onMouseLeave={e => e.target.style.color = 'var(--text-dim)'}>
+                        {label}
+                    </a>
+                    {i < arr.length - 1 && <span style={{ color: 'var(--bd)' }}>|</span>}
+                </span>
+            ))}
+        </div>
+    </footer>
 );
 
 export default Footer;

@@ -1,11 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Button, CircularProgress, Snackbar, Alert } from '@mui/material';
-import LockOpenIcon from '@mui/icons-material/LockOpen';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import LoginIcon from '@mui/icons-material/Login';
 
-// Shared logic for unlocking
 const useUnlock = () => {
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState(null);
@@ -13,9 +8,7 @@ const useUnlock = () => {
 
     useEffect(() => {
         let timer;
-        if (cooldown > 0) {
-            timer = setInterval(() => setCooldown(p => p - 1), 1000);
-        }
+        if (cooldown > 0) timer = setInterval(() => setCooldown(p => p - 1), 1000);
         return () => clearInterval(timer);
     }, [cooldown]);
 
@@ -27,14 +20,14 @@ const useUnlock = () => {
             const res = await fetch('/api/v1/access/unlock', { method: 'POST' });
             const data = await res.json();
             if (res.ok) {
-                setStatus({ type: 'success', message: 'Lab Unlocked! Welcome.' });
+                setStatus({ type: 'success', message: 'Lab unlocked. Welcome.' });
                 setCooldown(10);
                 if (onSuccess) onSuccess();
             } else {
-                const msg = res.status === 502 ? 'Controller Online, but Device Disconnected.' : (data.error || 'Failed.');
+                const msg = res.status === 502 ? 'Controller online, device disconnected.' : (data.error || 'Unlock failed.');
                 setStatus({ type: 'error', message: msg });
             }
-        } catch (e) {
+        } catch {
             setStatus({ type: 'error', message: 'Network error.' });
         } finally {
             setLoading(false);
@@ -44,70 +37,69 @@ const useUnlock = () => {
     return { unlock, loading, status, setStatus, cooldown };
 };
 
-export function UnlockButton({ sx }) {
-    const { unlock, loading, status, setStatus, cooldown } = useUnlock();
-    const isSuccess = status?.type === 'success' && cooldown > 0;
+function StatusToast({ status, onClose }) {
+    if (!status) return null;
+    const color = status.type === 'success' ? 'var(--green)' : 'var(--red)';
+    return (
+        <div style={{
+            position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+            border: `1px solid ${color}`, background: 'var(--bg-card)', color,
+            padding: '10px 18px', fontSize: 11, fontFamily: 'var(--mono)',
+            letterSpacing: '0.06em', zIndex: 200, display: 'flex', gap: 16, alignItems: 'center',
+            boxShadow: `0 0 16px ${color}40`,
+        }}>
+            <span>[{status.type.toUpperCase()}]</span>
+            <span style={{ color: 'var(--text)' }}>{status.message}</span>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 12 }}>×</button>
+        </div>
+    );
+}
 
+export function UnlockButton({ style }) {
+    const { unlock, loading, status, setStatus, cooldown } = useUnlock();
+    const ok = status?.type === 'success' && cooldown > 0;
     return (
         <>
-            <Button
-                variant="contained"
-                color={isSuccess ? "success" : "warning"}
-                startIcon={loading ? <CircularProgress size={20} color="inherit"/> : isSuccess ? <CheckCircleIcon/> : <LockOpenIcon/>}
+            <button
+                className={`btn ${ok ? '' : 'btn--amber'}`}
+                style={{ whiteSpace: 'nowrap', ...(ok ? { borderColor: 'var(--green)', color: 'var(--green)' } : {}), ...style }}
                 onClick={() => unlock()}
                 disabled={loading || cooldown > 0}
-                sx={{ fontWeight: 'bold', boxShadow: 3, whiteSpace: 'nowrap', minWidth: '140px', ...sx }}
             >
-                {loading ? 'Unlocking...' : isSuccess ? `Unlocked (${cooldown})` : 'Unlock Lab'}
-            </Button>
-            <Snackbar open={!!status} autoHideDuration={6000} onClose={() => setStatus(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-                <Alert onClose={() => setStatus(null)} severity={status?.type} sx={{ width: '100%' }}>{status?.message}</Alert>
-            </Snackbar>
+                {loading ? '$ unlocking...' : ok ? `$ unlocked (${cooldown}s)` : '$ unlock lab'}
+            </button>
+            <StatusToast status={status} onClose={() => setStatus(null)} />
         </>
     );
 }
 
-export function UnlockAndCheckInButton({ onCheckIn, checkInLoading, sx }) {
+export function UnlockAndCheckInButton({ onCheckIn, checkInLoading, style }) {
     const { unlock, loading, status, setStatus, cooldown } = useUnlock();
-    const isSuccess = status?.type === 'success' && cooldown > 0;
-
-    const handleClick = () => {
-        unlock(() => {
-            // Only check in if unlock was successful
-            if (onCheckIn) onCheckIn();
-        });
-    };
-
+    const ok = status?.type === 'success' && cooldown > 0;
     return (
         <>
-            <Button
-                variant="contained"
-                color={isSuccess ? "success" : "secondary"} 
-                startIcon={loading || checkInLoading ? <CircularProgress size={20} color="inherit"/> : isSuccess ? <CheckCircleIcon/> : <LoginIcon/>}
-                onClick={handleClick}
+            <button
+                className={`btn ${ok ? '' : 'btn--filled'}`}
+                style={{ whiteSpace: 'nowrap', ...(ok ? { borderColor: 'var(--green)', color: 'var(--green)', background: 'transparent' } : {}), ...style }}
+                onClick={() => unlock(onCheckIn)}
                 disabled={loading || checkInLoading || cooldown > 0}
-                sx={{ fontWeight: 'bold', boxShadow: 3, whiteSpace: 'nowrap', minWidth: '180px', ...sx }}
             >
-                {loading ? 'Unlocking...' : checkInLoading ? 'Checking In...' : isSuccess ? `Welcome! (${cooldown})` : 'Unlock & Check In'}
-            </Button>
-             <Snackbar open={!!status} autoHideDuration={6000} onClose={() => setStatus(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-                <Alert onClose={() => setStatus(null)} severity={status?.type} sx={{ width: '100%' }}>{status?.message}</Alert>
-            </Snackbar>
+                {loading ? '$ unlocking...' : checkInLoading ? '$ checking in...' : ok ? `$ welcome! (${cooldown}s)` : '$ unlock & check in'}
+            </button>
+            <StatusToast status={status} onClose={() => setStatus(null)} />
         </>
     );
 }
 
-export function CheckInButton({ onCheckIn, checkInLoading, sx }) {
+export function CheckInButton({ onCheckIn, checkInLoading, style }) {
     return (
-        <Button
-            variant="contained"
-            color="secondary"
-            startIcon={checkInLoading ? <CircularProgress size={20} color="inherit"/> : <LoginIcon/>}
+        <button
+            className="btn btn--filled"
             onClick={onCheckIn}
             disabled={checkInLoading}
-            sx={{ fontWeight: 'bold', boxShadow: 3, whiteSpace: 'nowrap', minWidth: '140px', ...sx }}
+            style={{ whiteSpace: 'nowrap', ...style }}
         >
-            {checkInLoading ? 'Checking In...' : 'Check In'}
-        </Button>
+            {checkInLoading ? '$ checking in...' : '$ check in'}
+        </button>
     );
 }

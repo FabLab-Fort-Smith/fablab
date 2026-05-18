@@ -1,12 +1,5 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { 
-    Dialog, DialogTitle, DialogContent, DialogActions, 
-    Button, Typography, Box, IconButton 
-} from '@mui/material';
-import CloseIcon from '@mui/icons-material/Close';
-import GetAppIcon from '@mui/icons-material/GetApp';
-import IosShareIcon from '@mui/icons-material/IosShare';
 
 export default function InstallPrompt() {
     const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -15,41 +8,28 @@ export default function InstallPrompt() {
     const [isStandalone, setIsStandalone] = useState(false);
 
     useEffect(() => {
-        // Check if already in standalone mode
         if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
             setIsStandalone(true);
         }
 
-        // Check if iOS
         const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
         setIsIOS(ios);
 
-        // Listen for beforeinstallprompt
         const handleBeforeInstallPrompt = (e) => {
             e.preventDefault();
             setDeferredPrompt(e);
-            // Check if user has dismissed it recently? For now, just show it.
-            // Maybe wait a bit or check local storage to not annoy user.
             const hasDismissed = localStorage.getItem('installPromptDismissed');
-            if (!hasDismissed) {
-                setOpen(true);
-            }
+            if (!hasDismissed) setOpen(true);
         };
 
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-        return () => {
-            window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-        };
+        return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     }, []);
 
-    // For iOS, we might want to show it once if not standalone
     useEffect(() => {
         if (isIOS && !isStandalone) {
-             const hasDismissed = localStorage.getItem('installPromptDismissed');
-             if (!hasDismissed) {
-                 setOpen(true);
-             }
+            const hasDismissed = localStorage.getItem('installPromptDismissed');
+            if (!hasDismissed) setOpen(true);
         }
     }, [isIOS, isStandalone]);
 
@@ -57,9 +37,7 @@ export default function InstallPrompt() {
         if (deferredPrompt) {
             deferredPrompt.prompt();
             const { outcome } = await deferredPrompt.userChoice;
-            if (outcome === 'accepted') {
-                setDeferredPrompt(null);
-            }
+            if (outcome === 'accepted') setDeferredPrompt(null);
             setOpen(false);
         }
     };
@@ -69,65 +47,34 @@ export default function InstallPrompt() {
         localStorage.setItem('installPromptDismissed', 'true');
     };
 
-    if (isStandalone) return null;
+    if (isStandalone || !open) return null;
 
     return (
-        <Dialog 
-            open={open} 
-            onClose={handleClose}
-            maxWidth="xs"
-            fullWidth
-            PaperProps={{
-                sx: { borderRadius: 2, p: 1 }
-            }}
-        >
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 2, pt: 1 }}>
-                <Typography variant="h6" fontWeight="bold">
-                    Install The Lab App
-                </Typography>
-                <IconButton onClick={handleClose} size="small">
-                    <CloseIcon />
-                </IconButton>
-            </Box>
-            
-            <DialogContent>
-                <Box sx={{ textAlign: 'center', py: 2 }}>
-                    <img src="/logos/icon.png" alt="App Icon" style={{ width: 64, height: 64, borderRadius: 12, marginBottom: 16 }} />
-                    <Typography variant="body1" gutterBottom>
-                        Install our app for a better experience, easier access, and push notifications!
-                    </Typography>
-                    
-                    {isIOS && (
-                        <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1, textAlign: 'left' }}>
-                            <Typography variant="body2" fontWeight="bold" gutterBottom>
-                                To install on iOS:
-                            </Typography>
-                            <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                                1. Tap the Share button <IosShareIcon fontSize="small" />
-                            </Typography>
-                            <Typography variant="body2">
-                                2. Scroll down and tap "Add to Home Screen"
-                            </Typography>
-                        </Box>
-                    )}
-                </Box>
-            </DialogContent>
-            
-            <DialogActions sx={{ px: 3, pb: 2 }}>
-                <Button onClick={handleClose} color="inherit">
-                    Maybe Later
-                </Button>
-                {!isIOS && (
-                    <Button 
-                        onClick={handleInstall} 
-                        variant="contained" 
-                        startIcon={<GetAppIcon />}
-                        autoFocus
-                    >
-                        Install
-                    </Button>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+            <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)', padding: '24px 28px', maxWidth: 360, width: '100%', position: 'relative' }}>
+                <button onClick={handleClose} style={{ position: 'absolute', top: 12, right: 14, background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+
+                <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                    <img src="/logos/icon.png" alt="App Icon" style={{ width: 56, height: 56, marginBottom: 12 }} />
+                    <div style={{ fontFamily: 'var(--display)', fontSize: '1.2rem', letterSpacing: '-0.04em', color: 'var(--text-bright)', marginBottom: 4 }}>Install The Lab App</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-mid)' }}>Install our app for a better experience, easier access, and push notifications!</div>
+                </div>
+
+                {isIOS && (
+                    <div style={{ border: '1px solid var(--bd)', padding: '10px 14px', marginBottom: 16, fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text-mid)' }}>
+                        <div style={{ color: 'var(--text-bright)', marginBottom: 6 }}>// TO INSTALL ON IOS:</div>
+                        <div style={{ marginBottom: 4 }}>1. Tap the Share button ↑</div>
+                        <div>2. Tap "Add to Home Screen"</div>
+                    </div>
                 )}
-            </DialogActions>
-        </Dialog>
+
+                <div style={{ display: 'flex', gap: 10 }}>
+                    <button className="btn btn--ghost btn--sm" style={{ flex: 1, fontSize: 10 }} onClick={handleClose}>maybe later</button>
+                    {!isIOS && (
+                        <button className="btn btn--filled btn--sm" style={{ flex: 1, fontSize: 10 }} onClick={handleInstall}>↓ install</button>
+                    )}
+                </div>
+            </div>
+        </div>
     );
 }

@@ -1,447 +1,231 @@
-"use client";
-import React, { useState, useEffect } from 'react';
-import { 
-    Box, Typography, Paper, Chip, IconButton, Tooltip, 
-    Card, CardContent, Grid, Avatar, useTheme, useMediaQuery, 
-    Container, TextField, InputAdornment, Stack, Button, Pagination,
-    Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, Autocomplete
-} from '@mui/material';
-import MergeTypeIcon from '@mui/icons-material/MergeType';
-import { DataGrid, GridToolbar } from '@mui/x-data-grid';
-import EditIcon from '@mui/icons-material/Edit';
-import SearchIcon from '@mui/icons-material/Search';
-import PersonIcon from '@mui/icons-material/Person';
-import EmailIcon from '@mui/icons-material/Email';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import MemberDialog from '../../../components/admin/MemberDialog';
+'use client';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import MemberDialog from '../../../components/admin/MemberDialog';
+
+function Modal({ open, onClose, title, children, footer }) {
+    if (!open) return null;
+    return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={onClose}>
+            <div className="card" style={{ maxWidth: 540, width: '100%', maxHeight: '90vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+                <div className="card-header">
+                    <span style={{ color: 'var(--text)', fontSize: 13, fontWeight: 600, fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>{title}</span>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18 }}>×</button>
+                </div>
+                <div style={{ padding: '20px 24px' }}>{children}</div>
+                {footer && <div style={{ padding: '12px 24px', borderTop: '1px solid var(--bd)', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>{footer}</div>}
+            </div>
+        </div>
+    );
+}
+
+const STATUS_COLOR = { active: 'var(--green)', probation: 'var(--amber)', suspended: 'var(--red)', registered: 'var(--text-dim)' };
 
 export default function MembersPage() {
     const { data: session, status } = useSession();
     const router = useRouter();
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-    
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedUser, setSelectedUser] = useState(null);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [paginationModel, setPaginationModel] = useState({
-        page: 0,
-        pageSize: 25,
-    });
+    const [search, setSearch] = useState('');
+    const [page, setPage] = useState(1);
     const [rowCount, setRowCount] = useState(0);
+    const [error, setError] = useState('');
     const [syncing, setSyncing] = useState(false);
-
-    // Merge State
-    const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+    const [mergeOpen, setMergeOpen] = useState(false);
     const [sourceUser, setSourceUser] = useState(null);
     const [targetUser, setTargetUser] = useState(null);
     const [merging, setMerging] = useState(false);
-    const [allUsersForMerge, setAllUsersForMerge] = useState([]); // For autocomplete
+    const [allUsersForMerge, setAllUsersForMerge] = useState([]);
+    const [toast, setToast] = useState(null);
+    const PAGE_SIZE = 25;
 
     useEffect(() => {
-        if (mergeDialogOpen) {
-            // Fetch all users for the autocomplete when dialog opens
-            // We need a lightweight list for selection
-            fetchAllUsersForMerge();
+        if (status === 'unauthenticated') router.push('/auth/signin');
+        else if (status === 'authenticated') {
+            if (session.user.role !== 'admin') router.push('/dashboard');
+            else fetchUsers(page);
         }
-    }, [mergeDialogOpen]);
-
-    const fetchAllUsersForMerge = async () => {
-        try {
-            // Fetching with a large limit to get everyone for the dropdown
-            // In a real large app, this should be a search-as-you-type
-            const response = await fetch(`/api/v1/users?limit=1000`);
-            const data = await response.json();
-            if (data.success) {
-                setAllUsersForMerge(data.users);
-            }
-        } catch (error) {
-            console.error('Error fetching users for merge:', error);
-        }
-    };
-
-    const handleMergeUsers = async () => {
-        if (!sourceUser || !targetUser) return;
-        if (sourceUser.userID === targetUser.userID) {
-            alert("Cannot merge a user into themselves.");
-            return;
-        }
-
-        if (!confirm(`Are you sure you want to merge ${sourceUser.email} INTO ${targetUser.email}? This action cannot be undone and ${sourceUser.email} will be deleted.`)) {
-            return;
-        }
-
-        setMerging(true);
-        try {
-            const response = await fetch('/api/v1/users/merge', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    sourceUserID: sourceUser.userID,
-                    targetUserID: targetUser.userID,
-                }),
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                alert('Users merged successfully');
-                setMergeDialogOpen(false);
-                setSourceUser(null);
-                setTargetUser(null);
-                fetchUsers(paginationModel.page + 1, paginationModel.pageSize); // Refresh list
-            } else {
-                alert('Error merging users: ' + data.error);
-            }
-        } catch (error) {
-            console.error('Error merging users:', error);
-            alert('An error occurred while merging users');
-        } finally {
-            setMerging(false);
-        }
-    };
+    }, [status, session, router, page]);
 
     useEffect(() => {
-        if (status === 'unauthenticated') {
-            router.push('/auth/signin');
-        } else if (status === 'authenticated') {
-            if (session.user.role !== 'admin') {
-                router.push('/dashboard'); // Redirect non-admins
-            } else {
-                fetchUsers(paginationModel.page + 1, paginationModel.pageSize);
-            }
-        }
-    }, [status, session, router, paginationModel]);
+        if (mergeOpen) fetchAllUsersForMerge();
+    }, [mergeOpen]);
 
-    const fetchUsers = async (page = 1, limit = 10) => {
+    const showToast = (msg, color = 'var(--green)') => { setToast({ msg, color }); setTimeout(() => setToast(null), 3500); };
+
+    const fetchUsers = async (p = 1) => {
         setLoading(true);
+        setError('');
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
         try {
-            const response = await fetch(`/api/v1/users?page=${page}&limit=${limit}`);
-            if (response.ok) {
-                const data = await response.json();
+            const res = await fetch(`/api/v1/users?page=${p}&limit=${PAGE_SIZE}`, { signal: controller.signal });
+            clearTimeout(timeout);
+            if (res.ok) {
+                const data = await res.json();
                 setUsers(data.users || []);
                 setRowCount(data.total || 0);
+            } else {
+                const data = await res.json().catch(() => ({}));
+                setError(data.error || `Server error (${res.status})`);
             }
-        } catch (error) {
-            console.error("Failed to fetch users", error);
+        } catch (err) {
+            clearTimeout(timeout);
+            setError(err.name === 'AbortError' ? 'Request timed out — the server took too long to respond.' : `Failed to load members: ${err.message}`);
         } finally {
             setLoading(false);
         }
     };
 
+    const fetchAllUsersForMerge = async () => {
+        try {
+            const res = await fetch('/api/v1/users?limit=1000');
+            const data = await res.json();
+            if (data.success) setAllUsersForMerge(data.users);
+        } catch {}
+    };
+
     const handleSyncMemberships = async () => {
-        if (!confirm("This will recalculate 'Community' vs 'Co-op' status for ALL users based on their subscription/waiver status. Continue?")) return;
-        
+        if (!confirm('This will recalculate Community vs Co-op status for ALL users. Continue?')) return;
         setSyncing(true);
         try {
             const res = await fetch('/api/admin/migrate-memberships', { method: 'POST' });
             const data = await res.json();
-            if (res.ok) {
-                alert(`Migration Complete! Updated ${data.updatedCount} users.`);
-                fetchUsers(paginationModel.page + 1, paginationModel.pageSize); // Refresh list
-            } else {
-                alert(`Error: ${data.error}`);
-            }
-        } catch (err) {
-            console.error(err);
-            alert("Failed to sync memberships.");
-        } finally {
-            setSyncing(false);
-        }
+            if (res.ok) { showToast(`Migration complete! Updated ${data.updatedCount} users.`); fetchUsers(page); }
+            else showToast(`Error: ${data.error}`, 'var(--red)');
+        } catch { showToast('Failed to sync.', 'var(--red)'); }
+        finally { setSyncing(false); }
     };
 
-    const handleEditClick = (user) => {
-        setSelectedUser(user);
-        setDialogOpen(true);
+    const handleMergeUsers = async () => {
+        if (!sourceUser || !targetUser) return;
+        if (sourceUser.userID === targetUser.userID) { alert('Cannot merge a user into themselves.'); return; }
+        if (!confirm(`Merge ${sourceUser.email} INTO ${targetUser.email}? This cannot be undone and ${sourceUser.email} will be deleted.`)) return;
+        setMerging(true);
+        try {
+            const res = await fetch('/api/v1/users/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sourceUserID: sourceUser.userID, targetUserID: targetUser.userID }) });
+            const data = await res.json();
+            if (data.success) { showToast('Users merged successfully.'); setMergeOpen(false); setSourceUser(null); setTargetUser(null); fetchUsers(page); }
+            else showToast(`Error: ${data.error}`, 'var(--red)');
+        } catch { showToast('Error merging.', 'var(--red)'); }
+        finally { setMerging(false); }
     };
 
-    const handleUserUpdate = (updatedUser) => {
-        setUsers(prev => prev.map(u => u.userID === updatedUser.userID ? updatedUser : u));
-    };
+    const handleUserUpdate = (updatedUser) => setUsers(prev => prev.map(u => u.userID === updatedUser.userID ? updatedUser : u));
 
-    const getStatusColor = (status) => {
-        if (status === 'active') return 'success';
-        if (status === 'probation') return 'warning';
-        if (status === 'suspended') return 'error';
-        return 'default';
-    };
-
-    const filteredUsers = users.filter(user => 
-        user.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    const filtered = users.filter(u =>
+        !search || u.firstName?.toLowerCase().includes(search.toLowerCase()) || u.lastName?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase())
     );
 
-    const columns = [
-        { field: 'firstName', headerName: 'First Name', flex: 1 },
-        { field: 'lastName', headerName: 'Last Name', flex: 1 },
-        { field: 'email', headerName: 'Email', flex: 1.5 },
-        { 
-            field: 'role', 
-            headerName: 'Role', 
-            width: 100,
-            renderCell: (params) => (
-                <Chip 
-                    label={params.value} 
-                    color={params.value === 'admin' ? 'secondary' : 'default'} 
-                    size="small" 
-                />
-            )
-        },
-        {
-            field: 'membershipStatus',
-            headerName: 'Status',
-            width: 120,
-            valueGetter: (value, row) => row.membership?.status || 'N/A',
-            renderCell: (params) => (
-                <Chip 
-                    label={params.value} 
-                    color={getStatusColor(params.value)} 
-                    size="small" 
-                    variant="outlined" 
-                />
-            )
-        },
-        {
-            field: 'volunteerHours',
-            headerName: 'Hours (Total)',
-            width: 120,
-            valueGetter: (value, row) => {
-                const logs = row.membership?.volunteerLog || [];
-                return logs.reduce((acc, log) => acc + (log.hours || 0), 0);
-            },
-        },
-        {
-            field: 'currentMonthHours',
-            headerName: 'Hours (Month)',
-            width: 120,
-            valueGetter: (value, row) => {
-                const logs = row.membership?.volunteerLog || [];
-                const currentMonth = new Date().getMonth();
-                return logs
-                    .filter(log => new Date(log.date).getMonth() === currentMonth)
-                    .reduce((acc, log) => acc + (log.hours || 0), 0);
-            },
-        },
-        {
-            field: 'actions',
-            headerName: 'Actions',
-            width: 100,
-            sortable: false,
-            renderCell: (params) => (
-                <Tooltip title="Manage Member">
-                    <IconButton onClick={() => handleEditClick(params.row)} color="primary">
-                        <EditIcon />
-                    </IconButton>
-                </Tooltip>
-            )
-        }
-    ];
-
-    if (status === 'loading' || loading) {
-        return <Typography>Loading...</Typography>;
-    }
-
-    if (session?.user?.role !== 'admin') {
-        return <Typography color="error">Access Denied</Typography>;
-    }
+    const totalPages = Math.ceil(rowCount / PAGE_SIZE);
 
     return (
-        <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 }, px: { xs: 2, md: 3 } }}>
-            <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Box>
-                    <Typography variant="h4" fontWeight="bold" sx={{ fontSize: { xs: '1.75rem', md: '2.125rem' } }}>
-                        Member Management
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Manage community members and roles
-                    </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                    <Button 
-                        variant="outlined" 
-                        onClick={handleSyncMemberships}
-                        disabled={syncing}
-                    >
-                        {syncing ? 'Syncing...' : 'Sync Types'}
-                    </Button>
-                    <Button 
-                        variant="outlined" 
-                        startIcon={<MergeTypeIcon />}
-                        onClick={() => setMergeDialogOpen(true)}
-                    >
-                        Merge Accounts
-                    </Button>
-                    <Button 
-                        variant="outlined" 
-                        startIcon={<AccessTimeIcon />}
-                        onClick={() => router.push('/dashboard/checkin-log')}
-                        sx={{ display: { xs: 'none', sm: 'flex' } }}
-                    >
-                        Check-In Log
-                    </Button>
-                </Box>
-            </Box>
+        <div style={{ padding: '20px 24px', maxWidth: 1200 }}>
+            {toast && <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 400, background: 'var(--bg-card)', border: `1px solid ${toast.color}`, color: toast.color, padding: '12px 18px', fontFamily: 'var(--mono)', fontSize: 12 }}>{toast.msg}</div>}
 
-            {isMobile ? (
-                <Box>
-                    <TextField
-                        fullWidth
-                        placeholder="Search members..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        sx={{ mb: 3, bgcolor: 'background.paper' }}
-                        InputProps={{
-                            startAdornment: (
-                                <InputAdornment position="start">
-                                    <SearchIcon color="action" />
-                                </InputAdornment>
-                            ),
-                        }}
-                    />
-                    <Stack spacing={2}>
-                        {filteredUsers.map((user) => {
-                            const totalHours = (user.membership?.volunteerLog || []).reduce((acc, log) => acc + (log.hours || 0), 0);
-                            const status = user.membership?.status || 'N/A';
-                            
-                            return (
-                                <Card key={user.userID} elevation={2}>
-                                    <CardContent>
-                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                                            <Box sx={{ display: 'flex', gap: 2 }}>
-                                                <Avatar sx={{ bgcolor: theme.palette.primary.main }}>
-                                                    {user.firstName?.[0]}{user.lastName?.[0]}
-                                                </Avatar>
-                                                <Box>
-                                                    <Typography variant="subtitle1" fontWeight="bold">
-                                                        {user.firstName} {user.lastName}
-                                                    </Typography>
-                                                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                                        <Chip 
-                                                            label={user.role} 
-                                                            size="small" 
-                                                            color={user.role === 'admin' ? 'secondary' : 'default'}
-                                                            sx={{ height: 20, fontSize: '0.7rem' }}
-                                                        />
-                                                        <Chip 
-                                                            label={status} 
-                                                            size="small" 
-                                                            color={getStatusColor(status)}
-                                                            variant="outlined"
-                                                            sx={{ height: 20, fontSize: '0.7rem' }}
-                                                        />
-                                                    </Box>
-                                                </Box>
-                                            </Box>
-                                            <IconButton onClick={() => handleEditClick(user)} size="small">
-                                                <EditIcon />
-                                            </IconButton>
-                                        </Box>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 28 }}>
+                <div>
+                    <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}><span style={{ color: 'var(--green)' }}>$</span> ./members --list</div>
+                    <h1 style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.4rem, 3vw, 2rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)', margin: 0 }}>member management</h1>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={handleSyncMemberships} disabled={syncing}>{syncing ? '$ syncing...' : '$ sync types'}</button>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setMergeOpen(true)}>$ merge accounts</button>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => router.push('/dashboard/admin/checkin-log')}>$ checkin log</button>
+                </div>
+            </div>
 
-                                        <Stack spacing={1}>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
-                                                <EmailIcon fontSize="small" />
-                                                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                                                    {user.email}
-                                                </Typography>
-                                            </Box>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
-                                                <AccessTimeIcon fontSize="small" />
-                                                <Typography variant="body2">
-                                                    {totalHours} Total Hours
-                                                </Typography>
-                                            </Box>
-                                        </Stack>
-                                    </CardContent>
-                                </Card>
-                            );
-                        })}
-                    </Stack>
-                    <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                        <Pagination 
-                            count={Math.ceil(rowCount / paginationModel.pageSize)} 
-                            page={paginationModel.page + 1} 
-                            onChange={(e, value) => setPaginationModel(prev => ({ ...prev, page: value - 1 }))} 
-                            color="primary" 
-                        />
-                    </Box>
-                </Box>
-            ) : (
-                <Paper sx={{ height: 'calc(100vh - 200px)', width: '100%' }}>
-                    <DataGrid
-                        rows={users}
-                        columns={columns}
-                        getRowId={(row) => row.userID}
-                        slots={{ toolbar: GridToolbar }}
-                        slotProps={{
-                            toolbar: {
-                                showQuickFilter: true,
-                            },
-                        }}
-                        disableRowSelectionOnClick
-                        paginationMode="server"
-                        rowCount={rowCount}
-                        paginationModel={paginationModel}
-                        onPaginationModelChange={setPaginationModel}
-                        loading={loading}
-                        pageSizeOptions={[10, 25, 50, 100]}
-                    />
-                </Paper>
+            <div style={{ marginBottom: 16 }}>
+                <input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder="search by name or email..." style={{ width: '100%', maxWidth: 360, boxSizing: 'border-box', fontSize: 12 }} />
+            </div>
+
+            {error && (
+                <div style={{ border: '1px solid var(--red)', color: 'var(--red)', padding: '12px 16px', marginBottom: 16, fontFamily: 'var(--mono)', fontSize: 12 }}>
+                    ✗ {error}
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, marginLeft: 16, borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => fetchUsers(page)}>retry</button>
+                </div>
             )}
 
-            <MemberDialog 
-                open={dialogOpen} 
-                onClose={() => setDialogOpen(false)} 
-                user={selectedUser} 
-                onUpdate={handleUserUpdate}
-            />
+            {loading ? (
+                <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>loading<span className="caret-block" style={{ marginLeft: 4 }} /></div>
+            ) : (
+                <>
+                    <div style={{ overflowX: 'auto' }}>
+                        <table className="term-table" style={{ width: '100%' }}>
+                            <thead>
+                                <tr>
+                                    <th>NAME</th>
+                                    <th>EMAIL</th>
+                                    <th>ROLE</th>
+                                    <th>STATUS</th>
+                                    <th>TOTAL_HRS</th>
+                                    <th>MONTH_HRS</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filtered.length === 0 ? (
+                                    <tr><td colSpan={7} style={{ color: 'var(--text-dim)', textAlign: 'center' }}>no members found</td></tr>
+                                ) : filtered.map(u => {
+                                    const logs = u.membership?.volunteerLog || [];
+                                    const totalHrs = logs.reduce((a, l) => a + (l.hours || 0), 0);
+                                    const monthHrs = logs.filter(l => new Date(l.date).getMonth() === new Date().getMonth()).reduce((a, l) => a + (l.hours || 0), 0);
+                                    const ms = u.membership?.status || 'N/A';
+                                    return (
+                                        <tr key={u.userID}>
+                                            <td style={{ color: 'var(--text)', fontWeight: 600 }}>{u.firstName} {u.lastName}</td>
+                                            <td style={{ color: 'var(--text-mid)', fontSize: 11 }}>{u.email}</td>
+                                            <td><span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: u.role === 'admin' ? 'var(--magenta)' : 'var(--text-dim)', border: `1px solid ${u.role === 'admin' ? 'var(--magenta)' : 'var(--bd)'}`, padding: '2px 6px' }}>{u.role}</span></td>
+                                            <td><span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: STATUS_COLOR[ms] || 'var(--text-dim)', border: `1px solid ${STATUS_COLOR[ms] || 'var(--bd)'}`, padding: '2px 6px' }}>{ms}</span></td>
+                                            <td style={{ color: 'var(--text-mid)', fontFamily: 'var(--mono)', fontSize: 11 }}>{totalHrs}</td>
+                                            <td style={{ color: monthHrs >= 4 ? 'var(--green)' : 'var(--amber)', fontFamily: 'var(--mono)', fontSize: 11 }}>{monthHrs}</td>
+                                            <td><button className="btn btn--ghost btn--sm" style={{ fontSize: 9 }} onClick={() => { setSelectedUser(u); setDialogOpen(true); }}>manage</button></td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
 
-            {/* Merge Users Dialog */}
-            <Dialog open={mergeDialogOpen} onClose={() => setMergeDialogOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Merge User Accounts</DialogTitle>
-                <DialogContent>
-                    <DialogContentText sx={{ mb: 3 }}>
-                        Select a Source user (to be deleted) and a Target user (to keep). 
-                        All data from the Source user will be moved to the Target user.
-                        <strong> This action is irreversible.</strong>
-                    </DialogContentText>
-                    
-                    <Stack spacing={3}>
-                        <Autocomplete
-                            options={allUsersForMerge}
-                            getOptionLabel={(option) => `${option.firstName} ${option.lastName} (${option.email})`}
-                            value={sourceUser}
-                            onChange={(event, newValue) => setSourceUser(newValue)}
-                            renderInput={(params) => <TextField {...params} label="Source User (Will be DELETED)" />}
-                        />
-                        
-                        <Autocomplete
-                            options={allUsersForMerge}
-                            getOptionLabel={(option) => `${option.firstName} ${option.lastName} (${option.email})`}
-                            value={targetUser}
-                            onChange={(event, newValue) => setTargetUser(newValue)}
-                            renderInput={(params) => <TextField {...params} label="Target User (Will KEEP)" />}
-                        />
-                    </Stack>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setMergeDialogOpen(false)}>Cancel</Button>
-                    <Button 
-                        onClick={handleMergeUsers} 
-                        variant="contained" 
-                        color="error"
-                        disabled={!sourceUser || !targetUser || merging}
-                    >
-                        {merging ? 'Merging...' : 'Merge Accounts'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
-        </Container>
+                    {totalPages > 1 && (
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 16, justifyContent: 'center' }}>
+                            <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>← prev</button>
+                            <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--mono)' }}>{page} / {totalPages}</span>
+                            <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>next →</button>
+                        </div>
+                    )}
+                </>
+            )}
+
+            <MemberDialog open={dialogOpen} onClose={() => setDialogOpen(false)} user={selectedUser} onUpdate={handleUserUpdate} />
+
+            {/* Merge Dialog */}
+            <Modal open={mergeOpen} onClose={() => setMergeOpen(false)} title="merge user accounts"
+                footer={<>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setMergeOpen(false)}>cancel</button>
+                    <button className="btn btn--sm btn--sm" style={{ fontSize: 10, borderColor: 'var(--red)', color: 'var(--red)' }} onClick={handleMergeUsers} disabled={!sourceUser || !targetUser || merging}>
+                        {merging ? '$ merging...' : '$ merge --confirm'}
+                    </button>
+                </>}
+            >
+                <div style={{ border: '1px solid var(--amber)', background: 'rgba(255,170,0,0.05)', padding: '10px 14px', marginBottom: 16, fontSize: 11, color: 'var(--amber)', fontFamily: 'var(--mono)' }}>
+                    ⚠ all data from source will move to target. source account will be deleted. irreversible.
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {[{ label: 'SOURCE_USER (will be deleted)', val: sourceUser, set: setSourceUser }, { label: 'TARGET_USER (will keep)', val: targetUser, set: setTargetUser }].map(({ label, val, set }) => (
+                        <div key={label}>
+                            <label style={{ display: 'block', fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 6 }}>{label}</label>
+                            <select className="input" value={val?.userID || ''} onChange={e => set(allUsersForMerge.find(u => u.userID === e.target.value) || null)} style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }}>
+                                <option value="">-- select user --</option>
+                                {allUsersForMerge.map(u => <option key={u.userID} value={u.userID}>{u.firstName} {u.lastName} ({u.email})</option>)}
+                            </select>
+                        </div>
+                    ))}
+                </div>
+            </Modal>
+        </div>
     );
 }

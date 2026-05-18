@@ -1,120 +1,95 @@
-"use client";
-import React from 'react';
-import { Box, Typography, Grid, Card, CardActionArea, useTheme, Chip } from '@mui/material';
-import { motion } from 'motion/react';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import EventIcon from '@mui/icons-material/Event';
-import Image from 'next/image';
+'use client';
 import Link from 'next/link';
-import QRCode from "react-qr-code";
-// chore force deplo
+import QRCode from 'react-qr-code';
 
-const MotionCard = motion(Card);
-
-const menuItems = [
-    {
-        title: 'Bounty Board',
-        description: 'View and claim available tasks',
-        icon: <AssignmentIcon sx={{ fontSize: 60, color: 'primary.main' }} />,
-        href: '/board/bounties',
-        color: 'primary.main'
-    },
-    {
-        title: 'Upcoming Events',
-        description: 'Workshops and meetups',
-        icon: <EventIcon sx={{ fontSize: 60, color: 'secondary.main' }} />,
-        href: '#', // Placeholder
-        color: 'secondary.main',
-        disabled: true
-    }
+const LINKS = [
+  {
+    label: 'bounty_board',
+    desc: 'View and claim open community tasks. Earn points, build reputation.',
+    cmd: '$ ./bounties --list',
+    href: '/board/bounties',
+    accent: 'var(--green)',
+  },
+  {
+    label: 'events_calendar',
+    desc: 'Workshops, open labs, and member meetups.',
+    cmd: '$ ./events --upcoming',
+    href: '#',
+    disabled: true,
+    accent: 'var(--amber)',
+  },
+  {
+    label: 'member_projects',
+    desc: 'See what the community is building right now.',
+    cmd: '$ ./projects --recent',
+    href: '#',
+    disabled: true,
+    accent: 'var(--cyan)',
+  },
 ];
 
-export default function BoardDashboard() {
-    const theme = useTheme();
+export default function BoardPage() {
+  const checkInUrl = `${process.env.NEXT_PUBLIC_URL || 'http://localhost:3000'}/dashboard/checkin`;
 
-    return (
-        <Box sx={{
-            minHeight: '100vh',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            p: 4,
-            background: `radial-gradient(circle at center, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`
-        }}>
-            <motion.div
-                initial={{ opacity: 0, y: -50 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, ease: "easeOut" }}
+  return (
+    <div style={{ background: 'var(--bg)', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px' }}>
+      <div style={{ width: '100%', maxWidth: 560 }}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 48 }}>
+          <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 12 }}>
+            <span style={{ color: 'var(--green)' }}>$</span> ./board --dashboard
+          </div>
+          <h1 style={{ fontFamily: 'var(--display)', fontSize: '2.2rem', letterSpacing: '-0.04em', color: 'var(--text-bright)', marginBottom: 8 }}>
+            community board
+          </h1>
+
+          {/* QR code check-in */}
+          <div style={{ display: 'inline-block', background: '#fff', padding: 14, border: '1px solid var(--bd-1)', marginTop: 24 }}>
+            <QRCode value={checkInUrl} size={140} />
+          </div>
+          <div style={{ color: 'var(--text-mid)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 10 }}>
+            Scan to check in
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <Link href="/dashboard/checkin" style={{ color: 'var(--text-dim)', fontSize: 10, textDecoration: 'none' }}>
+              or click here if on mobile
+            </Link>
+          </div>
+        </div>
+
+        {/* Navigation links */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {LINKS.map(link => (
+            <div
+              key={link.label}
+              className="card"
+              style={{
+                border: `1px solid ${link.disabled ? 'var(--bd)' : link.accent}`,
+                opacity: link.disabled ? 0.5 : 1,
+                transition: 'box-shadow 0.12s',
+              }}
             >
-                <Box sx={{ textAlign: 'center', mb: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <Box sx={{ position: 'relative', width: 300, height: 120, mb: 2 }}>
-                        <Image 
-                            src="/logos/darkLogo.png" 
-                            alt="FabLab Logo" 
-                            fill
-                            style={{ objectFit: 'contain' }}
-                            priority
-                        />
-                    </Box>
-                    <Typography variant="h5" color="text.secondary" sx={{ mt: 2 }}>
-                        Community Dashboard
-                    </Typography>
-                    <Box sx={{ mt: 4, p: 2, bgcolor: 'white', borderRadius: 2, boxShadow: 3 }}>
-                        <QRCode
-                            value={`${process.env.NEXT_PUBLIC_URL || 'http://localhost:3000'}/dashboard/checkin`}
-                            size={150}
-                        />
-                    </Box>
-                    <Typography variant="subtitle1" sx={{ mt: 2, fontWeight: 'bold', color: 'text.primary' }}>
-                        Scan to Check In
-                    </Typography>
-                </Box>
-            </motion.div>
-
-            <Grid container spacing={3} direction="column" alignItems="center" sx={{ maxWidth: 600, width: '100%' }}>
-                {menuItems.map((item, index) => (
-                    <Grid item xs={12} key={item.title} sx={{ width: '100%' }}>
-                        <MotionCard
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.1, duration: 0.4 }}
-                            whileTap={{ scale: item.disabled ? 1 : 0.98 }}
-                            sx={{
-                                width: '100%',
-                                opacity: item.disabled ? 0.6 : 1,
-                                bgcolor: 'background.paper',
-                                border: `1px solid ${theme.palette.divider}`,
-                                boxShadow: theme.shadows[4],
-                                borderRadius: 3
-                            }}
-                        >
-                            <CardActionArea
-                                component={item.disabled ? 'div' : Link}
-                                href={item.href}
-                                sx={{ p: 3, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', textAlign: 'left' }}
-                                disabled={item.disabled}
-                            >
-                                <Box sx={{ mr: 3, display: 'flex', alignItems: 'center' }}>
-                                    {item.icon}
-                                </Box>
-                                <Box sx={{ flexGrow: 1 }}>
-                                    <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                                        {item.title}
-                                    </Typography>
-                                    <Typography variant="body1" color="text.secondary">
-                                        {item.description}
-                                    </Typography>
-                                    {item.disabled && (
-                                        <Chip label="Coming Soon" size="small" sx={{ mt: 1 }} />
-                                    )}
-                                </Box>
-                            </CardActionArea>
-                        </MotionCard>
-                    </Grid>
-                ))}
-            </Grid>
-
-        </Box>
-    );
+              {link.disabled ? (
+                <div style={{ padding: '20px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontFamily: 'var(--mono)', color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.1em', marginBottom: 6 }}>{link.label}</div>
+                    <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>{link.desc}</div>
+                  </div>
+                  <span className="pill" style={{ fontSize: 9, color: 'var(--text-dim)', flexShrink: 0, marginLeft: 16 }}>soon</span>
+                </div>
+              ) : (
+                <Link href={link.href} style={{ display: 'flex', padding: '20px 22px', textDecoration: 'none', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontFamily: 'var(--mono)', color: link.accent, fontSize: 10, letterSpacing: '0.1em', marginBottom: 6 }}>{link.label}</div>
+                    <div style={{ color: 'var(--text)', fontSize: 12 }}>{link.desc}</div>
+                  </div>
+                  <div style={{ color: link.accent, fontSize: 10, fontFamily: 'var(--mono)', flexShrink: 0, marginLeft: 16 }}>→</div>
+                </Link>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }

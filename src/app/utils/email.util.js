@@ -121,6 +121,29 @@ export async function sendBountyNotificationEmail(email, firstName, bounty) {
     }
 }
 
+export async function sendDeclineEmail(email, firstName) {
+    const mailOptions = {
+        from: `"The Lab" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: 'Your Lab Membership Application',
+        html: `
+            <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #cccccc; padding: 20px; border-radius: 8px;">
+                <h2 style="color: #39ff14;">The Lab</h2>
+                <p>Hi ${firstName || 'there'},</p>
+                <p>Thank you for your interest in The Lab. After reviewing your application, we aren't able to move forward at this time.</p>
+                <p>We appreciate your interest in the community and hope to see you at a future event.</p>
+                <p style="color: #666; font-size: 12px;">— The Lab Team</p>
+            </div>
+        `,
+    };
+    try {
+        await transporter.sendMail(mailOptions);
+    } catch (error) {
+        console.error('Error sending decline email:', error);
+        throw new Error('Failed to send decline email');
+    }
+}
+
 /**
  * ✅ Send email to bounty creator when their bounty is claimed
  */

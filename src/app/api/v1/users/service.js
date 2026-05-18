@@ -247,7 +247,9 @@ export default class UserService {
 
                 // Check if we should auto-update status
                 const currentStatus = currentUser.membership?.status;
-                const isManualStatus = currentStatus === 'probation' || currentStatus === 'suspended';
+                const incomingStatus = updateData.membership?.status;
+                const isManualStatus = currentStatus === 'probation' || currentStatus === 'suspended'
+                    || currentStatus === 'declined' || incomingStatus === 'declined';
                 
                 // Only auto-calculate if not in a manual status, OR if the update explicitly changes status (which we can't easily detect here without comparing, but let's assume if they are in manual status we leave it unless they change it manually)
                 // Actually, if the user is in probation, we shouldn't auto-promote them.
@@ -277,8 +279,9 @@ export default class UserService {
                 
                 // Check if status changed (either by auto-calc or manual override in updateData)
                 if (updateData.membership.status) {
-                     // If manual override was provided, use it
+                     // If manual override was provided, use it and write back to mergedMembership
                      newStatus = updateData.membership.status;
+                     mergedMembership.status = newStatus;
                 }
                 
                 if (oldStatus !== newStatus) {

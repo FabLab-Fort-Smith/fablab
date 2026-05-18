@@ -1,387 +1,279 @@
-"use client";
-import React, { useState, useEffect } from 'react';
-import { 
-    Box, Typography, Paper, Chip, IconButton, Tooltip, CircularProgress,
-    Container, Card, CardContent, Stack, Avatar, useTheme, useMediaQuery,
-    TextField, InputAdornment, Tabs, Tab
-} from '@mui/material';
-import { DataGrid, GridToolbar } from '@mui/x-data-grid';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import PendingIcon from '@mui/icons-material/Pending';
-import SearchIcon from '@mui/icons-material/Search';
-import EmailIcon from '@mui/icons-material/Email';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
-import ReviewDialog from '../../../components/admin/ReviewDialog';
-import NudgeConfirmDialog from '../../../components/admin/NudgeConfirmDialog';
+'use client';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import ReviewDialog from '../../../components/admin/ReviewDialog';
+import NudgeConfirmDialog from '../../../components/admin/NudgeConfirmDialog';
+import DeclineDialog from '../../../components/admin/DeclineDialog';
 
 export default function OnboardingReviewsPage() {
     const { data: session, status } = useSession();
     const router = useRouter();
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedUser, setSelectedUser] = useState(null);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [tabValue, setTabValue] = useState(0);
-
-    // Nudge State
+    const [search, setSearch] = useState('');
+    const [tab, setTab] = useState(0);
     const [nudgeDialogOpen, setNudgeDialogOpen] = useState(false);
     const [nudgeDetails, setNudgeDetails] = useState(null);
     const [nudgeLoading, setNudgeLoading] = useState(false);
     const [nudgeTargetUser, setNudgeTargetUser] = useState(null);
+    const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
+    const [declineTargetUser, setDeclineTargetUser] = useState(null);
+    const [declineLoading, setDeclineLoading] = useState(false);
+    const [toast, setToast] = useState(null);
 
     useEffect(() => {
-        if (status === 'unauthenticated') {
-            router.push('/auth/signin');
-        } else if (status === 'authenticated') {
-            if (session.user.role !== 'admin') {
-                router.push('/dashboard');
-            } else {
-                fetchApplicants();
-            }
+        if (status === 'unauthenticated') router.push('/auth/signin');
+        else if (status === 'authenticated') {
+            if (session.user.role !== 'admin') router.push('/dashboard');
+            else fetchApplicants();
         }
     }, [status, session, router]);
 
+    const showToast = (msg, color = 'var(--green)') => { setToast({ msg, color }); setTimeout(() => setToast(null), 3000); };
+
     const fetchApplicants = async () => {
         try {
-            // Fetch with a high limit to ensure we get all applicants
-            const response = await fetch('/api/v1/users?limit=1000');
-            if (response.ok) {
-                const data = await response.json();
-                // Filter for users who have applied (have applicationDate)
-                const applicants = (data.users || []).filter(u => u.membership?.applicationDate);
-                setUsers(applicants);
+            const res = await fetch('/api/v1/users?limit=1000');
+            if (res.ok) {
+                const data = await res.json();
+                setUsers((data.users || []).filter(u => u.membership?.applicationDate));
             }
-        } catch (error) {
-            console.error("Failed to fetch applicants", error);
-        } finally {
-            setLoading(false);
+        } catch {}
+        finally { setLoading(false); }
+    };
+
+    const updateUserMembership = async (userID, membershipPatch) => {
+        const res = await fetch(`/api/v1/users?userID=${userID}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ membership: membershipPatch }),
+        });
+        return res;
+    };
+
+    const patchLocalUser = (userID, membershipPatch) => {
+        setUsers(prev => prev.map(u =>
+            u.userID === userID ? { ...u, membership: { ...u.membership, ...membershipPatch } } : u
+        ));
+        if (selectedUser?.userID === userID) {
+            setSelectedUser(prev => ({ ...prev, membership: { ...prev.membership, ...membershipPatch } }));
         }
     };
 
-    const handleReviewClick = (user) => {
-        setSelectedUser(user);
-        setDialogOpen(true);
+    const handleMarkReviewed = async (user) => {
+        try {
+            const res = await updateUserMembership(user.userID, { reviewStatus: 'reviewed', status: 'applicant' });
+            if (res.ok) {
+                patchLocalUser(user.userID, { reviewStatus: 'reviewed', status: 'applicant' });
+                showToast('Marked as reviewed.');
+            }
+        } catch {}
+    };
+
+    const handleMarkContacted = async (user) => {
+        try {
+            const res = await updateUserMembership(user.userID, { contacted: true, status: 'contacted' });
+            if (res.ok) {
+                patchLocalUser(user.userID, { contacted: true, status: 'contacted' });
+                showToast('Marked as contacted.');
+            }
+        } catch {}
+    };
+
+    const handleMarkOnboardingComplete = async (user) => {
+        try {
+            const res = await updateUserMembership(user.userID, { onboardingComplete: true, status: 'onboarding' });
+            if (res.ok) {
+                patchLocalUser(user.userID, { onboardingComplete: true, status: 'onboarding' });
+                showToast('Marked onboarding complete.');
+            }
+        } catch {}
+    };
+
+    const handleDecline = async (reason, sendEmail) => {
+        if (!declineTargetUser) return;
+        setDeclineLoading(true);
+        try {
+            const res = await updateUserMembership(declineTargetUser.userID, { status: 'declined', declineReason: reason });
+            if (res.ok) {
+                if (sendEmail) {
+                    await fetch('/api/v1/users/decline-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userID: declineTargetUser.userID }),
+                    });
+                }
+                patchLocalUser(declineTargetUser.userID, { status: 'declined', declineReason: reason });
+                setDeclineDialogOpen(false);
+                setDeclineTargetUser(null);
+                setDialogOpen(false);
+                showToast(`${declineTargetUser.firstName} declined.`, 'var(--red)');
+            }
+        } catch {}
+        finally { setDeclineLoading(false); }
+    };
+
+    const openDeclineDialog = (user) => {
+        setDeclineTargetUser(user);
+        setDeclineDialogOpen(true);
     };
 
     const handleNudge = async (e, user) => {
         e.stopPropagation();
+        setNudgeLoading(true);
+        setNudgeTargetUser(user);
         try {
-            setNudgeLoading(true);
-            setNudgeTargetUser(user);
-            
-            // 1. Preview the nudge first
-            const previewResponse = await fetch('/api/v1/users/nudge', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userID: user.userID, preview: true })
-            });
-
-            const previewData = await previewResponse.json();
-
-            if (!previewResponse.ok) {
-                alert(`Failed to preview nudge: ${previewData.error}`);
-                return;
-            }
-
-            setNudgeDetails(previewData.details);
+            const res = await fetch('/api/v1/users/nudge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userID: user.userID, preview: true }) });
+            const d = await res.json();
+            if (!res.ok) { alert(`Failed to preview nudge: ${d.error}`); return; }
+            setNudgeDetails(d.details);
             setNudgeDialogOpen(true);
-        } catch (error) {
-            console.error("Error preparing nudge:", error);
-            alert("Error preparing nudge.");
-        } finally {
-            setNudgeLoading(false);
-        }
+        } catch { alert('Error preparing nudge.'); }
+        finally { setNudgeLoading(false); }
     };
 
     const handleConfirmNudge = async () => {
         if (!nudgeTargetUser) return;
-        
+        setNudgeLoading(true);
         try {
-            setNudgeLoading(true);
-            const response = await fetch('/api/v1/users/nudge', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userID: nudgeTargetUser.userID, preview: false })
-            });
-            
-            if (response.ok) {
-                alert(`Nudge sent to ${nudgeTargetUser.firstName}!`);
-                setNudgeDialogOpen(false);
-                setNudgeTargetUser(null);
-            } else {
-                const data = await response.json();
-                alert(`Failed to send nudge: ${data.error}`);
-            }
-        } catch (error) {
-            console.error("Error sending nudge:", error);
-            alert("Error sending nudge.");
-        } finally {
-            setNudgeLoading(false);
-        }
+            const res = await fetch('/api/v1/users/nudge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userID: nudgeTargetUser.userID, preview: false }) });
+            if (res.ok) { showToast(`Nudge sent to ${nudgeTargetUser.firstName}!`); setNudgeDialogOpen(false); setNudgeTargetUser(null); }
+            else { const d = await res.json(); alert(`Failed: ${d.error}`); }
+        } catch { alert('Error sending nudge.'); }
+        finally { setNudgeLoading(false); }
     };
 
-    const handleToggleReviewStatus = async (user) => {
-        const newStatus = user.membership?.reviewStatus === 'reviewed' ? 'pending' : 'reviewed';
-        
-        // If marking as reviewed, also mark as contacted if not already
-        const updateData = {
-            membership: {
-                reviewStatus: newStatus
-            }
-        };
-
-        if (newStatus === 'reviewed' && !user.membership?.contacted) {
-            updateData.membership.contacted = true;
-        }
-        
-        try {
-            const response = await fetch(`/api/v1/users?userID=${user.userID}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updateData)
-            });
-
-            if (response.ok) {
-                const updatedUser = await response.json();
-                // Update local state
-                setUsers(prev => prev.map(u => u.userID === user.userID ? {
-                    ...u,
-                    membership: {
-                        ...u.membership,
-                        reviewStatus: newStatus,
-                        contacted: (newStatus === 'reviewed' && !user.membership?.contacted) ? true : u.membership.contacted
-                    }
-                } : u));
-                setDialogOpen(false);
-            }
-        } catch (error) {
-            console.error("Failed to update review status", error);
-        }
-    };
-
-    const handleTabChange = (event, newValue) => {
-        setTabValue(newValue);
-    };
-
-    const getFilteredUsers = () => {
-        let filtered = users;
-        
-        // Filter by Tab
-        if (tabValue === 0) {
-            filtered = filtered.filter(u => u.membership?.reviewStatus !== 'reviewed');
+    const getDisplayUsers = () => {
+        let list;
+        if (tab === 0) {
+            list = users.filter(u => u.membership?.reviewStatus !== 'reviewed' && u.membership?.status !== 'declined');
+        } else if (tab === 1) {
+            list = users.filter(u => u.membership?.reviewStatus === 'reviewed' && u.membership?.status !== 'declined');
         } else {
-            filtered = filtered.filter(u => u.membership?.reviewStatus === 'reviewed');
+            list = users.filter(u => u.membership?.status === 'declined');
         }
-
-        // Filter by Search
-        if (searchTerm) {
-            const lowerTerm = searchTerm.toLowerCase();
-            filtered = filtered.filter(user => 
-                user.firstName?.toLowerCase().includes(lowerTerm) ||
-                user.lastName?.toLowerCase().includes(lowerTerm) ||
-                user.email?.toLowerCase().includes(lowerTerm)
-            );
+        if (search) {
+            const t = search.toLowerCase();
+            list = list.filter(u => u.firstName?.toLowerCase().includes(t) || u.lastName?.toLowerCase().includes(t) || u.email?.toLowerCase().includes(t));
         }
-        
-        return filtered;
+        return list;
     };
 
-    const displayUsers = getFilteredUsers();
+    const displayUsers = getDisplayUsers();
+    const needsReviewCount = users.filter(u => u.membership?.reviewStatus !== 'reviewed' && u.membership?.status !== 'declined').length;
+    const reviewedCount = users.filter(u => u.membership?.reviewStatus === 'reviewed' && u.membership?.status !== 'declined').length;
+    const declinedCount = users.filter(u => u.membership?.status === 'declined').length;
 
-    const columns = [
-        { field: 'firstName', headerName: 'First Name', flex: 1 },
-        { field: 'lastName', headerName: 'Last Name', flex: 1 },
-        { field: 'email', headerName: 'Email', flex: 1.5 },
-        { 
-            field: 'applicationDate', 
-            headerName: 'Applied On', 
-            flex: 1,
-            valueGetter: (value, row) => {
-                const date = row.membership?.applicationDate;
-                return date ? new Date(date).toLocaleDateString() : 'N/A';
-            }
-        },
-        {
-            field: 'status',
-            headerName: 'Status',
-            flex: 1,
-            renderCell: (params) => {
-                const isReviewed = params.row.membership?.reviewStatus === 'reviewed';
-                return (
-                    <Chip 
-                        icon={isReviewed ? <CheckCircleIcon /> : <PendingIcon />}
-                        label={isReviewed ? "Reviewed" : "Needs Review"}
-                        color={isReviewed ? "success" : "warning"}
-                        variant="outlined"
-                    />
-                );
-            }
-        },
-        {
-            field: 'actions',
-            headerName: 'Actions',
-            flex: 0.7,
-            sortable: false,
-            renderCell: (params) => (
-                <Box>
-                    <Tooltip title="Review Application">
-                        <IconButton onClick={() => handleReviewClick(params.row)}>
-                            <VisibilityIcon />
-                        </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Send Reminder (Nudge)">
-                        <IconButton onClick={(e) => handleNudge(e, params.row)} color="warning">
-                            <NotificationsActiveIcon />
-                        </IconButton>
-                    </Tooltip>
-                </Box>
-            )
-        }
+    const TABS = [
+        [`needs review (${needsReviewCount})`, 0],
+        [`reviewed (${reviewedCount})`, 1],
+        [`declined (${declinedCount})`, 2],
     ];
 
-    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress /></Box>;
-
     return (
-        <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 }, px: { xs: 2, md: 3 } }}>
-            <Box sx={{ mb: 4 }}>
-                <Typography variant="h4" fontWeight="bold" sx={{ fontSize: { xs: '1.75rem', md: '2.125rem' } }}>
-                    Onboarding Reviews
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                    Review and approve new member applications
-                </Typography>
-            </Box>
-
-            <Paper sx={{ mb: 3 }}>
-                <Tabs 
-                    value={tabValue} 
-                    onChange={handleTabChange} 
-                    indicatorColor="primary" 
-                    textColor="primary"
-                    variant="fullWidth"
-                >
-                    <Tab label="Needs Review" />
-                    <Tab label="Reviewed" />
-                </Tabs>
-            </Paper>
-
-            {isMobile ? (
-                <Box>
-                    <TextField
-                        fullWidth
-                        placeholder="Search applicants..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        sx={{ mb: 3, bgcolor: 'background.paper' }}
-                        InputProps={{
-                            startAdornment: (
-                                <InputAdornment position="start">
-                                    <SearchIcon color="action" />
-                                </InputAdornment>
-                            ),
-                        }}
-                    />
-                    <Stack spacing={2}>
-                        {displayUsers.map((user) => {
-                            const isReviewed = user.membership?.reviewStatus === 'reviewed';
-                            const date = user.membership?.applicationDate ? new Date(user.membership.applicationDate).toLocaleDateString() : 'N/A';
-                            
-                            return (
-                                <Card key={user.userID} elevation={2}>
-                                    <CardContent>
-                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                                            <Box sx={{ display: 'flex', gap: 2 }}>
-                                                <Avatar sx={{ bgcolor: theme.palette.primary.main }}>
-                                                    {user.firstName?.[0]}{user.lastName?.[0]}
-                                                </Avatar>
-                                                <Box>
-                                                    <Typography variant="subtitle1" fontWeight="bold">
-                                                        {user.firstName} {user.lastName}
-                                                    </Typography>
-                                                    <Chip 
-                                                        icon={isReviewed ? <CheckCircleIcon /> : <PendingIcon />}
-                                                        label={isReviewed ? "Reviewed" : "Needs Review"}
-                                                        color={isReviewed ? "success" : "warning"}
-                                                        variant="outlined"
-                                                        size="small"
-                                                        sx={{ mt: 0.5, height: 24 }}
-                                                    />
-                                                </Box>
-                                            </Box>
-                                            <Box>
-                                                <IconButton onClick={() => handleReviewClick(user)} color="primary">
-                                                    <VisibilityIcon />
-                                                </IconButton>
-                                                <IconButton onClick={(e) => handleNudge(e, user)} color="warning">
-                                                    <NotificationsActiveIcon />
-                                                </IconButton>
-                                            </Box>
-                                        </Box>
-
-                                        <Stack spacing={1}>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
-                                                <EmailIcon fontSize="small" />
-                                                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                                                    {user.email}
-                                                </Typography>
-                                            </Box>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
-                                                <CalendarTodayIcon fontSize="small" />
-                                                <Typography variant="body2">
-                                                    Applied: {date}
-                                                </Typography>
-                                            </Box>
-                                        </Stack>
-                                    </CardContent>
-                                </Card>
-                            );
-                        })}
-                        {displayUsers.length === 0 && (
-                            <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 4 }}>
-                                No applicants found matching your search.
-                            </Typography>
-                        )}
-                    </Stack>
-                </Box>
-            ) : (
-                <Paper sx={{ height: 600, width: '100%' }}>
-                    <DataGrid
-                        rows={displayUsers}
-                        columns={columns}
-                        getRowId={(row) => row.userID}
-                        slots={{ toolbar: GridToolbar }}
-                        slotProps={{
-                            toolbar: {
-                                showQuickFilter: true,
-                            },
-                        }}
-                        disableRowSelectionOnClick
-                    />
-                </Paper>
+        <div style={{ padding: '20px 24px', maxWidth: 1100 }}>
+            {toast && (
+                <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 400, background: 'var(--bg-card)', border: `1px solid ${toast.color}`, color: toast.color, padding: '12px 18px', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                    {toast.msg}
+                </div>
             )}
-            
-            <ReviewDialog 
-                open={dialogOpen} 
-                onClose={() => setDialogOpen(false)} 
-                user={selectedUser}
-                onReview={handleToggleReviewStatus}
-            />
 
-            <NudgeConfirmDialog 
+            <div style={{ marginBottom: 28 }}>
+                <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}><span style={{ color: 'var(--green)' }}>$</span> ./onboarding --reviews</div>
+                <h1 style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.4rem, 3vw, 2rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)', margin: 0 }}>onboarding reviews</h1>
+                <p style={{ color: 'var(--text-mid)', fontSize: 12, marginTop: 6 }}>review and approve new member applications</p>
+            </div>
+
+            {/* Tabs + search */}
+            <div style={{ border: '1px solid var(--bd-1)', background: 'var(--bg-card)', marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--bd)', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex' }}>
+                        {TABS.map(([label, val]) => (
+                            <button key={val} onClick={() => setTab(val)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '12px 16px', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.08em', color: tab === val ? (val === 2 ? 'var(--red)' : 'var(--green)') : 'var(--text-dim)', borderBottom: tab === val ? `2px solid ${val === 2 ? 'var(--red)' : 'var(--green)'}` : '2px solid transparent', marginBottom: -1 }}>
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                    <div style={{ padding: '8px 16px' }}>
+                        <input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder="search..." style={{ fontSize: 10, padding: '4px 8px' }} />
+                    </div>
+                </div>
+            </div>
+
+            {loading ? (
+                <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>loading<span className="caret-block" style={{ marginLeft: 4 }} /></div>
+            ) : displayUsers.length === 0 ? (
+                <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>[no applicants found]</div>
+            ) : (
+                <div style={{ overflowX: 'auto' }}>
+                    <table className="term-table" style={{ width: '100%' }}>
+                        <thead>
+                            <tr>
+                                <th>NAME</th>
+                                <th>EMAIL</th>
+                                <th>APPLIED_ON</th>
+                                <th>STATUS</th>
+                                <th>ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {displayUsers.map(u => {
+                                const appDate = u.membership?.applicationDate ? new Date(u.membership.applicationDate).toLocaleDateString() : 'N/A';
+                                const memberStatus = u.membership?.status || 'registered';
+                                const statusColor = memberStatus === 'declined' ? 'var(--red)' : u.membership?.reviewStatus === 'reviewed' ? 'var(--green)' : 'var(--amber)';
+                                const statusLabel = memberStatus === 'declined' ? 'declined' : u.membership?.reviewStatus === 'reviewed' ? 'reviewed' : 'needs review';
+                                return (
+                                    <tr key={u.userID}>
+                                        <td style={{ color: 'var(--text)', fontWeight: 600 }}>{u.firstName} {u.lastName}</td>
+                                        <td style={{ color: 'var(--text-mid)', fontSize: 11 }}>{u.email}</td>
+                                        <td style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-dim)' }}>{appDate}</td>
+                                        <td>
+                                            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: statusColor, border: `1px solid ${statusColor}`, padding: '2px 6px' }}>
+                                                {statusLabel}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div style={{ display: 'flex', gap: 8 }}>
+                                                <button className="btn btn--ghost btn--sm" style={{ fontSize: 9 }} onClick={() => { setSelectedUser(u); setDialogOpen(true); }}>$ review</button>
+                                                {tab !== 2 && (
+                                                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 9, borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={e => handleNudge(e, u)} disabled={nudgeLoading}>nudge</button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            <ReviewDialog
+                open={dialogOpen}
+                onClose={() => setDialogOpen(false)}
+                user={selectedUser}
+                onReview={handleMarkReviewed}
+                onMarkContacted={handleMarkContacted}
+                onMarkOnboardingComplete={handleMarkOnboardingComplete}
+                onDecline={openDeclineDialog}
+            />
+            <NudgeConfirmDialog
                 open={nudgeDialogOpen}
                 onClose={() => setNudgeDialogOpen(false)}
                 onConfirm={handleConfirmNudge}
                 nudgeDetails={nudgeDetails}
                 loading={nudgeLoading}
             />
-        </Container>
+            <DeclineDialog
+                open={declineDialogOpen}
+                onClose={() => { setDeclineDialogOpen(false); setDeclineTargetUser(null); }}
+                onConfirm={handleDecline}
+                user={declineTargetUser}
+                loading={declineLoading}
+            />
+        </div>
     );
 }

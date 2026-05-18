@@ -1,7 +1,6 @@
+"use client";
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Box, Typography, Paper, List, ListItem, ListItemAvatar, Avatar, ListItemText, Divider, Button } from '@mui/material';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 
 const ArcadeLeaderboard = ({ refreshTrigger }) => {
     const [scores, setScores] = useState([]);
@@ -11,75 +10,48 @@ const ArcadeLeaderboard = ({ refreshTrigger }) => {
             try {
                 const res = await fetch('/api/v1/arcade/leaderboard?game=infinite_loop');
                 const data = await res.json();
-                if (Array.isArray(data)) {
-                    setScores(data);
-                }
+                if (Array.isArray(data)) setScores(data);
             } catch (error) {
                 console.error("Failed to fetch leaderboard", error);
             }
         };
 
         fetchLeaderboard();
-        // Refresh every minute
         const interval = setInterval(fetchLeaderboard, 60000);
         return () => clearInterval(interval);
     }, [refreshTrigger]);
 
+    const RANK_COLORS = ['#ffd700', '#c0c0c0', '#cd7f32'];
+
     return (
-        <Paper sx={{ p: 2, background: 'rgba(0,0,0,0.5)', border: '1px solid #333' }}>
-            <Typography variant="h6" sx={{ color: '#00ff00', fontFamily: 'Roboto Mono, monospace', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <EmojiEventsIcon /> TOP HACKERS
-            </Typography>
-            <List>
+        <div style={{ padding: 16, background: 'rgba(0,0,0,0.5)', border: '1px solid #333' }}>
+            <div style={{ color: 'var(--green)', fontFamily: 'var(--mono)', fontSize: 13, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                ★ TOP HACKERS
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                 {scores.slice(0, 3).map((score, index) => (
-                    <React.Fragment key={score._id}>
-                        <ListItem alignItems="flex-start">
-                            <ListItemAvatar>
-                                <Avatar alt={score.username} src={score.avatar} sx={{ border: index < 3 ? '2px solid gold' : 'none' }} />
-                            </ListItemAvatar>
-                            <ListItemText
-                                primary={
-                                    <Typography sx={{ color: '#fff', fontFamily: 'Roboto Mono, monospace' }}>
-                                        {index + 1}. {score.username}
-                                    </Typography>
-                                }
-                                secondary={
-                                    <Typography sx={{ color: '#00ff00', fontFamily: 'Roboto Mono, monospace' }}>
-                                        {score.score} PTS
-                                    </Typography>
-                                }
-                            />
-                        </ListItem>
-                        {index < Math.min(scores.length, 3) - 1 && <Divider variant="inset" component="li" sx={{ borderColor: '#333' }} />}
-                    </React.Fragment>
+                    <div key={score._id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: index < Math.min(scores.length, 3) - 1 ? '1px solid #333' : 'none' }}>
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: score.avatar ? `url(${score.avatar}) center/cover` : '#222', border: `2px solid ${RANK_COLORS[index] || '#333'}`, flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ color: '#fff', fontFamily: 'var(--mono)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {index + 1}. {score.username}
+                            </div>
+                            <div style={{ color: 'var(--green)', fontFamily: 'var(--mono)', fontSize: 11 }}>{score.score} PTS</div>
+                        </div>
+                    </div>
                 ))}
                 {scores.length === 0 && (
-                    <Typography sx={{ color: '#666', textAlign: 'center', py: 2 }}>
-                        No scores yet. Be the first!
-                    </Typography>
+                    <div style={{ color: '#666', textAlign: 'center', padding: '16px 0', fontFamily: 'var(--mono)', fontSize: 12 }}>No scores yet. Be the first!</div>
                 )}
-            </List>
-            <Box sx={{ mt: 2, textAlign: 'center' }}>
-                <Link href="/dashboard/activities/leaderboard" passHref>
-                    <Button 
-                        variant="outlined" 
-                        size="small"
-                        sx={{ 
-                            color: '#00ff00', 
-                            borderColor: '#00ff00', 
-                            fontFamily: 'Roboto Mono, monospace',
-                            '&:hover': {
-                                borderColor: '#fff',
-                                color: '#fff',
-                                backgroundColor: 'rgba(0, 255, 0, 0.1)'
-                            }
-                        }}
-                    >
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 16 }}>
+                <Link href="/dashboard/activities/leaderboard">
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, color: 'var(--green)', borderColor: 'var(--green)', width: '100%' }}>
                         VIEW FULL LEADERBOARD
-                    </Button>
+                    </button>
                 </Link>
-            </Box>
-        </Paper>
+            </div>
+        </div>
     );
 };
 
