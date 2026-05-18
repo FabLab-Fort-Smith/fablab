@@ -36,11 +36,11 @@
   --red-dim: #7a1414;
 
   /* text */
-  --text: #b8ffc8;
-  --text-bright: #d6ffe0;
-  --text-mid: #6fa07a;
-  --text-dim: #3d5a44;
-  --text-faint: #2a3a30;
+  --text: #c8ffd4;
+  --text-bright: #e8fff0;
+  --text-mid: #8abf96;
+  --text-dim: #5a8a66;
+  --text-faint: #3a5040;
 
   /* effects */
   --glow-sm: 0 0 4px currentColor;
