@@ -73,6 +73,7 @@ function navForRole(role, userID) {
         { id: '/dashboard/admin/emails',              icon: '✉', label: 'email.templates' },
         { id: '/dashboard/admin/plans',               icon: '◉', label: 'membership.plans', hot: 'cyan' },
         { id: '/dashboard/admin/square-transactions', icon: '⟁', label: 'square.txns', hot: 'cyan' },
+        { id: '/dashboard/admin/coupons',             icon: '%', label: 'coupons', hot: 'cyan' },
       ],
     }, {
       title: 'member.views',
