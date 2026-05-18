@@ -43,19 +43,17 @@ function shapePlan(plan, hidden, subscriberCount = 0) {
     subscriberCount,
     variations: (plan.subscriptionPlanData?.subscriptionPlanVariations || []).map((v) => {
       const phases = v.subscriptionPlanVariationData?.phases || [];
-      // Billing phase = highest ordinal (trial is ordinal 0 when present)
-      const billingPhase = phases.reduce(
-        (best, p) => (Number(p.ordinal) > Number(best?.ordinal ?? -1) ? p : best),
-        phases[0]
-      );
-      const trialPhase = phases.length > 1
-        ? phases.find(p => Number(p.ordinal) === 0 && Number(p.pricing?.priceMoney?.amount ?? p.priceMoney?.amount ?? -1) === 0)
-        : null;
+      // Square always puts billing last; trial (if present) is first with $0
+      const billingPhase = phases[phases.length - 1];
+      const trialPhase = phases.length > 1 ? phases[0] : null;
+      const priceAmount = billingPhase?.pricing?.priceMoney?.amount
+        ?? billingPhase?.recurringPriceMoney?.amount
+        ?? 0;
       return {
         id: v.id,
         name: v.subscriptionPlanVariationData?.name || "",
         cadence: billingPhase?.cadence || "UNKNOWN",
-        priceCents: Number(billingPhase?.pricing?.priceMoney?.amount ?? 0),
+        priceCents: Number(priceAmount),
         trialDays: trialPhase ? Number(trialPhase.periods ?? 0) : 0,
       };
     }),
