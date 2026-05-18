@@ -4,6 +4,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import ReviewDialog from '../../../components/admin/ReviewDialog';
 import NudgeConfirmDialog from '../../../components/admin/NudgeConfirmDialog';
+import DeclineDialog from '../../../components/admin/DeclineDialog';
 
 export default function OnboardingReviewsPage() {
     const { data: session, status } = useSession();
@@ -18,6 +19,9 @@ export default function OnboardingReviewsPage() {
     const [nudgeDetails, setNudgeDetails] = useState(null);
     const [nudgeLoading, setNudgeLoading] = useState(false);
     const [nudgeTargetUser, setNudgeTargetUser] = useState(null);
+    const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
+    const [declineTargetUser, setDeclineTargetUser] = useState(null);
+    const [declineLoading, setDeclineLoading] = useState(false);
     const [toast, setToast] = useState(null);
 
     useEffect(() => {
@@ -33,9 +37,88 @@ export default function OnboardingReviewsPage() {
     const fetchApplicants = async () => {
         try {
             const res = await fetch('/api/v1/users?limit=1000');
-            if (res.ok) { const data = await res.json(); setUsers((data.users || []).filter(u => u.membership?.applicationDate)); }
+            if (res.ok) {
+                const data = await res.json();
+                setUsers((data.users || []).filter(u => u.membership?.applicationDate));
+            }
         } catch {}
         finally { setLoading(false); }
+    };
+
+    const updateUserMembership = async (userID, membershipPatch) => {
+        const res = await fetch(`/api/v1/users?userID=${userID}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ membership: membershipPatch }),
+        });
+        return res;
+    };
+
+    const patchLocalUser = (userID, membershipPatch) => {
+        setUsers(prev => prev.map(u =>
+            u.userID === userID ? { ...u, membership: { ...u.membership, ...membershipPatch } } : u
+        ));
+        if (selectedUser?.userID === userID) {
+            setSelectedUser(prev => ({ ...prev, membership: { ...prev.membership, ...membershipPatch } }));
+        }
+    };
+
+    const handleMarkReviewed = async (user) => {
+        try {
+            const res = await updateUserMembership(user.userID, { reviewStatus: 'reviewed', status: 'applicant' });
+            if (res.ok) {
+                patchLocalUser(user.userID, { reviewStatus: 'reviewed', status: 'applicant' });
+                showToast('Marked as reviewed.');
+            }
+        } catch {}
+    };
+
+    const handleMarkContacted = async (user) => {
+        try {
+            const res = await updateUserMembership(user.userID, { contacted: true, status: 'contacted' });
+            if (res.ok) {
+                patchLocalUser(user.userID, { contacted: true, status: 'contacted' });
+                showToast('Marked as contacted.');
+            }
+        } catch {}
+    };
+
+    const handleMarkOnboardingComplete = async (user) => {
+        try {
+            const res = await updateUserMembership(user.userID, { onboardingComplete: true, status: 'onboarding' });
+            if (res.ok) {
+                patchLocalUser(user.userID, { onboardingComplete: true, status: 'onboarding' });
+                showToast('Marked onboarding complete.');
+            }
+        } catch {}
+    };
+
+    const handleDecline = async (reason, sendEmail) => {
+        if (!declineTargetUser) return;
+        setDeclineLoading(true);
+        try {
+            const res = await updateUserMembership(declineTargetUser.userID, { status: 'declined', declineReason: reason });
+            if (res.ok) {
+                if (sendEmail) {
+                    await fetch('/api/v1/users/decline-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userID: declineTargetUser.userID }),
+                    });
+                }
+                patchLocalUser(declineTargetUser.userID, { status: 'declined', declineReason: reason });
+                setDeclineDialogOpen(false);
+                setDeclineTargetUser(null);
+                setDialogOpen(false);
+                showToast(`${declineTargetUser.firstName} declined.`, 'var(--red)');
+            }
+        } catch {}
+        finally { setDeclineLoading(false); }
+    };
+
+    const openDeclineDialog = (user) => {
+        setDeclineTargetUser(user);
+        setDeclineDialogOpen(true);
     };
 
     const handleNudge = async (e, user) => {
@@ -63,33 +146,40 @@ export default function OnboardingReviewsPage() {
         finally { setNudgeLoading(false); }
     };
 
-    const handleToggleReviewStatus = async (user) => {
-        const newStatus = user.membership?.reviewStatus === 'reviewed' ? 'pending' : 'reviewed';
-        const updateData = { membership: { reviewStatus: newStatus } };
-        if (newStatus === 'reviewed' && !user.membership?.contacted) updateData.membership.contacted = true;
-        try {
-            const res = await fetch(`/api/v1/users?userID=${user.userID}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updateData) });
-            if (res.ok) {
-                setUsers(prev => prev.map(u => u.userID === user.userID ? { ...u, membership: { ...u.membership, reviewStatus: newStatus, contacted: newStatus === 'reviewed' && !user.membership?.contacted ? true : u.membership?.contacted } } : u));
-                setDialogOpen(false);
-                showToast(`Marked as ${newStatus}.`);
-            }
-        } catch {}
-    };
-
     const getDisplayUsers = () => {
-        let list = tab === 0 ? users.filter(u => u.membership?.reviewStatus !== 'reviewed') : users.filter(u => u.membership?.reviewStatus === 'reviewed');
-        if (search) { const t = search.toLowerCase(); list = list.filter(u => u.firstName?.toLowerCase().includes(t) || u.lastName?.toLowerCase().includes(t) || u.email?.toLowerCase().includes(t)); }
+        let list;
+        if (tab === 0) {
+            list = users.filter(u => u.membership?.reviewStatus !== 'reviewed' && u.membership?.status !== 'declined');
+        } else if (tab === 1) {
+            list = users.filter(u => u.membership?.reviewStatus === 'reviewed' && u.membership?.status !== 'declined');
+        } else {
+            list = users.filter(u => u.membership?.status === 'declined');
+        }
+        if (search) {
+            const t = search.toLowerCase();
+            list = list.filter(u => u.firstName?.toLowerCase().includes(t) || u.lastName?.toLowerCase().includes(t) || u.email?.toLowerCase().includes(t));
+        }
         return list;
     };
 
     const displayUsers = getDisplayUsers();
-    const needsReviewCount = users.filter(u => u.membership?.reviewStatus !== 'reviewed').length;
-    const reviewedCount = users.filter(u => u.membership?.reviewStatus === 'reviewed').length;
+    const needsReviewCount = users.filter(u => u.membership?.reviewStatus !== 'reviewed' && u.membership?.status !== 'declined').length;
+    const reviewedCount = users.filter(u => u.membership?.reviewStatus === 'reviewed' && u.membership?.status !== 'declined').length;
+    const declinedCount = users.filter(u => u.membership?.status === 'declined').length;
+
+    const TABS = [
+        [`needs review (${needsReviewCount})`, 0],
+        [`reviewed (${reviewedCount})`, 1],
+        [`declined (${declinedCount})`, 2],
+    ];
 
     return (
         <div style={{ padding: '20px 24px', maxWidth: 1100 }}>
-            {toast && <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 400, background: 'var(--bg-card)', border: `1px solid ${toast.color}`, color: toast.color, padding: '12px 18px', fontFamily: 'var(--mono)', fontSize: 12 }}>{toast.msg}</div>}
+            {toast && (
+                <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 400, background: 'var(--bg-card)', border: `1px solid ${toast.color}`, color: toast.color, padding: '12px 18px', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                    {toast.msg}
+                </div>
+            )}
 
             <div style={{ marginBottom: 28 }}>
                 <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}><span style={{ color: 'var(--green)' }}>$</span> ./onboarding --reviews</div>
@@ -101,8 +191,10 @@ export default function OnboardingReviewsPage() {
             <div style={{ border: '1px solid var(--bd-1)', background: 'var(--bg-card)', marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--bd)', flexWrap: 'wrap' }}>
                     <div style={{ display: 'flex' }}>
-                        {[[`needs review (${needsReviewCount})`, 0], [`reviewed (${reviewedCount})`, 1]].map(([label, val]) => (
-                            <button key={val} onClick={() => setTab(val)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '12px 16px', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.08em', color: tab === val ? 'var(--green)' : 'var(--text-dim)', borderBottom: tab === val ? '2px solid var(--green)' : '2px solid transparent', marginBottom: -1 }}>{label}</button>
+                        {TABS.map(([label, val]) => (
+                            <button key={val} onClick={() => setTab(val)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '12px 16px', fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.08em', color: tab === val ? (val === 2 ? 'var(--red)' : 'var(--green)') : 'var(--text-dim)', borderBottom: tab === val ? `2px solid ${val === 2 ? 'var(--red)' : 'var(--green)'}` : '2px solid transparent', marginBottom: -1 }}>
+                                {label}
+                            </button>
                         ))}
                     </div>
                     <div style={{ padding: '8px 16px' }}>
@@ -129,22 +221,26 @@ export default function OnboardingReviewsPage() {
                         </thead>
                         <tbody>
                             {displayUsers.map(u => {
-                                const isReviewed = u.membership?.reviewStatus === 'reviewed';
                                 const appDate = u.membership?.applicationDate ? new Date(u.membership.applicationDate).toLocaleDateString() : 'N/A';
+                                const memberStatus = u.membership?.status || 'registered';
+                                const statusColor = memberStatus === 'declined' ? 'var(--red)' : u.membership?.reviewStatus === 'reviewed' ? 'var(--green)' : 'var(--amber)';
+                                const statusLabel = memberStatus === 'declined' ? 'declined' : u.membership?.reviewStatus === 'reviewed' ? 'reviewed' : 'needs review';
                                 return (
                                     <tr key={u.userID}>
                                         <td style={{ color: 'var(--text)', fontWeight: 600 }}>{u.firstName} {u.lastName}</td>
                                         <td style={{ color: 'var(--text-mid)', fontSize: 11 }}>{u.email}</td>
                                         <td style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-dim)' }}>{appDate}</td>
                                         <td>
-                                            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: isReviewed ? 'var(--green)' : 'var(--amber)', border: `1px solid ${isReviewed ? 'var(--green)' : 'var(--amber)'}`, padding: '2px 6px' }}>
-                                                {isReviewed ? 'reviewed' : 'needs review'}
+                                            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: statusColor, border: `1px solid ${statusColor}`, padding: '2px 6px' }}>
+                                                {statusLabel}
                                             </span>
                                         </td>
                                         <td>
                                             <div style={{ display: 'flex', gap: 8 }}>
                                                 <button className="btn btn--ghost btn--sm" style={{ fontSize: 9 }} onClick={() => { setSelectedUser(u); setDialogOpen(true); }}>$ review</button>
-                                                <button className="btn btn--ghost btn--sm" style={{ fontSize: 9, borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={e => handleNudge(e, u)} disabled={nudgeLoading}>nudge</button>
+                                                {tab !== 2 && (
+                                                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 9, borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={e => handleNudge(e, u)} disabled={nudgeLoading}>nudge</button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -155,8 +251,29 @@ export default function OnboardingReviewsPage() {
                 </div>
             )}
 
-            <ReviewDialog open={dialogOpen} onClose={() => setDialogOpen(false)} user={selectedUser} onReview={handleToggleReviewStatus} />
-            <NudgeConfirmDialog open={nudgeDialogOpen} onClose={() => setNudgeDialogOpen(false)} onConfirm={handleConfirmNudge} nudgeDetails={nudgeDetails} loading={nudgeLoading} />
+            <ReviewDialog
+                open={dialogOpen}
+                onClose={() => setDialogOpen(false)}
+                user={selectedUser}
+                onReview={handleMarkReviewed}
+                onMarkContacted={handleMarkContacted}
+                onMarkOnboardingComplete={handleMarkOnboardingComplete}
+                onDecline={openDeclineDialog}
+            />
+            <NudgeConfirmDialog
+                open={nudgeDialogOpen}
+                onClose={() => setNudgeDialogOpen(false)}
+                onConfirm={handleConfirmNudge}
+                nudgeDetails={nudgeDetails}
+                loading={nudgeLoading}
+            />
+            <DeclineDialog
+                open={declineDialogOpen}
+                onClose={() => { setDeclineDialogOpen(false); setDeclineTargetUser(null); }}
+                onConfirm={handleDecline}
+                user={declineTargetUser}
+                loading={declineLoading}
+            />
         </div>
     );
 }
