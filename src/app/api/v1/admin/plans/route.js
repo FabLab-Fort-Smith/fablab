@@ -5,106 +5,180 @@ import { db } from "@/lib/database";
 import { v4 as uuidv4 } from "uuid";
 
 const catalogApi = squareClient.catalogApi;
+const subscriptionsApi = squareClient.subscriptionsApi;
+
+// ── helpers ──────────────────────────────────────────────────────────────────
 
 async function getHiddenPlanIds() {
   const col = await db.dbPlans();
   const doc = await col.findOne({ _id: "hidden_plans" });
   return new Set(doc?.ids || []);
 }
-
 async function setHiddenPlanId(planId) {
   const col = await db.dbPlans();
-  await col.updateOne(
-    { _id: "hidden_plans" },
-    { $addToSet: { ids: planId } },
-    { upsert: true }
-  );
+  await col.updateOne({ _id: "hidden_plans" }, { $addToSet: { ids: planId } }, { upsert: true });
 }
-
 async function unsetHiddenPlanId(planId) {
   const col = await db.dbPlans();
   await col.updateOne({ _id: "hidden_plans" }, { $pull: { ids: planId } });
 }
 
-// GET: List all subscription plans from Square Catalog
-export async function GET() {
+async function fetchAllSubscriptions(filter) {
+  const subs = [];
+  let cursor;
+  do {
+    const { result } = await subscriptionsApi.searchSubscriptions({ cursor, limit: 200, query: { filter } });
+    subs.push(...(result.subscriptions || []));
+    cursor = result.cursor;
+  } while (cursor);
+  return subs;
+}
+
+function shapePlan(plan, hidden, subscriberCount = 0) {
+  return {
+    id: plan.id,
+    version: Number(plan.version),
+    name: plan.subscriptionPlanData?.name || "Unnamed Plan",
+    hidden: hidden.has(plan.id),
+    subscriberCount,
+    variations: (plan.subscriptionPlanData?.subscriptionPlanVariations || []).map((v) => ({
+      id: v.id,
+      name: v.subscriptionPlanVariationData?.name || "",
+      cadence: v.subscriptionPlanVariationData?.phases?.[0]?.cadence || "UNKNOWN",
+      priceCents: Number(v.subscriptionPlanVariationData?.phases?.[0]?.pricing?.priceMoney?.amount ?? 0),
+      trialDays: (() => {
+        const phases = v.subscriptionPlanVariationData?.phases || [];
+        const trial = phases.find(p => p.ordinal === 0 && Number(p.priceMoney?.amount ?? p.pricing?.priceMoney?.amount ?? -1) === 0 && phases.length > 1);
+        return trial ? Number(trial.periods ?? 0) : 0;
+      })(),
+    })),
+  };
+}
+
+// ── GET: list plans with subscriber counts ────────────────────────────────────
+
+export async function GET(request) {
   try {
     const session = await auth();
-    if (!session || session.user.role !== "admin") {
+    if (!session || session.user.role !== "admin")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { searchParams } = new URL(request.url);
+    const subscribersPlanId = searchParams.get("subscribers");
+
+    // ── Subscriber list for a specific plan ──
+    if (subscribersPlanId) {
+      const { result: planResult } = await catalogApi.retrieveCatalogObject(subscribersPlanId, true);
+      const variationIds = (planResult.object?.subscriptionPlanData?.subscriptionPlanVariations || [])
+        .map(v => v.id).filter(Boolean);
+
+      if (!variationIds.length)
+        return NextResponse.json([], { status: 200 });
+
+      const subs = await fetchAllSubscriptions({ planVariationIds: variationIds });
+
+      const customerIds = [...new Set(subs.map(s => s.customerId).filter(Boolean))];
+      const usersCol = await db.dbUsers();
+      const users = customerIds.length
+        ? await usersCol.find({ $or: [
+            { "membership.squareCustomerId": { $in: customerIds } },
+            { squareCustomerId: { $in: customerIds } },
+            { squareID: { $in: customerIds } },
+          ]}).toArray()
+        : [];
+      const customerMap = {};
+      for (const u of users) {
+        const id = u.membership?.squareCustomerId || u.squareCustomerId || u.squareID;
+        if (id) customerMap[id] = { userID: u.userID, firstName: u.firstName, lastName: u.lastName, email: u.email };
+      }
+
+      return NextResponse.json(subs.map(s => ({
+        id: s.id,
+        status: s.status,
+        planVariationId: s.planVariationId,
+        startDate: s.startDate,
+        canceledDate: s.canceledDate,
+        chargedThroughDate: s.chargedThroughDate,
+        customerId: s.customerId,
+        customer: customerMap[s.customerId] || null,
+      })), { status: 200 });
     }
 
+    // ── Full plan list ──
     const [{ result }, hidden] = await Promise.all([
       catalogApi.listCatalog(undefined, "SUBSCRIPTION_PLAN"),
       getHiddenPlanIds(),
     ]);
 
-    const plans = (result.objects || []).map((plan) => ({
-      id: plan.id,
-      version: Number(plan.version),
-      name: plan.subscriptionPlanData?.name || "Unnamed Plan",
-      hidden: hidden.has(plan.id),
-      variations: (plan.subscriptionPlanData?.subscriptionPlanVariations || []).map((v) => ({
-        id: v.id,
-        name: v.subscriptionPlanVariationData?.name || "",
-        cadence: v.subscriptionPlanVariationData?.phases?.[0]?.cadence || "UNKNOWN",
-        priceCents: Number(v.subscriptionPlanVariationData?.phases?.[0]?.pricing?.priceMoney?.amount ?? 0),
-      })),
-    }));
+    const rawPlans = result.objects || [];
+    const allVariationIds = rawPlans.flatMap(p =>
+      (p.subscriptionPlanData?.subscriptionPlanVariations || []).map(v => v.id)
+    );
 
-    return NextResponse.json(plans, { status: 200 });
+    // Fetch subscriber counts for all variations in one query
+    const countByPlan = {};
+    if (allVariationIds.length) {
+      const subs = await fetchAllSubscriptions({
+        planVariationIds: allVariationIds,
+        statuses: ["ACTIVE", "PAUSED"],
+      });
+      const varToPlan = {};
+      for (const p of rawPlans)
+        for (const v of (p.subscriptionPlanData?.subscriptionPlanVariations || []))
+          varToPlan[v.id] = p.id;
+      for (const s of subs) {
+        const pid = varToPlan[s.planVariationId];
+        if (pid) countByPlan[pid] = (countByPlan[pid] || 0) + 1;
+      }
+    }
+
+    return NextResponse.json(
+      rawPlans.map(p => shapePlan(p, hidden, countByPlan[p.id] || 0)),
+      { status: 200 }
+    );
   } catch (error) {
     console.error("❌ Error fetching plans:", error);
     return NextResponse.json({ error: "Failed to fetch plans." }, { status: 500 });
   }
 }
 
-// POST: Create a new subscription plan in Square Catalog
+// ── POST: create plan with flexible variations ────────────────────────────────
+
 export async function POST(request) {
   try {
     const session = await auth();
-    if (!session || session.user.role !== "admin") {
+    if (!session || session.user.role !== "admin")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
-    const { name, monthlyPriceCents, annualPriceCents } = await request.json();
-    if (!name || !monthlyPriceCents) {
-      return NextResponse.json({ error: "name and monthlyPriceCents are required." }, { status: 400 });
-    }
+    const { name, variations } = await request.json();
+    if (!name || !variations?.length)
+      return NextResponse.json({ error: "name and at least one variation are required." }, { status: 400 });
 
-    const variations = [
-      {
-        type: "SUBSCRIPTION_PLAN_VARIATION",
-        id: `#monthly-${uuidv4()}`,
-        presentAtAllLocations: true,
-        subscriptionPlanVariationData: {
-          name: "Monthly",
-          phases: [
-            {
-              cadence: "MONTHLY",
-              pricing: { type: "STATIC", priceMoney: { amount: BigInt(monthlyPriceCents), currency: "USD" } },
-            },
-          ],
-        },
-      },
-    ];
-
-    if (annualPriceCents) {
-      variations.push({
-        type: "SUBSCRIPTION_PLAN_VARIATION",
-        id: `#annual-${uuidv4()}`,
-        presentAtAllLocations: true,
-        subscriptionPlanVariationData: {
-          name: "Annual",
-          phases: [
-            {
-              cadence: "ANNUAL",
-              pricing: { type: "STATIC", priceMoney: { amount: BigInt(annualPriceCents), currency: "USD" } },
-            },
-          ],
-        },
+    const builtVariations = variations.map((v, idx) => {
+      const phases = [];
+      if (v.trialDays > 0) {
+        phases.push({
+          cadence: "DAILY",
+          periods: v.trialDays,
+          pricing: { type: "STATIC", priceMoney: { amount: BigInt(0), currency: "USD" } },
+          ordinal: BigInt(0),
+        });
+      }
+      phases.push({
+        cadence: v.cadence,
+        pricing: { type: "STATIC", priceMoney: { amount: BigInt(v.priceCents), currency: "USD" } },
+        ordinal: BigInt(v.trialDays > 0 ? 1 : 0),
       });
-    }
+      return {
+        type: "SUBSCRIPTION_PLAN_VARIATION",
+        id: `#var-${idx}-${uuidv4()}`,
+        presentAtAllLocations: true,
+        subscriptionPlanVariationData: {
+          name: v.name || v.cadence,
+          phases,
+        },
+      };
+    });
 
     const { result } = await catalogApi.upsertCatalogObject({
       idempotencyKey: uuidv4(),
@@ -112,10 +186,7 @@ export async function POST(request) {
         type: "SUBSCRIPTION_PLAN",
         id: `#plan-${uuidv4()}`,
         presentAtAllLocations: true,
-        subscriptionPlanData: {
-          name,
-          subscriptionPlanVariations: variations,
-        },
+        subscriptionPlanData: { name, subscriptionPlanVariations: builtVariations },
       },
     });
 
@@ -126,42 +197,55 @@ export async function POST(request) {
   }
 }
 
-// PUT: Update an existing plan's name, or restore a locally-hidden plan
+// ── PUT: rename plan, edit variation prices, or restore hidden ────────────────
+
 export async function PUT(request) {
   try {
     const session = await auth();
-    if (!session || session.user.role !== "admin") {
+    if (!session || session.user.role !== "admin")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
-    const { planId, name, version, restore } = await request.json();
-    if (!planId) {
+    const { planId, name, variations, restore } = await request.json();
+    if (!planId)
       return NextResponse.json({ error: "planId is required." }, { status: 400 });
-    }
 
     if (restore) {
       await unsetHiddenPlanId(planId);
       return NextResponse.json({ success: true, restored: true }, { status: 200 });
     }
 
-    if (!name) {
-      return NextResponse.json({ error: "name is required." }, { status: 400 });
-    }
-
-    const { result: current } = await catalogApi.retrieveCatalogObject(planId);
+    const { result: current } = await catalogApi.retrieveCatalogObject(planId, true);
     const existing = current.object;
-    if (!existing) {
+    if (!existing)
       return NextResponse.json({ error: "Plan not found." }, { status: 404 });
+
+    // Apply variation price updates if provided
+    let updatedVariations = existing.subscriptionPlanData?.subscriptionPlanVariations || [];
+    if (variations?.length) {
+      updatedVariations = updatedVariations.map(v => {
+        const update = variations.find(u => u.id === v.id);
+        if (!update) return v;
+        const phases = (v.subscriptionPlanVariationData?.phases || []).map((phase, i) => {
+          // Update the last (billing) phase price; leave trial phases untouched
+          const isTrialPhase = i === 0 && (v.subscriptionPlanVariationData?.phases || []).length > 1;
+          if (isTrialPhase) return phase;
+          return {
+            ...phase,
+            pricing: { type: "STATIC", priceMoney: { amount: BigInt(update.priceCents), currency: "USD" } },
+          };
+        });
+        return { ...v, subscriptionPlanVariationData: { ...v.subscriptionPlanVariationData, phases } };
+      });
     }
 
     const { result } = await catalogApi.upsertCatalogObject({
       idempotencyKey: uuidv4(),
       object: {
         ...existing,
-        version: version || existing.version,
         subscriptionPlanData: {
           ...existing.subscriptionPlanData,
-          name,
+          ...(name ? { name } : {}),
+          subscriptionPlanVariations: updatedVariations,
         },
       },
     });
@@ -173,69 +257,79 @@ export async function PUT(request) {
   }
 }
 
-// DELETE: Cancel subscribers (optional) then delete from Square
+// ── PATCH: pause / resume / cancel a single subscription ─────────────────────
+
+export async function PATCH(request) {
+  try {
+    const session = await auth();
+    if (!session || session.user.role !== "admin")
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { action, subscriptionId } = await request.json();
+    if (!action || !subscriptionId)
+      return NextResponse.json({ error: "action and subscriptionId are required." }, { status: 400 });
+
+    if (action === "pause") {
+      await subscriptionsApi.pauseSubscription(subscriptionId, {});
+    } else if (action === "resume") {
+      await subscriptionsApi.resumeSubscription(subscriptionId, {});
+    } else if (action === "cancel") {
+      await subscriptionsApi.cancelSubscription(subscriptionId);
+    } else {
+      return NextResponse.json({ error: "Invalid action. Use pause, resume, or cancel." }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error) {
+    const msg = error?.errors?.[0]?.detail || "Failed to update subscription.";
+    console.error("❌ Subscription action error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+// ── DELETE: cancel subscribers (optional) then delete from Square ─────────────
+
 export async function DELETE(request) {
   try {
     const session = await auth();
-    if (!session || session.user.role !== "admin") {
+    if (!session || session.user.role !== "admin")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     const { planId, cancelSubscriptions } = await request.json();
-    if (!planId) {
+    if (!planId)
       return NextResponse.json({ error: "planId is required." }, { status: 400 });
-    }
 
-    // If requested, cancel all active subscriptions for this plan's variations
     let cancelledCount = 0;
     if (cancelSubscriptions) {
-      // Retrieve the plan to get its variation IDs
       const { result: planResult } = await catalogApi.retrieveCatalogObject(planId, true);
       const variationIds = (planResult.object?.subscriptionPlanData?.subscriptionPlanVariations || [])
-        .map(v => v.id)
-        .filter(Boolean);
+        .map(v => v.id).filter(Boolean);
 
       if (variationIds.length) {
-        // Search for active/paused subscriptions tied to these variations
-        const { result: subResult } = await squareClient.subscriptionsApi.searchSubscriptions({
-          query: {
-            filter: {
-              planVariationIds: variationIds,
-              statuses: ["ACTIVE", "PAUSED"],
-            },
-          },
-        });
-
-        const subscriptions = subResult.subscriptions || [];
+        const subs = await fetchAllSubscriptions({ planVariationIds: variationIds, statuses: ["ACTIVE", "PAUSED"] });
         await Promise.allSettled(
-          subscriptions.map(s =>
-            squareClient.subscriptionsApi.cancelSubscription(s.id)
+          subs.map(s =>
+            subscriptionsApi.cancelSubscription(s.id)
               .then(() => { cancelledCount++; })
-              .catch(err => console.warn(`⚠️ Could not cancel subscription ${s.id}:`, err?.message))
+              .catch(err => console.warn(`⚠️ Could not cancel ${s.id}:`, err?.message))
           )
         );
-        console.log(`✅ Cancelled ${cancelledCount}/${subscriptions.length} subscriptions for plan ${planId}`);
       }
     }
 
-    // Now delete the catalog object
     try {
       const { result } = await catalogApi.deleteCatalogObject(planId);
-      if (result.errors?.length) {
+      if (result.errors?.length)
         throw Object.assign(new Error(result.errors[0]?.detail), { errors: result.errors });
-      }
       await unsetHiddenPlanId(planId);
       return NextResponse.json({ success: true, deleted: true, cancelledCount }, { status: 200 });
     } catch (squareErr) {
-      // Still blocked — hide locally as fallback
-      const reason = squareErr?.errors?.[0]?.detail || squareErr?.message || "Square rejected the delete.";
-      console.warn("⚠️ Square blocked delete after cancellations, hiding locally:", reason);
+      const reason = squareErr?.errors?.[0]?.detail || squareErr?.message;
+      console.warn("⚠️ Square blocked delete, hiding locally:", reason);
       await setHiddenPlanId(planId);
       return NextResponse.json({
-        success: true,
-        hidden: true,
-        cancelledCount,
-        note: "Subscriptions cancelled but Square still blocked the plan delete. Plan hidden from member selection.",
+        success: true, hidden: true, cancelledCount,
+        note: "Plan has active subscribers and cannot be removed from Square. Hidden from member selection.",
       }, { status: 200 });
     }
   } catch (error) {
