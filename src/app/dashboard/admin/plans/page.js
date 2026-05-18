@@ -61,6 +61,7 @@ export default function PlansPage() {
   const [submitting, setSubmitting] = useState(false);
   const [cancelSubs, setCancelSubs] = useState(false);
   const [subAction, setSubAction] = useState(null);
+  const [planTab, setPlanTab] = useState('active');
 
   const [addForm, setAddForm] = useState({
     name: '',
@@ -298,67 +299,102 @@ export default function PlansPage() {
         </div>
       )}
 
-      {/* Plans table */}
-      {loading ? (
-        <div style={{ color: 'var(--text-dim)', fontSize: 12, fontFamily: 'var(--mono)' }}>loading plans...</div>
-      ) : plans.length === 0 ? (
-        <div style={{ border: '1px solid var(--bd)', padding: '32px', textAlign: 'center', color: 'var(--text-dim)', fontSize: 12 }}>
-          no plans found. create one to get started.
-        </div>
-      ) : (
-        <div style={{ border: '1px solid var(--bd)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 110px 160px', borderBottom: '1px solid var(--bd)', padding: '8px 14px', fontSize: 9, letterSpacing: '0.12em', color: 'var(--text-dim)' }}>
-            <span>PLAN NAME</span>
-            <span>BILLING OPTIONS</span>
-            <span>SUBSCRIBERS</span>
-            <span>ACTIONS</span>
-          </div>
-          {plans.map((plan, i) => (
-            <div key={plan.id} style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 110px 160px', padding: '12px 14px', borderBottom: i < plans.length - 1 ? '1px solid var(--bd)' : 'none', alignItems: 'center', gap: 8, opacity: plan.hidden ? 0.55 : 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, color: plan.hidden ? 'var(--text-dim)' : 'var(--text-bright)', fontFamily: 'var(--mono)', fontWeight: 600, textDecoration: plan.hidden ? 'line-through' : 'none' }}>{plan.name}</span>
-                {plan.hidden && <span style={{ fontSize: 8, border: '1px solid var(--amber)', color: 'var(--amber)', padding: '1px 5px', letterSpacing: '0.1em' }}>HIDDEN</span>}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {(plan.variations || []).map(v => (
-                  <span key={v.id} style={{ fontSize: 9, border: '1px solid var(--bd-1)', color: 'var(--cyan)', padding: '3px 7px', letterSpacing: '0.06em', fontFamily: 'var(--mono)' }}>
-                    {v.priceCents != null ? `${formatPrice(v.priceCents)}/` : ''}{cadenceLabel(v.cadence)}
-                    {v.priceCents == null && <span style={{ color: 'var(--text-dim)', marginLeft: 4 }}>·custom</span>}
-                  </span>
-                ))}
-              </div>
-              <div>
-                {plan.subscriberCount > 0 ? (
-                  <button
-                    onClick={() => openSubscriberModal(plan)}
-                    style={{ background: 'none', border: '1px solid var(--green)', color: 'var(--green)', fontFamily: 'var(--mono)', fontSize: 10, padding: '2px 8px', cursor: 'pointer', letterSpacing: '0.06em' }}
-                  >
-                    {plan.subscriberCount} active
-                  </button>
-                ) : (
-                  <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--mono)' }}>—</span>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {plan.hidden ? (
-                  <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px', borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={() => handleRestore(plan)}>
-                    restore
-                  </button>
-                ) : (
-                  <>
-                    <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px' }} onClick={() => openEditModal(plan)}>
-                      edit
-                    </button>
-                    <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px', borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => setArchivePlan(plan)}>
-                      archive
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
+      {/* Tab bar */}
+      {!loading && (
+        <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid var(--bd)' }}>
+          {[
+            { key: 'active', label: 'active', count: plans.filter(p => !p.hidden).length },
+            { key: 'archived', label: 'archived', count: plans.filter(p => p.hidden).length },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setPlanTab(tab.key)}
+              style={{
+                background: 'none',
+                border: 'none',
+                borderBottom: `2px solid ${planTab === tab.key ? 'var(--cyan)' : 'transparent'}`,
+                color: planTab === tab.key ? 'var(--cyan)' : 'var(--text-dim)',
+                fontFamily: 'var(--mono)',
+                fontSize: 10,
+                letterSpacing: '0.12em',
+                padding: '6px 16px 8px',
+                cursor: 'pointer',
+                marginBottom: -1,
+              }}
+            >
+              {tab.label}
+              {tab.count > 0 && (
+                <span style={{ marginLeft: 6, fontSize: 9, opacity: 0.7 }}>({tab.count})</span>
+              )}
+            </button>
           ))}
         </div>
       )}
+
+      {/* Plans table */}
+      {loading ? (
+        <div style={{ color: 'var(--text-dim)', fontSize: 12, fontFamily: 'var(--mono)' }}>loading plans...</div>
+      ) : (() => {
+        const visible = plans.filter(p => planTab === 'archived' ? p.hidden : !p.hidden);
+        if (visible.length === 0) return (
+          <div style={{ border: '1px solid var(--bd)', padding: '32px', textAlign: 'center', color: 'var(--text-dim)', fontSize: 12 }}>
+            {planTab === 'archived' ? 'no archived plans.' : 'no active plans. create one to get started.'}
+          </div>
+        );
+        return (
+          <div style={{ border: '1px solid var(--bd)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 110px 160px', borderBottom: '1px solid var(--bd)', padding: '8px 14px', fontSize: 9, letterSpacing: '0.12em', color: 'var(--text-dim)' }}>
+              <span>PLAN NAME</span>
+              <span>BILLING OPTIONS</span>
+              <span>SUBSCRIBERS</span>
+              <span>ACTIONS</span>
+            </div>
+            {visible.map((plan, i) => (
+              <div key={plan.id} style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 110px 160px', padding: '12px 14px', borderBottom: i < visible.length - 1 ? '1px solid var(--bd)' : 'none', alignItems: 'center', gap: 8 }}>
+                <div>
+                  <span style={{ fontSize: 12, color: 'var(--text-bright)', fontFamily: 'var(--mono)', fontWeight: 600 }}>{plan.name}</span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {(plan.variations || []).map(v => (
+                    <span key={v.id} style={{ fontSize: 9, border: '1px solid var(--bd-1)', color: 'var(--cyan)', padding: '3px 7px', letterSpacing: '0.06em', fontFamily: 'var(--mono)' }}>
+                      {v.priceCents != null ? `${formatPrice(v.priceCents)}/` : ''}{cadenceLabel(v.cadence)}
+                      {v.priceCents == null && <span style={{ color: 'var(--text-dim)', marginLeft: 4 }}>·custom</span>}
+                    </span>
+                  ))}
+                </div>
+                <div>
+                  {plan.subscriberCount > 0 ? (
+                    <button
+                      onClick={() => openSubscriberModal(plan)}
+                      style={{ background: 'none', border: '1px solid var(--green)', color: 'var(--green)', fontFamily: 'var(--mono)', fontSize: 10, padding: '2px 8px', cursor: 'pointer', letterSpacing: '0.06em' }}
+                    >
+                      {plan.subscriberCount} active
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--mono)' }}>—</span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {plan.hidden ? (
+                    <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px', borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={() => handleRestore(plan)}>
+                      restore
+                    </button>
+                  ) : (
+                    <>
+                      <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px' }} onClick={() => openEditModal(plan)}>
+                        edit
+                      </button>
+                      <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px', borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => setArchivePlan(plan)}>
+                        archive
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* ── Add Plan Modal ───────────────────────────────────────────────────── */}
       {addOpen && (
@@ -461,8 +497,7 @@ export default function PlansPage() {
                 onClick={() => setEditForm(p => ({ ...p, benefits: [...(p.benefits || []), ''] }))}
               >+ add benefit</button>
             </div>
-            {editForm.variations.length > 0 && (
-              <div>
+            <div>
                 <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.1em', marginBottom: 8 }}>VARIATION PRICES</div>
                 {editForm.variations.map((v, idx) => (
                   <div key={v.id || idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10, padding: '10px 12px', border: `1px solid ${v.isNew ? 'var(--cyan)' : 'var(--bd)'}`, position: 'relative' }}>
@@ -514,8 +549,7 @@ export default function PlansPage() {
                 >
                   + add variation
                 </button>
-              </div>
-            )}
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
             <button className="btn btn--sm" style={{ fontSize: 10 }} onClick={() => setEditPlan(null)}>cancel</button>
