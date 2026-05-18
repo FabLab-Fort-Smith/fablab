@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 
 const catalogApi = squareClient.catalogApi;
 const subscriptionsApi = squareClient.subscriptionsApi;
+const ordersApi = squareClient.ordersApi;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -21,6 +22,21 @@ async function setHiddenPlanId(planId) {
 async function unsetHiddenPlanId(planId) {
   const col = await db.dbPlans();
   await col.updateOne({ _id: "hidden_plans" }, { $pull: { ids: planId } });
+}
+
+// Fetch the base price from a list of order template IDs (parallel, non-fatal)
+async function fetchOrderTemplatePrices(templateIds) {
+  const priceMap = {};
+  await Promise.allSettled(
+    [...new Set(templateIds)].filter(Boolean).map(async (id) => {
+      try {
+        const { result } = await ordersApi.retrieveOrder(id);
+        const amount = result.order?.lineItems?.[0]?.basePriceMoney?.amount;
+        if (amount != null) priceMap[id] = Number(amount);
+      } catch { /* non-fatal */ }
+    })
+  );
+  return priceMap;
 }
 
 async function fetchAllSubscriptions(filter) {
@@ -88,8 +104,14 @@ export async function GET(request) {
       const varSet = new Set(variationIds);
       const subs = allSubs.filter(s => varSet.has(s.planVariationId));
 
+      // Fetch prices + customer info in parallel
+      const orderTemplateIds = subs.map(s => s.phases?.[0]?.orderTemplateId).filter(Boolean);
+      const [orderPriceMap, usersCol] = await Promise.all([
+        fetchOrderTemplatePrices(orderTemplateIds),
+        db.dbUsers(),
+      ]);
+
       const customerIds = [...new Set(subs.map(s => s.customerId).filter(Boolean))];
-      const usersCol = await db.dbUsers();
       const users = customerIds.length
         ? await usersCol.find({ $or: [
             { "membership.squareCustomerId": { $in: customerIds } },
@@ -113,6 +135,7 @@ export async function GET(request) {
         chargedThroughDate: s.chargedThroughDate,
         customerId: s.customerId,
         customer: customerMap[s.customerId] || null,
+        priceCents: orderPriceMap[s.phases?.[0]?.orderTemplateId] ?? null,
       })), { status: 200 });
     }
 
@@ -127,8 +150,9 @@ export async function GET(request) {
       (p.subscriptionPlanData?.subscriptionPlanVariations || []).map(v => v.id)
     );
 
-    // Fetch subscriber counts for all variations in one query
+    // Fetch subscriber counts + one representative order template per variation
     const countByPlan = {};
+    const varToPriceCents = {};
     if (allVariationIds.length) {
       const subs = await fetchAllSubscriptions({
         planVariationIds: allVariationIds,
@@ -138,16 +162,31 @@ export async function GET(request) {
       for (const p of rawPlans)
         for (const v of (p.subscriptionPlanData?.subscriptionPlanVariations || []))
           varToPlan[v.id] = p.id;
+
+      // One order template ID per variation (first active sub seen)
+      const varToTemplate = {};
       for (const s of subs) {
         const pid = varToPlan[s.planVariationId];
         if (pid) countByPlan[pid] = (countByPlan[pid] || 0) + 1;
+        if (s.planVariationId && s.phases?.[0]?.orderTemplateId && !varToTemplate[s.planVariationId])
+          varToTemplate[s.planVariationId] = s.phases[0].orderTemplateId;
+      }
+
+      // Fetch prices for one sub per variation
+      const priceMap = await fetchOrderTemplatePrices(Object.values(varToTemplate));
+      for (const [varId, templateId] of Object.entries(varToTemplate)) {
+        if (priceMap[templateId] != null) varToPriceCents[varId] = priceMap[templateId];
       }
     }
 
-    return NextResponse.json(
-      rawPlans.map(p => shapePlan(p, hidden, countByPlan[p.id] || 0)),
-      { status: 200 }
-    );
+    // Shape plans then inject real prices from subscriber order templates
+    const plans = rawPlans.map(p => shapePlan(p, hidden, countByPlan[p.id] || 0));
+    for (const plan of plans)
+      for (const v of plan.variations)
+        if (v.priceCents == null && varToPriceCents[v.id] != null)
+          v.priceCents = varToPriceCents[v.id];
+
+    return NextResponse.json(plans, { status: 200 });
   } catch (error) {
     console.error("❌ Error fetching plans:", error);
     return NextResponse.json({ error: "Failed to fetch plans." }, { status: 500 });
