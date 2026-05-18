@@ -37,13 +37,11 @@ export async function POST(request, context) {
       await usersCollection.updateOne({ userID }, { $set: { "membership.squareCustomerId": squareCustomerId } });
     }
 
-    // Fetch variation name + parent plan ID
+    // Fetch variation name
     let variationName = "Membership";
-    let parentPlanId = null;
     try {
       const { result: varResult } = await squareClient.catalogApi.retrieveCatalogObject(planID);
       variationName = varResult.object?.subscriptionPlanVariationData?.name || variationName;
-      parentPlanId = varResult.object?.subscriptionPlanVariationData?.subscriptionPlanId || null;
     } catch { /* non-fatal */ }
 
     let priceCents = Math.round(price * 100);
@@ -81,11 +79,10 @@ export async function POST(request, context) {
       askForShippingAddress: false,
     };
 
-    // For the standard (no coupon) path, attach subscriptionPlanId so Square
-    // creates the subscription automatically at checkout.
-    // quickPay satisfies Square's "one of quick_pay/order" requirement.
-    if (!couponCode && parentPlanId) {
-      checkoutOptions.subscriptionPlanId = parentPlanId;
+    // For the standard (no coupon) path, attach subscriptionPlanId (variation ID)
+    // so Square creates the subscription automatically at checkout.
+    if (!couponCode) {
+      checkoutOptions.subscriptionPlanId = planID;
     }
 
     const { result: checkoutResult } = await checkoutApi.createPaymentLink({
