@@ -4,91 +4,70 @@ import { db } from "@/lib/database";
 import { v4 as uuidv4 } from "uuid";
 
 const customersApi = squareClient.customersApi;
-const checkoutApi = squareClient.checkoutApi; // For creating the checkout link
+const checkoutApi = squareClient.checkoutApi;
 
 export async function POST(request, context) {
   try {
     const { params } = context;
     const { planID } = await params;
-    // Expecting userID, price, currency, and addon in the request body
-    const { userID, price, currency, addon } = await request.json();
+    const { userID, price, currency } = await request.json();
 
-    if (!userID || !price || !currency) {
-      return NextResponse.json(
-        { error: "Missing required parameters." },
-        { status: 400 }
-      );
+    if (!userID || price == null || !currency) {
+      return NextResponse.json({ error: "Missing required parameters." }, { status: 400 });
     }
 
-    // Retrieve the user collection and find the user in your database
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_URL || "";
+
     const usersCollection = await db.dbUsers();
     const user = await usersCollection.findOne({ userID });
     if (!user) {
-      return NextResponse.json(
-        { error: "User not found." },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "User not found." }, { status: 404 });
     }
 
-    // Create a Square Customer if one doesn't exist for this user
-    let squareCustomerId = user.squareCustomerId;
+    // Ensure a Square customer record exists for this user
+    let squareCustomerId = user.membership?.squareCustomerId || user.squareCustomerId || user.squareID;
     if (!squareCustomerId) {
-      const customerBody = {
+      const { result } = await customersApi.createCustomer({
         idempotencyKey: uuidv4(),
         givenName: user.firstName || "Unknown",
         familyName: user.lastName || "User",
-        emailAddress: user.email,
         referenceId: userID,
-      };
-
-      const { result } = await customersApi.createCustomer(customerBody);
+      });
       squareCustomerId = result.customer.id;
-
-      // Save the Square customer ID to your database
-      await usersCollection.updateOne({ userID }, { $set: { squareCustomerId } });
+      await usersCollection.updateOne({ userID }, { $set: { "membership.squareCustomerId": squareCustomerId } });
     }
 
-    // Build the checkout link request using the planID from the URL
-    const checkoutBody = {
+    // Use a catalog line item so Square treats this as a subscription enrollment.
+    // basePriceMoney is required for RELATIVE-priced plans (price not stored in catalog).
+    const priceCents = Math.round(price * 100);
+    const { result: checkoutResult } = await checkoutApi.createPaymentLink({
       idempotencyKey: uuidv4(),
-      quickPay: {
-        name: "Subscription Plan",
-        priceMoney: {
-          amount: price * 100, // Convert dollars to cents
-          currency: currency,
-        },
+      order: {
         locationId: process.env.SQUARE_LOCATION_ID,
+        customerId: squareCustomerId,
+        lineItems: [{
+          quantity: "1",
+          catalogObjectId: planID,
+          itemType: "ITEM",
+          ...(priceCents > 0 ? {
+            basePriceMoney: { amount: BigInt(priceCents), currency },
+          } : {}),
+        }],
       },
       checkoutOptions: {
-        subscription_plan_id: planID,
+        redirectUrl: `${appUrl}/api/v1/memberships/confirm?userID=${userID}`,
+        askForShippingAddress: false,
       },
-    };
+    });
 
-    // Include addon in the checkout request if selected
-    if (addon) {
-      checkoutBody.quickPay.name += " + Locker Addon";
-      checkoutBody.quickPay.priceMoney.amount += 500; // Example addon price in cents
+    if (!checkoutResult.paymentLink?.url) {
+      return NextResponse.json({ error: "Failed to create checkout link." }, { status: 500 });
     }
 
-    // Create the checkout link using Square's Checkout API
-    const { result: checkoutResult } = await checkoutApi.createPaymentLink(checkoutBody);
-
-    if (!checkoutResult.paymentLink) {
-      return NextResponse.json(
-        { error: "Failed to create checkout link." },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(
-      { url: checkoutResult.paymentLink.url },
-      { status: 200 }
-    );
+    return NextResponse.json({ url: checkoutResult.paymentLink.url }, { status: 200 });
   } catch (error) {
-    console.error("Error creating checkout link:", error);
-    return NextResponse.json(
-      { error: "Failed to create checkout link." },
-      { status: 500 }
-    );
+    const msg = error?.errors?.[0]?.detail || error?.message || "Failed to create checkout link.";
+    console.error("❌ Checkout error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

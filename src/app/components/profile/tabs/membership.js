@@ -262,7 +262,9 @@ const MembershipTab = ({ user, onUpdateMembership, membershipApplied = false }) 
                 </div>
 
                 {filteredPlans.map(plan => {
-                    const variation = plan.variations?.find(v => v.cadence === billingType);
+                    // Prefer a variation that has a known price; fall back to any matching cadence
+                    const variation = plan.variations?.find(v => v.cadence === billingType && v.priceCents != null)
+                        ?? plan.variations?.find(v => v.cadence === billingType);
                     const isCurrentPlan = currentMembership?.squareSubscriptionId && currentMembership?.planName === plan.name;
                     const hasPrice = variation?.priceCents != null;
                     return (
