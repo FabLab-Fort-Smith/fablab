@@ -152,17 +152,23 @@ export async function GET(request) {
         if (id) customerMap[id] = { userID: u.userID, firstName: u.firstName, lastName: u.lastName };
       }
 
-      return NextResponse.json(subs.map(s => ({
-        id: s.id,
-        status: s.status,
-        planVariationId: s.planVariationId,
-        startDate: s.startDate,
-        canceledDate: s.canceledDate,
-        chargedThroughDate: s.chargedThroughDate,
-        customerId: s.customerId,
-        customer: customerMap[s.customerId] || null,
-        priceCents: orderPriceMap[s.phases?.[0]?.orderTemplateId] ?? null,
-      })), { status: 200 });
+      return NextResponse.json(subs.map(s => {
+        const pendingSwapAction = (s.actions || []).find(a => a.type === "SWAP_PLAN");
+        return {
+          id: s.id,
+          status: s.status,
+          planVariationId: s.planVariationId,
+          startDate: s.startDate,
+          canceledDate: s.canceledDate,
+          chargedThroughDate: s.chargedThroughDate,
+          customerId: s.customerId,
+          customer: customerMap[s.customerId] || null,
+          priceCents: orderPriceMap[s.phases?.[0]?.orderTemplateId] ?? null,
+          pendingSwap: pendingSwapAction
+            ? { newPlanVariationId: pendingSwapAction.newPlanVariationId, effectiveDate: pendingSwapAction.effectiveDate }
+            : null,
+        };
+      }), { status: 200 });
     }
 
     // ── Full plan list ──

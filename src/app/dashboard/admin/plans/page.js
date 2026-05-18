@@ -648,19 +648,27 @@ export default function PlansPage() {
                           {s.customer ? `${s.customer.firstName} ${s.customer.lastName}` : <span style={{ color: 'var(--text-dim)' }}>unknown</span>}
                         </td>
                         <td style={{ padding: '8px 8px', color: 'var(--cyan)' }}>
-                          <div>
-                            {s.priceCents != null
-                              ? `${formatPrice(s.priceCents)}/${cadenceLabel(variation?.cadence || 'mo')}`
-                              : variation
-                                ? cadenceLabel(variation.cadence)
-                                : '—'}
-                            {pendingMigrations[s.id] && (
-                              <div style={{ fontSize: 8, color: 'var(--amber)', marginTop: 2, letterSpacing: '0.06em' }}>
-                                → {pendingMigrations[s.id].label}
-                                {pendingMigrations[s.id].effectiveDate ? ` (${pendingMigrations[s.id].effectiveDate})` : ' (next cycle)'}
+                          {(() => {
+                            const swap = s.pendingSwap || pendingMigrations[s.id];
+                            const swapVarId = swap?.newPlanVariationId;
+                            const swapTargetPlan = swapVarId && plans.find(p => (p.variations || []).some(v => v.id === swapVarId));
+                            const swapTargetVar = swapVarId && swapTargetPlan?.variations?.find(v => v.id === swapVarId);
+                            const swapLabel = swap?.label || (swapTargetPlan && swapTargetVar ? `${swapTargetPlan.name} · ${swapTargetVar.name || swapTargetVar.cadence}` : null);
+                            return (
+                              <div>
+                                {s.priceCents != null
+                                  ? `${formatPrice(s.priceCents)}/${cadenceLabel(variation?.cadence || 'mo')}`
+                                  : variation
+                                    ? cadenceLabel(variation.cadence)
+                                    : '—'}
+                                {swapLabel && (
+                                  <div style={{ fontSize: 8, color: 'var(--amber)', marginTop: 2, letterSpacing: '0.06em' }}>
+                                    → {swapLabel}{swap?.effectiveDate ? ` (${swap.effectiveDate})` : ' (next cycle)'}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: '8px 8px' }}>
                           <span style={{ fontSize: 9, border: `1px solid ${statusColor}`, color: statusColor, padding: '1px 5px', letterSpacing: '0.08em' }}>
