@@ -31,21 +31,37 @@ export async function GET(request) {
     const payments = result.payments || [];
 
     // Build a lookup of squareCustomerId → user
+    // The customer ID is stored under three different field names depending on the code path:
+    //   membership.squareCustomerId (confirm callback + manual link)
+    //   squareCustomerId            (checkout route)
+    //   squareID                    (webhook / syncSubscription)
     const usersCollection = await db.dbUsers();
     const customerIds = [...new Set(payments.map((p) => p.customerId).filter(Boolean))];
 
     const linkedUsers = await usersCollection
-      .find({ "membership.squareCustomerId": { $in: customerIds } })
+      .find({
+        $or: [
+          { "membership.squareCustomerId": { $in: customerIds } },
+          { squareCustomerId: { $in: customerIds } },
+          { squareID: { $in: customerIds } },
+        ],
+      })
       .toArray();
 
     const customerMap = {};
     for (const u of linkedUsers) {
-      customerMap[u.membership.squareCustomerId] = {
-        userID: u.userID,
-        firstName: u.firstName,
-        lastName: u.lastName,
-        email: u.email,
-      };
+      const id =
+        u.membership?.squareCustomerId ||
+        u.squareCustomerId ||
+        u.squareID;
+      if (id) {
+        customerMap[id] = {
+          userID: u.userID,
+          firstName: u.firstName,
+          lastName: u.lastName,
+          email: u.email,
+        };
+      }
     }
 
     const enriched = payments.map((p) => ({
@@ -86,16 +102,22 @@ export async function POST(request) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
     }
 
-    // Save the customer ID
+    // Save the customer ID (normalise to membership.squareCustomerId)
     await usersCollection.updateOne(
       { userID },
       { $set: { "membership.squareCustomerId": squareCustomerId } }
     );
 
-    // Sync subscription status from Square
-    const updatedUser = await SubscriptionService.syncSubscription(squareCustomerId, userID);
+    // Attempt to sync subscription — non-fatal (customer may have no active subscription yet)
+    let synced = false;
+    try {
+      await SubscriptionService.syncSubscription(squareCustomerId, userID);
+      synced = true;
+    } catch (syncErr) {
+      console.warn("⚠️ Subscription sync skipped:", syncErr?.message || syncErr);
+    }
 
-    return NextResponse.json({ success: true, user: updatedUser }, { status: 200 });
+    return NextResponse.json({ success: true, synced }, { status: 200 });
   } catch (error) {
     console.error("❌ Error linking Square customer:", error);
     return NextResponse.json({ error: "Failed to link customer." }, { status: 500 });
