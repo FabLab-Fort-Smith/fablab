@@ -1,522 +1,226 @@
-"use client";
+'use client';
+import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import LoadingTerminal from '@/app/components/LoadingTerminal';
+import WaysToEarnStake from '@/app/components/dashboard/WaysToEarnStake';
+import Announcements from '@/app/components/dashboard/Announcements';
+import { UnlockButton, UnlockAndCheckInButton, CheckInButton } from '@/app/components/dashboard/LabControls';
 
-import React, { useEffect, useState } from "react";
-import {
-  Box,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  Avatar,
-  useTheme,
-  Stepper,
-  Step,
-  StepLabel,
-  Alert,
-  IconButton,
-  Paper,
-  CircularProgress,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
-} from "@mui/material";
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { 
-    Person as PersonIcon, 
-    CardMembership as MembershipIcon, 
-    Assignment as BountyIcon, 
-    People as DirectoryIcon, 
-    Help as HelpIcon, 
-    Timer as VolunteerIcon,
-    ArrowForwardIos as ArrowIcon,
-    BugReport as BugIcon,
-    EmojiEvents as BadgeIcon,
-    Collections as ShowcaseIcon,
-    LocationOn as CheckInIcon,
-    Lightbulb as IdeaIcon,
-    Campaign as AnnouncementIcon
-} from "@mui/icons-material";
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import LoadingTerminal from "@/app/components/LoadingTerminal";
-import WaysToEarnStake from "@/app/components/dashboard/WaysToEarnStake";
-import Announcements from "@/app/components/dashboard/Announcements";
-import { UnlockButton, UnlockAndCheckInButton, CheckInButton } from "@/app/components/dashboard/LabControls";
+const LOADING_STEPS = ['initializing...', 'loading user data...', 'fetching membership...', 'connecting to database...', 'retrieving session...', 'ready.'];
 
-const DashboardPage = ({ params }) => {
-  const { data: session, status } = useSession();
-  const router = useRouter();
-  const theme = useTheme();
-  const [userData, setUserData] = useState(null);
-  const [loadingUser, setLoadingUser] = useState(true);
-  const [isCheckedIn, setIsCheckedIn] = useState(false);
-  const [checkInLoading, setCheckInLoading] = useState(false);
+const MEMBERSHIP_STEPS = [
+    'account_created', 'submit_application', 'initial_contact', 'onboarding',
+    'membership_subscription', 'complete_public_profile', 'volunteer_hours',
+    'access_key_issued', 'full_access_granted'
+];
 
-  const loading = status === 'loading';
+const MENU = (uid, role) => [
+    { sym: '◈', title: 'profile',       desc: 'personal details',  path: `/dashboard/${uid}/profile` },
+    { sym: '⊞', title: 'membership',    desc: 'plans & billing',   path: `/dashboard/${uid}/profile?tab=1` },
+    { sym: '⊡', title: 'bounties',      desc: 'earn credits',      path: '/dashboard/activities/bounties' },
+    { sym: '◉', title: 'directory',     desc: 'find members',      path: '/dashboard/community/directory' },
+    { sym: '◌', title: 'volunteer',     desc: 'log hours',         path: `/dashboard/${uid}/volunteer` },
+    { sym: '⊠', title: 'showcase',      desc: 'member projects',   path: '/dashboard/showcase' },
+    { sym: '★', title: 'badges',        desc: 'achievements',      path: '/dashboard/resources/badges' },
+    { sym: '!', title: 'bug_tracker',   desc: 'report issues',     path: '/dashboard/resources/bugs' },
+    { sym: '#', title: 'support',       desc: 'get help',          href: '/api/v1/discord/invite' },
+    { sym: '▶', title: 'announcements', desc: 'view all',          path: '/dashboard/community/announcements' },
+    ...(role === 'admin' ? [
+        { sym: '⊟', title: 'bounty_ideas', desc: 'manage ideas',   path: '/dashboard/admin/bounty-ideas', admin: true },
+        { sym: '≡', title: 'manage_news',  desc: 'post updates',   path: '/dashboard/admin/announcements', admin: true },
+    ] : []),
+];
 
-  const loadingSteps = [
-    'Initializing...',
-    'Loading user data...',
-    'Fetching membership plans...',
-    'Connecting to database...',
-    'Retrieving session information...',
-    'Finalizing setup...',
-    'Almost there...'
-  ];
+export default function DashboardPage({ params }) {
+    const { data: session, status } = useSession();
+    const router = useRouter();
+    const [userData, setUserData] = useState(null);
+    const [loadingUser, setLoadingUser] = useState(true);
+    const [isCheckedIn, setIsCheckedIn] = useState(false);
+    const [checkInLoading, setCheckInLoading] = useState(false);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      if (session?.user?.userID) {
+    useEffect(() => {
+        if (!session?.user?.userID) return;
+        fetch(`/api/v1/users?userID=${session.user.userID}`, { cache: 'no-store' })
+            .then(r => r.ok ? r.json() : {})
+            .then(data => { setUserData(data.user); setIsCheckedIn(data.user?.isCheckedIn || false); })
+            .catch(() => {})
+            .finally(() => setLoadingUser(false));
+    }, [session]);
+
+    const handleCheckInToggle = async () => {
+        setCheckInLoading(true);
         try {
-          const res = await fetch(`/api/v1/users?userID=${session.user.userID}`, { cache: 'no-store' });
-          if (res.ok) {
-            const data = await res.json();
-            setUserData(data.user);
-          }
-        } catch (error) {
-          console.error("Failed to fetch user data", error);
-        } finally {
-          setLoadingUser(false);
-        }
-      }
+            const res = await fetch('/api/v1/checkin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userID: session.user.userID, action: isCheckedIn ? 'checkout' : 'checkin' }),
+            });
+            if (res.ok) setIsCheckedIn(p => !p);
+        } catch {}
+        finally { setCheckInLoading(false); }
     };
 
-    if (session) {
-      fetchUser();
-    }
-  }, [session]);
+    if (status === 'loading' || loadingUser) return <LoadingTerminal steps={LOADING_STEPS} />;
 
-  useEffect(() => {
-    const fetchCheckInStatus = async () => {
-      if (session?.user?.userID) {
-        try {
-          const res = await fetch(`/api/v1/users?userID=${session.user.userID}`);
-          if (res.ok) {
-            const data = await res.json();
-            setIsCheckedIn(data.user.isCheckedIn || false);
-          }
-        } catch (error) {
-          console.error("Failed to fetch check-in status", error);
-        }
-      }
+    const uid = session?.user?.userID || session?.user?.id;
+    const role = session?.user?.role;
+    const displayName = session?.user?.username || session?.user?.name || 'user';
+
+    // Membership progress
+    let activeStep = 0;
+    let showProgress = false;
+    if (userData) {
+        showProgress = true;
+        const m = userData.membership || {};
+        const totalHours = (m.volunteerLog || []).reduce((acc, l) => acc + Number(l.hours), 0);
+        const isMember = m.isWaived || (m.sponsorshipExpiresAt && new Date(m.sponsorshipExpiresAt) > new Date());
+        if (!m.applicationDate) activeStep = 1;
+        else if (!m.contacted) activeStep = 2;
+        else if (!m.onboardingComplete) activeStep = 3;
+        else if (m.status === 'onboarding' && !isMember) activeStep = 4;
+        else if ((m.status === 'probation' || (m.status === 'onboarding' && isMember)) && (!userData.profileCompleted || !userData.isPublic)) activeStep = 5;
+        else if (totalHours < 4) activeStep = 6;
+        else if (!m.accessKey?.issued) activeStep = 7;
+        else if (m.status !== 'active' && m.status !== 'probation') activeStep = 8;
+        else showProgress = false;
+    }
+
+    const PROGRESS_ALERTS = {
+        1: { msg: 'submit your membership application to get started.', action: () => router.push(`/dashboard/${uid}/onboarding`), label: '$ ./apply' },
+        2: { msg: 'application submitted. we will contact you shortly.', action: null },
+        3: { msg: 'please visit the fablab for orientation and paperwork.', action: null },
+        4: { msg: 'select a membership plan to continue.', action: () => router.push(`/dashboard/${uid}/profile?tab=1`), label: '$ ./plans' },
+        5: { msg: 'membership active. complete your public profile.', action: () => router.push(`/dashboard/${uid}/profile?tab=2`), label: '$ ./profile' },
+        6: { msg: 'volunteer hours remaining for your first month requirement.', action: () => router.push(`/dashboard/${uid}/volunteer`), label: '$ ./log-hours' },
     };
-    
-    if (session) {
-      fetchCheckInStatus();
-    }
-  }, [session]);
 
-  const handleCheckInToggle = async () => {
-    setCheckInLoading(true);
-    try {
-      const res = await fetch('/api/v1/checkin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userID: session.user.userID,
-          action: isCheckedIn ? 'checkout' : 'checkin'
-        }),
-      });
+    const menu = MENU(uid, role);
 
-      if (res.ok) {
-        setIsCheckedIn(!isCheckedIn);
-      }
-    } catch (error) {
-      console.error("Failed to toggle check-in", error);
-    } finally {
-      setCheckInLoading(false);
-    }
-  };
+    return (
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 1200 }}>
+            <Announcements />
 
-  if (loading || loadingUser) {
-    return <LoadingTerminal steps={loadingSteps} />;
-  }
+            {/* Header */}
+            <div>
+                <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 4 }}>
+                    <span style={{ color: 'var(--green)' }}>$</span> whoami
+                </div>
+                <h1 style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.4rem, 3vw, 2rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)', margin: 0 }}>
+                    welcome, {displayName}.
+                </h1>
+            </div>
 
-  const handleNavigate = (path) => {
-    router.push(path);
-  };
+            {/* Check-in card */}
+            <div style={{
+                border: `1px solid ${isCheckedIn ? 'var(--green)' : 'var(--bd-1)'}`,
+                background: isCheckedIn ? 'rgba(57,255,20,0.04)' : 'var(--bg-card)',
+                padding: '16px 20px',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16,
+                boxShadow: isCheckedIn ? '0 0 16px rgba(57,255,20,0.1)' : 'none',
+                transition: 'all 0.2s',
+            }}>
+                <div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                        <span className="dot pulse" style={{ background: isCheckedIn ? 'var(--green)' : 'var(--text-dim)', width: 7, height: 7, borderRadius: '50%', display: 'inline-block' }} />
+                        <span style={{ color: isCheckedIn ? 'var(--green)' : 'var(--text)', fontSize: 12, fontWeight: 600, letterSpacing: '0.06em' }}>
+                            {isCheckedIn ? 'CHECKED IN' : 'NOT CHECKED IN'}
+                        </span>
+                    </div>
+                    <div style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+                        {isCheckedIn ? "don't forget to check out when you leave." : "ready to make something?"}
+                    </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {isCheckedIn ? (
+                        <button className="btn btn--red btn--sm" onClick={handleCheckInToggle} disabled={checkInLoading} style={{ fontSize: 10 }}>
+                            {checkInLoading ? '$ checking out...' : '$ check out'}
+                        </button>
+                    ) : userData?.membership?.type === 'community' ? (
+                        <CheckInButton onCheckIn={handleCheckInToggle} checkInLoading={checkInLoading} style={{ fontSize: 10 }} />
+                    ) : (
+                        <>
+                            <UnlockAndCheckInButton onCheckIn={handleCheckInToggle} checkInLoading={checkInLoading} style={{ fontSize: 10 }} />
+                            <UnlockButton style={{ fontSize: 10 }} />
+                        </>
+                    )}
+                </div>
+            </div>
 
-  const displayName = session?.user?.username || session?.user?.name || "User";
-
-  // Determine active step
-  let activeStep = 0;
-  let showProgress = false;
-
-  if (userData) {
-      showProgress = true;
-      const m = userData.membership || {};
-      // Calculate total hours from volunteer log
-      const totalHours = (m.volunteerLog || []).reduce((acc, log) => acc + Number(log.hours), 0);
-      
-      // Check if membership is active (waived or valid subscription)
-      const isMember = m.isWaived || (m.sponsorshipExpiresAt && new Date(m.sponsorshipExpiresAt) > new Date());
-
-      if (!m.applicationDate) activeStep = 1;
-      else if (!m.contacted) activeStep = 2;
-      else if (!m.onboardingComplete) activeStep = 3;
-      else if (m.status === 'onboarding' && !isMember) activeStep = 4; // Membership Subscription
-      else if ((m.status === 'probation' || (m.status === 'onboarding' && isMember)) && (!userData.profileCompleted || !userData.isPublic)) activeStep = 5; // Complete Public Profile
-      else if (totalHours < 4) activeStep = 6; // Volunteer Requirement
-      else if (!m.accessKey?.issued) activeStep = 7; // Access Key
-      else if (m.status !== 'active' && m.status !== 'probation') activeStep = 8; // Full Access
-      else showProgress = false; // All steps complete
-  }
-
-  const steps = [
-    'Account Created',
-    'Submit Application',
-    'Initial Contact',
-    'Onboarding',
-    'Membership Subscription',
-    'Complete Public Profile',
-    'First Month Volunteer Requirement',
-    'Access Key Issued',
-    'Full Access Granted'
-  ];
-
-  const menuItems = [
-      { 
-          title: 'Profile', 
-          icon: <PersonIcon fontSize="large" />, 
-          path: `/dashboard/${session.user.userID}/profile`,
-          desc: 'Manage personal details'
-      },
-      { 
-          title: 'Membership', 
-          icon: <MembershipIcon fontSize="large" />, 
-          path: `/dashboard/${session.user.userID}/profile?tab=1`,
-          desc: 'Plans & Billing'
-      },
-      { 
-          title: 'Bounties', 
-          icon: <BountyIcon fontSize="large" />, 
-          path: `/dashboard/activities/bounties`,
-          desc: 'Earn credits'
-      },
-      { 
-          title: 'Directory', 
-          icon: <DirectoryIcon fontSize="large" />, 
-          path: `/dashboard/directory`,
-          desc: 'Find members'
-      },
-      { 
-          title: 'Volunteer', 
-          icon: <VolunteerIcon fontSize="large" />, 
-          path: `/dashboard/${session.user.userID}/volunteer`,
-          desc: 'Log hours'
-      },
-      { 
-          title: 'Showcase', 
-          icon: <ShowcaseIcon fontSize="large" />, 
-          path: `/dashboard/showcase`,
-          desc: 'Member projects'
-      },
-      { 
-          title: 'Badges', 
-          icon: <BadgeIcon fontSize="large" />, 
-          path: `/dashboard/badges`,
-          desc: 'View achievements'
-      },
-      { 
-          title: 'Bug Tracker', 
-          icon: <BugIcon fontSize="large" />, 
-          path: `/dashboard/bugs`,
-          desc: 'Report issues'
-      },
-      { 
-          title: 'Support', 
-          icon: <HelpIcon fontSize="large" />, 
-          action: () => window.open("/api/v1/discord/invite", "_blank"),
-          desc: 'Get help'
-      },
-      { 
-          title: 'Announcements', 
-          icon: <AnnouncementIcon fontSize="large" />, 
-          path: `/dashboard/announcements`,
-          desc: 'View all'
-      },
-      ...(session?.user?.role === 'admin' ? [{
-          title: 'Bounty Ideas',
-          icon: <IdeaIcon fontSize="large" />,
-          path: '/dashboard/admin/bounty-ideas',
-          desc: 'Manage ideas'
-      },
-      {
-          title: 'Manage News',
-          icon: <AnnouncementIcon fontSize="large" />,
-          path: '/dashboard/admin/announcements',
-          desc: 'Post updates'
-      }] : [])
-  ];
-
-  return (
-    <Box
-      sx={{
-        padding: { xs: 2, md: 4 },
-        display: "flex",
-        flexDirection: "column",
-        gap: { xs: 2, md: 3 },
-        backgroundColor: theme.palette.background.default,
-        color: theme.palette.text.primary,
-        minHeight: "100vh",
-      }}
-    >
-      <Announcements />
-
-      {/* Header Section */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: "1rem",
-          marginBottom: { xs: 1, md: 2 },
-        }}
-      >
-        <Typography 
-            variant="h4" 
-            component="h1" 
-            sx={{ 
-                fontSize: { xs: '1.5rem', md: '2.125rem' },
-                wordBreak: 'break-word'
-            }}
-        >
-          Welcome, {displayName}!
-        </Typography>
-      </Box>
-
-      {/* Quick Actions */}
-      <Card 
-        variant="outlined" 
-        sx={{ 
-          mb: 1, 
-          p: 2, 
-          background: isCheckedIn 
-            ? `linear-gradient(45deg, ${theme.palette.success.dark}, ${theme.palette.success.main})`
-            : `linear-gradient(45deg, ${theme.palette.grey[800]}, ${theme.palette.grey[900]})`,
-          color: 'white',
-          display: 'flex',
-          flexDirection: { xs: 'column', md: 'row' },
-          justifyContent: 'space-between',
-          alignItems: { xs: 'stretch', md: 'center' },
-          gap: 2
-        }}
-      >
-        <Box>
-          <Typography variant="h6">
-            {isCheckedIn ? "You are checked in!" : "You are currently away"}
-          </Typography>
-          <Typography variant="body2" sx={{ opacity: 0.8 }}>
-            {isCheckedIn ? "Don't forget to check out when you leave." : "Ready to make something awesome?"}
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2, width: { xs: '100%', md: 'auto' } }}>
-            {isCheckedIn ? (
-                <Button 
-                    variant="contained" 
-                    color="error"
-                    onClick={handleCheckInToggle}
-                    disabled={checkInLoading}
-                    startIcon={checkInLoading ? <CircularProgress size={20} color="inherit" /> : <CheckInIcon />}
-                    sx={{ 
-                        backgroundColor: 'white',
-                        color: theme.palette.error.main,
-                        '&:hover': { backgroundColor: '#f5f5f5' },
-                        whiteSpace: 'nowrap',
-                        flex: 1,
-                        py: 1.5
-                    }}
-                >
-                    Check Out
-                </Button>
-            ) : (
-                userData?.membership?.type === 'community' ? (
-                    <CheckInButton 
-                        onCheckIn={handleCheckInToggle} 
-                        checkInLoading={checkInLoading} 
-                        sx={{ flex: 1, py: 1.5 }}
-                    />
-                ) : (
-                    <>
-                        <UnlockAndCheckInButton 
-                            onCheckIn={handleCheckInToggle} 
-                            checkInLoading={checkInLoading} 
-                            sx={{ flex: 1, py: 1.5 }}
-                        />
-                        <UnlockButton sx={{ flex: 1, py: 1.5 }} />
-                    </>
-                )
+            {/* Membership progress */}
+            {showProgress && (
+                <details style={{ border: '1px solid var(--bd-1)', background: 'var(--bg-card)' }}>
+                    <summary style={{ padding: '12px 16px', cursor: 'pointer', color: 'var(--green)', fontSize: 11, letterSpacing: '0.08em', fontFamily: 'var(--mono)', listStyle: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>CO-OP_MEMBERSHIP_PROGRESS</span>
+                        <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>step {activeStep}/{MEMBERSHIP_STEPS.length - 1} ▾</span>
+                    </summary>
+                    <div style={{ padding: '16px', borderTop: '1px solid var(--bd)' }}>
+                        <div style={{ display: 'flex', gap: 0, overflowX: 'auto', paddingBottom: 4 }}>
+                            {MEMBERSHIP_STEPS.map((step, i) => (
+                                <div key={step} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 80, padding: '0 4px' }}>
+                                        <div style={{
+                                            width: 22, height: 22, border: `1px solid ${i < activeStep ? 'var(--green)' : i === activeStep ? 'var(--amber)' : 'var(--bd-1)'}`,
+                                            background: i < activeStep ? 'var(--green)' : 'transparent',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontSize: 9, color: i < activeStep ? 'var(--bg)' : i === activeStep ? 'var(--amber)' : 'var(--text-dim)',
+                                        }}>{i < activeStep ? '✓' : i + 1}</div>
+                                        <div style={{ fontSize: 8, color: i === activeStep ? 'var(--amber)' : i < activeStep ? 'var(--green)' : 'var(--text-dim)', textAlign: 'center', letterSpacing: '0.06em', lineHeight: 1.3 }}>
+                                            {step.replace(/_/g, ' ')}
+                                        </div>
+                                    </div>
+                                    {i < MEMBERSHIP_STEPS.length - 1 && (
+                                        <div style={{ width: 24, height: 1, background: i < activeStep ? 'var(--green)' : 'var(--bd)', flexShrink: 0 }} />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                        {PROGRESS_ALERTS[activeStep] && (
+                            <div style={{ marginTop: 16, border: '1px solid var(--bd-1)', background: 'var(--bg-1)', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                <div style={{ color: 'var(--text-mid)', fontSize: 12 }}>
+                                    <span style={{ color: 'var(--green)' }}>&gt;</span> {PROGRESS_ALERTS[activeStep].msg}
+                                </div>
+                                {PROGRESS_ALERTS[activeStep].action && (
+                                    <button className="btn btn--sm" style={{ fontSize: 10, flexShrink: 0 }} onClick={PROGRESS_ALERTS[activeStep].action}>
+                                        {PROGRESS_ALERTS[activeStep].label}
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </details>
             )}
-        </Box>
-      </Card>
 
-      {/* Membership Progress */}
-      {showProgress && (
-      <Card variant="outlined" sx={{ mb: 3, p: 0, backgroundColor: theme.palette.background.paper, border: `1px solid ${theme.palette.primary.main}` }}>
-          <Accordion defaultExpanded={false} sx={{ boxShadow: 'none', backgroundColor: 'transparent' }}>
-            <AccordionSummary expandIcon={<ExpandMoreIcon color="primary" />}>
-                <Typography variant="h6" color="primary">Co-op Membership Progress</Typography>
-            </AccordionSummary>
-            <AccordionDetails sx={{ p: { xs: 1, md: 2 }, pt: 0 }}>
-                <Stepper 
-                    activeStep={activeStep} 
-            alternativeLabel={false} 
-            orientation="vertical"
-            sx={{
-              display: { xs: 'flex', md: 'none' },
-              '& .MuiStepLabel-label': { color: 'text.secondary' },
-              '& .MuiStepLabel-label.Mui-active': { color: 'primary.main' },
-              '& .MuiStepLabel-label.Mui-completed': { color: 'primary.main' },
-              '& .MuiStepIcon-root': { color: 'gray' },
-              '& .MuiStepIcon-root.Mui-active': { color: 'primary.main' },
-              '& .MuiStepIcon-root.Mui-completed': { color: 'primary.main' },
-          }}>
-            {steps.map((label) => (
-              <Step key={label}>
-                <StepLabel>{label}</StepLabel>
-              </Step>
-            ))}
-          </Stepper>
-          <Stepper 
-            activeStep={activeStep} 
-            alternativeLabel 
-            sx={{
-              display: { xs: 'none', md: 'flex' },
-              '& .MuiStepLabel-label': { color: 'text.secondary' },
-              '& .MuiStepLabel-label.Mui-active': { color: 'primary.main' },
-              '& .MuiStepLabel-label.Mui-completed': { color: 'primary.main' },
-              '& .MuiStepIcon-root': { color: 'gray' },
-              '& .MuiStepIcon-root.Mui-active': { color: 'primary.main' },
-              '& .MuiStepIcon-root.Mui-completed': { color: 'primary.main' },
-          }}>
-            {steps.map((label) => (
-              <Step key={label}>
-                <StepLabel>{label}</StepLabel>
-              </Step>
-            ))}
-          </Stepper>
-          
-          {!userData?.onboardingComplete && activeStep === 1 && (
-              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-                  <Alert severity="info" variant="outlined" sx={{ color: 'primary.main', borderColor: 'primary.main' }} action={
-                      <Button color="inherit" size="small" onClick={() => handleNavigate(`/dashboard/${session.user.userID}/onboarding`)}>
-                          Start Application
-                      </Button>
-                  }>
-                      Please submit your membership application to get started.
-                  </Alert>
-              </Box>
-          )}
+            {/* Ways to earn stake */}
+            {userData && <WaysToEarnStake user={userData} />}
 
-          {activeStep === 2 && (
-              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-                  <Alert severity="info" variant="outlined">
-                      Application submitted! We will contact you shortly.
-                  </Alert>
-              </Box>
-          )}
-
-          {activeStep === 3 && (
-              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-                  <Alert severity="info" variant="outlined">
-                      Please visit the FabLab for your orientation and paperwork.
-                  </Alert>
-              </Box>
-          )}
-
-          {activeStep === 4 && (
-              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-                  <Alert severity="info" variant="outlined" action={
-                      <Button color="inherit" size="small" onClick={() => handleNavigate(`/dashboard/${session.user.userID}/profile?tab=1`)}>
-                          View Plans
-                      </Button>
-                  }>
-                      Please select a membership plan to continue.
-                  </Alert>
-              </Box>
-          )}
-          
-          {activeStep === 5 && (
-              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-                  <Alert severity="success" variant="outlined" action={
-                      <Button color="inherit" size="small" onClick={() => handleNavigate(`/dashboard/${session.user.userID}/profile?tab=2`)}>
-                          Setup Profile
-                      </Button>
-                  }>
-                      Membership active! Please complete your public profile to connect with the community.
-                  </Alert>
-              </Box>
-          )}
-          
-          {activeStep === 6 && (
-               <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-                  <Alert severity="warning" variant="outlined" action={
-                      <Button color="inherit" size="small" onClick={() => handleNavigate(`/dashboard/${session.user.userID}/volunteer`)}>
-                          Log Hours
-                      </Button>
-                  }>
-                      You have volunteer hours remaining for your first month requirement.
-                  </Alert>
-              </Box>
-          )}
-            </AccordionDetails>
-          </Accordion>
-      </Card>
-      )}
-
-      {/* Ways to Earn Stake */}
-      {userData && <WaysToEarnStake user={userData} />}
-
-      {/* Dashboard Options Grid */}
-      <Grid container spacing={2}>
-        {menuItems.map((item) => (
-            <Grid item xs={6} md={4} lg={3} key={item.title}>
-                <Paper
-                    elevation={0}
-                    onClick={() => item.action ? item.action() : handleNavigate(item.path)}
-                    sx={{
-                        p: 2,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        border: `1px solid ${theme.palette.divider}`,
-                        backgroundColor: theme.palette.background.paper,
-                        transition: 'all 0.2s ease-in-out',
-                        height: '100%',
-                        minHeight: 160,
-                        '&:hover': {
-                            transform: 'translateY(-4px)',
-                            boxShadow: `0 4px 20px ${item.color}40`,
-                            borderColor: item.color,
-                        }
-                    }}
-                >
-                    <Box sx={{ 
-                        color: item.color, 
-                        mb: 1.5,
-                        p: 1.5,
-                        borderRadius: '50%',
-                        backgroundColor: `${item.color}15`
-                    }}>
-                        {item.icon}
-                    </Box>
-                    <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 'bold', mb: 0.5 }}>
-                        {item.title}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
-                        {item.description || item.desc}
-                    </Typography>
-                </Paper>
-            </Grid>
-        ))}
-      </Grid>
-    </Box>
-  );
-};
-
-export default DashboardPage;
+            {/* Menu grid */}
+            <div>
+                <div style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: '0.14em', marginBottom: 12 }}>QUICK_ACCESS</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+                    {menu.map(item => (
+                        <div
+                            key={item.title}
+                            className="card"
+                            onClick={() => item.href ? window.open(item.href, '_blank') : router.push(item.path)}
+                            style={{
+                                padding: '16px 14px', cursor: 'pointer', textAlign: 'center',
+                                border: item.admin ? '1px solid var(--amber-dim)' : '1px solid var(--bd)',
+                                transition: 'border-color 0.12s, box-shadow 0.12s',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = item.admin ? 'var(--amber)' : 'var(--green)'; e.currentTarget.style.boxShadow = `0 0 12px ${item.admin ? 'rgba(255,176,0,0.1)' : 'rgba(57,255,20,0.08)'}`; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = item.admin ? 'var(--amber-dim)' : 'var(--bd)'; e.currentTarget.style.boxShadow = 'none'; }}
+                        >
+                            <div style={{ fontFamily: 'var(--mono)', fontSize: 20, color: item.admin ? 'var(--amber)' : 'var(--green)', marginBottom: 8, textShadow: `0 0 8px ${item.admin ? 'var(--amber)' : 'var(--green)'}` }}>
+                                {item.sym}
+                            </div>
+                            <div style={{ color: 'var(--text)', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', marginBottom: 4 }}>{item.title}</div>
+                            <div style={{ color: 'var(--text-dim)', fontSize: 10 }}>{item.desc}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}

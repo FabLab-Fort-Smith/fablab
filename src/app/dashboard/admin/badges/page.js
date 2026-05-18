@@ -1,360 +1,190 @@
-"use client";
-import React, { useState, useEffect } from 'react';
-import { 
-    Box, Typography, Paper, Button, IconButton, 
-    Dialog, DialogTitle, DialogContent, DialogActions, 
-    TextField, Grid, Stack, Container, Alert,
-    Card, CardContent, CardActions, CardMedia,
-    CircularProgress, InputAdornment,
-    FormControl, InputLabel, Select, MenuItem, Chip
-} from '@mui/material';
-import { 
-    Add as AddIcon, 
-    Edit as EditIcon, 
-    Delete as DeleteIcon,
-    CloudUpload as CloudUploadIcon,
-    Search as SearchIcon
-} from '@mui/icons-material';
+'use client';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
 import { uploadFileToS3 } from '@/utils/s3.util';
+
+function Modal({ open, onClose, title, children, footer }) {
+    if (!open) return null;
+    return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={onClose}>
+            <div className="card" style={{ maxWidth: 520, width: '100%', maxHeight: '90vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+                <div className="card-header">
+                    <span style={{ color: 'var(--text)', fontSize: 13, fontWeight: 600, fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>{title}</span>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+                </div>
+                <div style={{ padding: '20px 24px' }}>{children}</div>
+                {footer && <div style={{ padding: '12px 24px', borderTop: '1px solid var(--bd)', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>{footer}</div>}
+            </div>
+        </div>
+    );
+}
+
+const EMPTY = { id: '', name: '', description: '', icon: '🏅', imageUrl: '', type: 'admin' };
+const TYPE_COLOR = { admin: 'var(--text-dim)', system: 'var(--cyan)', bounty: 'var(--magenta)' };
 
 export default function BadgeManagementPage() {
     const { data: session, status } = useSession();
     const router = useRouter();
-    
     const [badges, setBadges] = useState([]);
-    const [filteredBadges, setFilteredBadges] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState('');
-    
+    const [search, setSearch] = useState('');
     const [dialogOpen, setDialogOpen] = useState(false);
     const [currentBadge, setCurrentBadge] = useState(null);
-    const [formData, setFormData] = useState({
-        id: '',
-        name: '',
-        description: '',
-        icon: '',
-        imageUrl: '',
-        type: 'admin'
-    });
-    
+    const [formData, setFormData] = useState(EMPTY);
     const [uploading, setUploading] = useState(false);
-    const [error, setError] = useState('');
+    const [toast, setToast] = useState(null);
 
     useEffect(() => {
         if (status === 'authenticated') {
-            if (session.user.role !== 'admin') {
-                router.push('/dashboard');
-            } else {
-                fetchBadges();
-            }
+            if (session.user.role !== 'admin') router.push('/dashboard');
+            else fetchBadges();
         }
     }, [status, session, router]);
 
-    useEffect(() => {
-        if (searchQuery.trim() === '') {
-            setFilteredBadges(badges);
-        } else {
-            const lowerQuery = searchQuery.toLowerCase();
-            setFilteredBadges(badges.filter(badge => 
-                badge.name.toLowerCase().includes(lowerQuery) || 
-                badge.description.toLowerCase().includes(lowerQuery) ||
-                badge.id.toLowerCase().includes(lowerQuery)
-            ));
-        }
-    }, [searchQuery, badges]);
+    const showToast = (msg, color = 'var(--green)') => { setToast({ msg, color }); setTimeout(() => setToast(null), 3000); };
 
     const fetchBadges = async () => {
         setLoading(true);
         try {
-            const res = await axios.get('/api/v1/badges');
-            const badgesData = res.data.badges || [];
-            setBadges(badgesData);
-            setFilteredBadges(badgesData);
-        } catch (err) {
-            console.error("Failed to fetch badges", err);
-            setError("Failed to load badges.");
-        } finally {
-            setLoading(false);
-        }
+            const res = await fetch('/api/v1/badges');
+            if (res.ok) { const data = await res.json(); setBadges(data.badges || []); }
+        } catch {}
+        finally { setLoading(false); }
     };
 
     const handleOpenDialog = (badge = null) => {
-        if (badge) {
-            setCurrentBadge(badge);
-            setFormData({
-                id: badge.id,
-                name: badge.name,
-                description: badge.description,
-                icon: badge.icon || '',
-                imageUrl: badge.imageUrl || '',
-                type: badge.type || 'admin'
-            });
-        } else {
-            setCurrentBadge(null);
-            setFormData({
-                id: '',
-                name: '',
-                description: '',
-                icon: '🏅',
-                imageUrl: '',
-                type: 'admin'
-            });
-        }
+        if (badge) { setCurrentBadge(badge); setFormData({ id: badge.id, name: badge.name, description: badge.description, icon: badge.icon || '', imageUrl: badge.imageUrl || '', type: badge.type || 'admin' }); }
+        else { setCurrentBadge(null); setFormData(EMPTY); }
         setDialogOpen(true);
     };
 
-    const handleCloseDialog = () => {
-        setDialogOpen(false);
-        setCurrentBadge(null);
-        setError('');
-    };
-
-    const handleNameChange = (e) => {
+    const handleNameChange = e => {
         const name = e.target.value;
-        // If creating a new badge, auto-generate ID from name
-        if (!currentBadge) {
-            const id = name.toLowerCase()
-                .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
-                .replace(/\s+/g, '_');        // Replace spaces with underscores
-            setFormData(prev => ({ ...prev, name, id }));
-        } else {
-            setFormData(prev => ({ ...prev, name }));
-        }
+        if (!currentBadge) { const id = name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '_'); setFormData(p => ({ ...p, name, id })); }
+        else setFormData(p => ({ ...p, name }));
     };
 
-    const handleImageUpload = async (e) => {
+    const handleImageUpload = async e => {
         const file = e.target.files[0];
         if (!file) return;
-
         setUploading(true);
-        try {
-            // Upload to S3 (badges folder)
-            const url = await uploadFileToS3(file, 'badges');
-            setFormData(prev => ({ ...prev, imageUrl: url }));
-        } catch (err) {
-            console.error("Upload failed", err);
-            setError("Failed to upload image.");
-        } finally {
-            setUploading(false);
-        }
+        try { const url = await uploadFileToS3(file, 'badges'); setFormData(p => ({ ...p, imageUrl: url })); }
+        catch { showToast('Upload failed.', 'var(--red)'); }
+        finally { setUploading(false); }
     };
 
     const handleSave = async () => {
         try {
-            if (currentBadge) {
-                // Update
-                await axios.put(`/api/v1/badges/${currentBadge.id}`, formData);
-            } else {
-                // Create
-                await axios.post('/api/v1/badges', formData);
-            }
-            fetchBadges();
-            handleCloseDialog();
-        } catch (err) {
-            console.error("Error saving badge:", err);
-            setError(err.response?.data?.error || "Failed to save badge.");
-        }
+            const url = currentBadge ? `/api/v1/badges/${currentBadge.id}` : '/api/v1/badges';
+            const method = currentBadge ? 'PUT' : 'POST';
+            const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
+            if (res.ok) { fetchBadges(); setDialogOpen(false); showToast('Badge saved.'); }
+            else { const d = await res.json(); showToast(d.error || 'Failed.', 'var(--red)'); }
+        } catch { showToast('Error.', 'var(--red)'); }
     };
 
     const handleDelete = async (id) => {
-        if (confirm('Are you sure you want to delete this badge? Users who have it will keep it, but it will be removed from the system.')) {
-            try {
-                await axios.delete(`/api/v1/badges/${id}`);
-                fetchBadges();
-            } catch (err) {
-                console.error("Error deleting badge:", err);
-                setError("Failed to delete badge.");
-            }
-        }
+        if (!confirm('Delete this badge? Users who have it will keep it.')) return;
+        try {
+            const res = await fetch(`/api/v1/badges/${id}`, { method: 'DELETE' });
+            if (res.ok) { fetchBadges(); showToast('Deleted.'); }
+            else showToast('Failed.', 'var(--red)');
+        } catch { showToast('Error.', 'var(--red)'); }
     };
 
-    if (status === 'loading') return <Box p={3} display="flex" justifyContent="center"><CircularProgress /></Box>;
+    const filtered = search.trim() ? badges.filter(b => b.name?.toLowerCase().includes(search.toLowerCase()) || b.id?.toLowerCase().includes(search.toLowerCase()) || b.description?.toLowerCase().includes(search.toLowerCase())) : badges;
+    const set = field => e => setFormData(p => ({ ...p, [field]: e.target.value }));
 
     return (
-        <Container maxWidth="xl" sx={{ pb: 8 }}>
-            <Box sx={{ my: 4 }}>
-                <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'center' }} spacing={2} mb={3}>
-                    <Typography variant="h4" component="h1">
-                        Badge Management
-                    </Typography>
-                    <Button 
-                        variant="contained" 
-                        startIcon={<AddIcon />}
-                        onClick={() => handleOpenDialog()}
-                        fullWidth={false}
-                    >
-                        Create Badge
-                    </Button>
-                </Stack>
+        <div style={{ padding: '20px 24px', maxWidth: 1100 }}>
+            {toast && <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 400, background: 'var(--bg-card)', border: `1px solid ${toast.color}`, color: toast.color, padding: '12px 18px', fontFamily: 'var(--mono)', fontSize: 12 }}>{toast.msg}</div>}
 
-                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 28 }}>
+                <div>
+                    <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}>
+                        <span style={{ color: 'var(--green)' }}>$</span> ./badges --manage
+                    </div>
+                    <h1 style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.4rem, 3vw, 2rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)', margin: 0 }}>badges</h1>
+                </div>
+                <button className="btn btn--filled" style={{ fontSize: 11 }} onClick={() => handleOpenDialog()}>$ ./create --badge</button>
+            </div>
 
-                <TextField
-                    fullWidth
-                    placeholder="Search badges..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    sx={{ mb: 3 }}
-                    InputProps={{
-                        startAdornment: (
-                            <InputAdornment position="start">
-                                <SearchIcon />
-                            </InputAdornment>
-                        ),
-                    }}
-                />
+            <div style={{ marginBottom: 16 }}>
+                <input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder="search badges..." style={{ width: '100%', maxWidth: 320, boxSizing: 'border-box', fontSize: 12 }} />
+            </div>
 
-                {loading ? (
-                    <Box display="flex" justifyContent="center" p={4}>
-                        <CircularProgress />
-                    </Box>
-                ) : (
-                    <Grid container spacing={2}>
-                        {filteredBadges.map((badge) => (
-                            <Grid item xs={12} sm={6} md={4} lg={3} key={badge.id}>
-                                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                                    <Box sx={{ pt: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', height: 140, bgcolor: 'action.hover' }}>
-                                        {badge.imageUrl ? (
-                                            <Box 
-                                                component="img"
-                                                src={badge.imageUrl}
-                                                alt={badge.name}
-                                                sx={{ maxHeight: 100, maxWidth: 100, objectFit: 'contain' }}
-                                            />
-                                        ) : (
-                                            <Typography variant="h1">{badge.icon || '🏅'}</Typography>
-                                        )}
-                                    </Box>
-                                    <CardContent sx={{ flexGrow: 1 }}>
-                                        <Typography gutterBottom variant="h6" component="div">
-                                            {badge.name}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
-                                            ID: {badge.id}
-                                        </Typography>
-                                        <Box sx={{ mb: 1 }}>
-                                            <Chip 
-                                                label={badge.type || 'admin'} 
-                                                size="small" 
-                                                color={badge.type === 'system' ? 'primary' : badge.type === 'bounty' ? 'secondary' : 'default'} 
-                                                variant="outlined"
-                                                sx={{ textTransform: 'capitalize' }}
-                                            />
-                                        </Box>
-                                        <Typography variant="body2" color="text.secondary" sx={{ 
-                                            display: '-webkit-box',
-                                            WebkitLineClamp: 3,
-                                            WebkitBoxOrient: 'vertical',
-                                            overflow: 'hidden'
-                                        }}>
-                                            {badge.description}
-                                        </Typography>
-                                    </CardContent>
-                                    <CardActions>
-                                        <Button size="small" startIcon={<EditIcon />} onClick={() => handleOpenDialog(badge)}>Edit</Button>
-                                        <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => handleDelete(badge.id)}>Delete</Button>
-                                    </CardActions>
-                                </Card>
-                            </Grid>
-                        ))}
-                        {filteredBadges.length === 0 && (
-                            <Grid item xs={12}>
-                                <Paper sx={{ p: 4, textAlign: 'center' }}>
-                                    <Typography color="text.secondary">No badges found.</Typography>
-                                </Paper>
-                            </Grid>
-                        )}
-                    </Grid>
-                )}
+            {loading ? (
+                <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>loading<span className="caret-block" style={{ marginLeft: 4 }} /></div>
+            ) : filtered.length === 0 ? (
+                <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>[no badges found]</div>
+            ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+                    {filtered.map(badge => (
+                        <div key={badge.id} className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                            <div style={{ width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, background: 'var(--bg-1)', border: '1px solid var(--bd)' }}>
+                                {badge.imageUrl
+                                    ? <img src={badge.imageUrl} alt={badge.name} style={{ maxWidth: 56, maxHeight: 56, objectFit: 'contain' }} />
+                                    : <span style={{ fontSize: 36 }}>{badge.icon || '🏅'}</span>
+                                }
+                            </div>
+                            <div style={{ color: 'var(--text)', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{badge.name}</div>
+                            <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-dim)', marginBottom: 6 }}>{badge.id}</div>
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.1em', color: TYPE_COLOR[badge.type] || 'var(--text-dim)', border: `1px solid ${TYPE_COLOR[badge.type] || 'var(--bd)'}`, padding: '2px 6px', marginBottom: 10 }}>
+                                {badge.type?.toUpperCase()}
+                            </span>
+                            <div style={{ color: 'var(--text-mid)', fontSize: 11, lineHeight: 1.5, flex: 1, marginBottom: 14, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                {badge.description}
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                                <button className="btn btn--ghost btn--sm" style={{ fontSize: 9, flex: 1 }} onClick={() => handleOpenDialog(badge)}>$ edit</button>
+                                <button className="btn btn--sm" style={{ fontSize: 9, borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => handleDelete(badge.id)}>✕</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
-                <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-                    <DialogTitle>{currentBadge ? 'Edit Badge' : 'Create New Badge'}</DialogTitle>
-                    <DialogContent>
-                        <Box component="form" sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <TextField
-                                label="Name"
-                                fullWidth
-                                value={formData.name}
-                                onChange={handleNameChange}
-                            />
-                            {/* ID is auto-generated from name */}
-                            <FormControl fullWidth>
-                                <InputLabel>Type</InputLabel>
-                                <Select
-                                    value={formData.type}
-                                    label="Type"
-                                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                                >
-                                    <MenuItem value="admin">Admin (Manual Award)</MenuItem>
-                                    <MenuItem value="system">System (Programmatic)</MenuItem>
-                                    <MenuItem value="bounty">Bounty (Task Based)</MenuItem>
-                                </Select>
-                            </FormControl>
-                            <TextField
-                                label="Description"
-                                fullWidth
-                                multiline
-                                rows={3}
-                                value={formData.description}
-                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                            />
-                            
-                            <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
-                                <Typography variant="subtitle2" gutterBottom>Badge Image</Typography>
-                                <Stack direction="row" spacing={2} alignItems="center">
-                                    <Box 
-                                        sx={{ 
-                                            width: 80, 
-                                            height: 80, 
-                                            display: 'flex', 
-                                            justifyContent: 'center', 
-                                            alignItems: 'center',
-                                            bgcolor: 'action.hover',
-                                            borderRadius: 1,
-                                            border: '1px dashed',
-                                            borderColor: 'text.secondary'
-                                        }}
-                                    >
-                                        {formData.imageUrl ? (
-                                            <Box component="img" src={formData.imageUrl} sx={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                        ) : (
-                                            <Typography variant="h3">{formData.icon || '?'}</Typography>
-                                        )}
-                                    </Box>
-                                    <Box sx={{ flex: 1 }}>
-                                        <Button
-                                            component="label"
-                                            variant="outlined"
-                                            startIcon={uploading ? <CircularProgress size={20} /> : <CloudUploadIcon />}
-                                            disabled={uploading}
-                                            fullWidth
-                                            sx={{ mb: 1 }}
-                                        >
-                                            Upload Image
-                                            <input type="file" hidden accept="image/*" onChange={handleImageUpload} />
-                                        </Button>
-                                        <TextField
-                                            label="Or use Emoji Icon"
-                                            size="small"
-                                            fullWidth
-                                            value={formData.icon}
-                                            onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-                                            placeholder="e.g. 🏅"
-                                        />
-                                    </Box>
-                                </Stack>
-                            </Box>
-                        </Box>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseDialog}>Cancel</Button>
-                        <Button onClick={handleSave} variant="contained" disabled={uploading}>Save</Button>
-                    </DialogActions>
-                </Dialog>
-            </Box>
-        </Container>
+            <Modal open={dialogOpen} onClose={() => setDialogOpen(false)} title={currentBadge ? 'edit badge' : 'create badge'}
+                footer={<>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setDialogOpen(false)}>cancel</button>
+                    <button className="btn btn--filled btn--sm" style={{ fontSize: 10 }} onClick={handleSave} disabled={uploading}>$ save</button>
+                </>}
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div>
+                        <label style={{ display: 'block', fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 6 }}>NAME</label>
+                        <input className="input" value={formData.name} onChange={handleNameChange} placeholder="badge name" style={{ width: '100%', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                        <label style={{ display: 'block', fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 6 }}>TYPE</label>
+                        <select className="input" value={formData.type} onChange={set('type')} style={{ width: '100%', boxSizing: 'border-box' }}>
+                            <option value="admin">admin (manual award)</option>
+                            <option value="system">system (programmatic)</option>
+                            <option value="bounty">bounty (task based)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style={{ display: 'block', fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 6 }}>DESCRIPTION</label>
+                        <textarea className="input" rows={3} value={formData.description} onChange={set('description')} placeholder="what does this badge mean?" style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'var(--mono)', fontSize: 12 }} />
+                    </div>
+                    <div style={{ border: '1px solid var(--bd)', padding: '14px 16px' }}>
+                        <div style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 12 }}>BADGE_IMAGE</div>
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                            <div style={{ width: 64, height: 64, background: 'var(--bg-1)', border: '1px dashed var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                {formData.imageUrl ? <img src={formData.imageUrl} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="" /> : <span style={{ fontSize: 28 }}>{formData.icon || '?'}</span>}
+                            </div>
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                <label className="btn btn--ghost btn--sm" style={{ fontSize: 10, cursor: 'pointer', textAlign: 'center' }}>
+                                    {uploading ? '$ uploading...' : '$ upload image'}
+                                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} disabled={uploading} />
+                                </label>
+                                <input className="input" value={formData.icon} onChange={set('icon')} placeholder="or paste emoji icon" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </Modal>
+        </div>
     );
 }

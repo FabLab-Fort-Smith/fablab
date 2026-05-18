@@ -1,157 +1,82 @@
-// src/app/dashboard/membership/page.js
 "use client";
-
-import React, { useState, useEffect } from "react";
-import {
-  Typography,
-  Box,
-  Button,
-  Grid,
-  Alert,
-  CircularProgress,
-  Paper,
-} from "@mui/material";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import squareClient from "../../../../lib/square"; // Import your Square.js client
 
 const ManageMembership = () => {
-  const { data: session } = useSession();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [membershipStatus, setMembershipStatus] = useState(null);
+    const { data: session } = useSession();
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+    const [membershipStatus, setMembershipStatus] = useState(null);
 
-  useEffect(() => {
-    const fetchMembershipStatus = async () => {
-      try {
+    useEffect(() => {
+        if (!session) return;
         setLoading(true);
-        const response = await fetch("/api/membership/status", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.user?.token}`,
-          },
-        });
+        fetch("/api/membership/status", { headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.user?.token}` } })
+            .then(r => { if (!r.ok) throw new Error("Failed to fetch membership status."); return r.json(); })
+            .then(data => setMembershipStatus(data))
+            .catch(err => setError(err.message))
+            .finally(() => setLoading(false));
+    }, [session]);
 
-        if (response.ok) {
-          const data = await response.json();
-          setMembershipStatus(data);
-        } else {
-          throw new Error("Failed to fetch membership status.");
-        }
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+    const handleUpgrade = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/membership/upgrade", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.user?.token}` }, body: JSON.stringify({ plan: "premium" }) });
+            if (!res.ok) throw new Error("Failed to upgrade membership.");
+            setMembershipStatus(await res.json());
+        } catch (err) { setError(err.message); }
+        finally { setLoading(false); }
     };
 
-    if (session) fetchMembershipStatus();
-  }, [session]);
+    const handleCancel = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/membership/cancel", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.user?.token}` } });
+            if (!res.ok) throw new Error("Failed to cancel membership.");
+            setMembershipStatus(await res.json());
+        } catch (err) { setError(err.message); }
+        finally { setLoading(false); }
+    };
 
-  const handleUpgrade = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch("/api/membership/upgrade", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.user?.token}`,
-        },
-        body: JSON.stringify({ plan: "premium" }),
-      });
+    return (
+        <div style={{ padding: '20px 24px', maxWidth: 600 }}>
+            <div style={{ marginBottom: 28 }}>
+                <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}><span style={{ color: 'var(--green)' }}>$</span> ./membership --manage</div>
+                <h1 style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.4rem, 3vw, 2rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)', margin: 0 }}>manage membership</h1>
+            </div>
 
-      if (!response.ok) {
-        throw new Error("Failed to upgrade membership.");
-      }
+            {loading && <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 16 }}>loading<span className="caret-block" style={{ marginLeft: 4 }} /></div>}
 
-      const data = await response.json();
-      setMembershipStatus(data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+            {error && <div style={{ border: '1px solid var(--red)', color: 'var(--red)', padding: '10px 14px', marginBottom: 20, fontSize: 12, fontFamily: 'var(--mono)' }}>✕ {error}</div>}
 
-  const handleCancel = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch("/api/membership/cancel", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.user?.token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to cancel membership.");
-      }
-
-      const data = await response.json();
-      setMembershipStatus(data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Box sx={{ padding: "2rem" }}>
-      <Typography variant="h4" gutterBottom>
-        Manage Your Membership
-      </Typography>
-
-      {loading && <CircularProgress />}
-
-      {error && (
-        <Alert severity="error" sx={{ marginBottom: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      {membershipStatus ? (
-        <Paper sx={{ padding: 3, marginBottom: 3 }}>
-          <Typography variant="h6">
-            Current Plan: {membershipStatus.plan}
-          </Typography>
-          <Typography variant="body1">
-            Status: {membershipStatus.status}
-          </Typography>
-          <Typography variant="body2" sx={{ marginBottom: 2 }}>
-            Renewal Date: {membershipStatus.renewalDate}
-          </Typography>
-          <Grid container spacing={2}>
-            <Grid item>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleUpgrade}
-                disabled={loading || membershipStatus.plan === "premium"}
-              >
-                Upgrade to Premium
-              </Button>
-            </Grid>
-            <Grid item>
-              <Button
-                variant="outlined"
-                color="error"
-                onClick={handleCancel}
-                disabled={loading}
-              >
-                Cancel Membership
-              </Button>
-            </Grid>
-          </Grid>
-        </Paper>
-      ) : (
-        <Typography>
-          You don’t have an active membership. Select a plan to get started.
-        </Typography>
-      )}
-    </Box>
-  );
+            {membershipStatus ? (
+                <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)', padding: '20px 24px', marginBottom: 20 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--mono)', marginBottom: 4 }}>CURRENT_PLAN</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-bright)', marginBottom: 12 }}>{membershipStatus.plan}</div>
+                    <div style={{ display: 'flex', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
+                        <div>
+                            <div style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--text-dim)', marginBottom: 2 }}>STATUS</div>
+                            <div style={{ fontSize: 12, color: 'var(--green)' }}>{membershipStatus.status}</div>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--text-dim)', marginBottom: 2 }}>RENEWAL_DATE</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-mid)', fontFamily: 'var(--mono)' }}>{membershipStatus.renewalDate}</div>
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        <button className="btn btn--sm" style={{ fontSize: 10, borderColor: 'var(--green)', color: 'var(--green)' }} onClick={handleUpgrade} disabled={loading || membershipStatus.plan === "premium"}>
+                            $ upgrade to premium
+                        </button>
+                        <button className="btn btn--sm" style={{ fontSize: 10, borderColor: 'var(--red)', color: 'var(--red)' }} onClick={handleCancel} disabled={loading}>
+                            ✕ cancel membership
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                !loading && <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>You don't have an active membership. Select a plan to get started.</div>
+            )}
+        </div>
+    );
 };
 
 export default ManageMembership;

@@ -1,21 +1,30 @@
-"use client";
-import React, { useState, useEffect } from 'react';
-import { 
-    Box, Typography, Grid, Card, CardContent, Avatar, Chip, 
-    TextField, InputAdornment, Container, CircularProgress, 
-    FormControl, InputLabel, Select, MenuItem, OutlinedInput,
-    useTheme, Button, Alert, Paper,
-    Dialog, DialogTitle, DialogContent, DialogActions, Radio, RadioGroup, FormControlLabel, Pagination
-} from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import LockIcon from '@mui/icons-material/Lock';
+'use client';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import Link from 'next/link';
+
+function Modal({ open, onClose, title, children, footer }) {
+    if (!open) return null;
+    return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={onClose}>
+            <div className="card" style={{ maxWidth: 480, width: '100%', maxHeight: '90vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+                <div className="card-header">
+                    <span style={{ color: 'var(--text)', fontSize: 13, fontWeight: 600, fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>{title}</span>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 18, lineHeight: 1 }}>×</button>
+                </div>
+                <div style={{ padding: '20px 24px' }}>{children}</div>
+                {footer && (
+                    <div style={{ padding: '12px 24px', borderTop: '1px solid var(--bd)', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                        {footer}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
 
 export default function MembersDirectory() {
-    const theme = useTheme();
     const router = useRouter();
     const { data: session, status } = useSession();
     const [users, setUsers] = useState([]);
@@ -25,49 +34,28 @@ export default function MembersDirectory() {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedInterests, setSelectedInterests] = useState([]);
     const [hasAccess, setHasAccess] = useState(false);
-    
-    // Sponsorship Dialog State
+    const [allInterests, setAllInterests] = useState([]);
     const [sponsorDialogOpen, setSponsorDialogOpen] = useState(false);
     const [selectedRecipient, setSelectedRecipient] = useState(null);
     const [sponsorshipType, setSponsorshipType] = useState('one-time');
-    
-    // Derived lists for filters
-    const [allInterests, setAllInterests] = useState([]);
+    const [sponsorError, setSponsorError] = useState('');
 
     useEffect(() => {
-        const checkAccessAndFetch = async () => {
-            if (status === 'loading') return;
-            
-            if (status === 'unauthenticated') {
-                router.push('/auth/signin');
-                return;
-            }
+        if (status === 'loading') return;
+        if (status === 'unauthenticated') { router.push('/auth/signin'); return; }
 
-            try {
-                // Check membership status
-                const userRes = await fetch(`/api/v1/users?userID=${session.user.userID}`);
-                if (userRes.ok) {
-                    const userData = await userRes.json();
-                    const memberStatus = userData.user?.membership?.status;
-                    const isWaived = userData.user?.membership?.isWaived;
-                    const subscriptionStatus = userData.user?.membership?.subscriptionStatus;
-                    const memberType = userData.user?.membership?.type;
-                    
-                    if (memberStatus === 'active' || memberStatus === 'probation' || isWaived || subscriptionStatus === 'ACTIVE' || memberType === 'community' || session.user.role === 'admin') {
-                        setHasAccess(true);
-                        await fetchMembers(1);
-                    } else {
-                        setHasAccess(false);
-                        setLoading(false);
-                    }
-                }
-            } catch (error) {
-                console.error("Error checking access:", error);
+        fetch(`/api/v1/users?userID=${session.user.userID}`)
+            .then(r => r.ok ? r.json() : {})
+            .then(userData => {
+                const m = userData.user?.membership;
+                const access = m?.status === 'active' || m?.status === 'probation' ||
+                    m?.isWaived || m?.subscriptionStatus === 'ACTIVE' ||
+                    m?.type === 'community' || session.user.role === 'admin';
+                setHasAccess(access);
+                if (access) return fetchMembers(1);
                 setLoading(false);
-            }
-        };
-
-        checkAccessAndFetch();
+            })
+            .catch(() => setLoading(false));
     }, [status, session, router]);
 
     const fetchMembers = async (pageNum = 1) => {
@@ -79,353 +67,240 @@ export default function MembersDirectory() {
                 setUsers(data.users || []);
                 setTotalPages(data.totalPages || 1);
                 setPage(data.page || 1);
-                
-                // Extract unique interests
                 const interests = new Set();
-                
-                (data.users || []).forEach(user => {
-                    (user.interests || []).forEach(interest => interests.add(interest));
-                });
-                
+                (data.users || []).forEach(u => (u.interests || []).forEach(i => interests.add(i)));
                 setAllInterests(Array.from(interests).sort());
             }
-        } catch (error) {
-            console.error("Failed to fetch members", error);
         } finally {
             setLoading(false);
         }
     };
 
-    const handlePageChange = (event, value) => {
-        setPage(value);
-        fetchMembers(value);
+    const handlePageChange = (newPage) => {
+        fetchMembers(newPage);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleSponsorClick = (user) => {
         setSelectedRecipient(user);
-        setSponsorshipType('one-time'); // Default
+        setSponsorshipType('one-time');
+        setSponsorError('');
         setSponsorDialogOpen(true);
     };
 
     const handleConfirmSponsorship = async () => {
         if (!selectedRecipient) return;
-        
+        setSponsorError('');
         try {
             const res = await fetch('/api/v1/sponsorship/checkout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    recipientId: selectedRecipient.userID,
-                    donorId: session?.user?.userID,
-                    type: sponsorshipType
-                })
+                body: JSON.stringify({ recipientId: selectedRecipient.userID, donorId: session?.user?.userID, type: sponsorshipType }),
             });
-            
             const data = await res.json();
-            if (data.url) {
-                window.location.href = data.url;
-            } else {
-                alert("Failed to create sponsorship link.");
-            }
-        } catch (error) {
-            console.error("Sponsorship Error:", error);
-            alert("An error occurred.");
+            if (data.url) window.location.href = data.url;
+            else setSponsorError('Failed to create sponsorship link.');
+        } catch {
+            setSponsorError('An error occurred.');
         }
     };
 
-    const filteredUsers = users.filter(user => {
-        const matchesSearch = (
-            (user.username || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (user.firstName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (user.lastName || '').toLowerCase().includes(searchTerm.toLowerCase())
-        );
-
-        const matchesInterests = selectedInterests.length === 0 || 
-            selectedInterests.every(interest => (user.interests || []).includes(interest));
-
+    const filteredUsers = users.filter(u => {
+        const matchesSearch = (u.username || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (u.firstName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (u.lastName || '').toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesInterests = selectedInterests.length === 0 ||
+            selectedInterests.every(i => (u.interests || []).includes(i));
         return matchesSearch && matchesInterests;
     });
 
-    const handleCardClick = (userID) => {
-        if (userID) {
-            router.push(`/dashboard/member/${userID}`);
-        }
-    };
+    if (loading) return (
+        <div style={{ padding: '40px 24px', display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-mid)', fontSize: 12 }}>
+            <span className="dot pulse" style={{ background: 'var(--green)', width: 6, height: 6, borderRadius: '50%', display: 'inline-block' }} />
+            loading directory...
+        </div>
+    );
 
-    if (loading) {
-        return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: { xs: 4, md: 8 } }}>
-                <CircularProgress />
-            </Box>
-        );
-    }
-
-    if (!hasAccess) {
-        return (
-            <Container maxWidth="md" sx={{ mt: { xs: 4, md: 8 }, textAlign: 'center' }}>
-                <Box sx={{ p: { xs: 2, md: 4 }, border: '1px solid #333', borderRadius: 2, bgcolor: 'background.paper' }}>
-                    <LockIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
-                    <Typography variant="h4" gutterBottom>
-                        Membership Required
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary" paragraph>
-                        The Member Directory is exclusive to active members. 
-                        Please upgrade your membership to connect with the community.
-                    </Typography>
-                    <Button 
-                        variant="contained" 
-                        color="primary" 
-                        component={Link} 
-                        href={`/dashboard/${session?.user?.userID}/membership`}
-                        sx={{ mt: 2 }}
-                    >
-                        View Membership Options
-                    </Button>
-                </Box>
-            </Container>
-        );
-    }
+    if (!hasAccess) return (
+        <div style={{ padding: '80px 24px', maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
+            <div style={{ fontFamily: 'var(--display)', fontSize: 48, color: 'var(--text-dim)', marginBottom: 16 }}>⊠</div>
+            <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 12 }}>ACCESS_DENIED</div>
+            <h2 style={{ fontFamily: 'var(--display)', fontSize: '1.6rem', letterSpacing: '-0.04em', color: 'var(--text-bright)', marginBottom: 12 }}>
+                membership required
+            </h2>
+            <p style={{ color: 'var(--text-mid)', fontSize: 13, lineHeight: 1.7, marginBottom: 24 }}>
+                The member directory is exclusive to active members.
+            </p>
+            <Link href={`/dashboard/${session?.user?.userID}/profile?tab=1`} className="btn btn--filled" style={{ fontSize: 11 }}>
+                $ ./view --membership-options
+            </Link>
+        </div>
+    );
 
     return (
-        <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 }, px: { xs: 2, md: 3 } }}>
-            <Box sx={{ mb: { xs: 3, md: 6 }, textAlign: 'center' }}>
-                <Typography variant="h3" component="h1" gutterBottom fontWeight="bold" color="primary" sx={{ fontSize: { xs: '2rem', md: '3rem' } }}>
-                    Member Directory
-                </Typography>
-                <Typography variant="h6" color="text.secondary" sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>
-                    Connect with other makers, creators, and innovators in our community.
-                </Typography>
-            </Box>
+        <div style={{ padding: '20px 24px', maxWidth: 1200 }}>
+            <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}>
+                <span style={{ color: 'var(--green)' }}>$</span> ./directory --list --public
+            </div>
+            <h1 style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.4rem, 3vw, 2rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)', marginBottom: 8 }}>
+                member directory
+            </h1>
+            <p style={{ color: 'var(--text-mid)', fontSize: 13, marginBottom: 28 }}>
+                Connect with makers, creators, and innovators in the community.
+            </p>
 
-            {/* Filters & Search */}
-            <Paper sx={{ p: { xs: 2, md: 3 }, mb: 4, borderRadius: 2 }} elevation={2}>
-                <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} md={4}>
-                        <TextField
-                            fullWidth
-                            placeholder="Search members..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            InputProps={{
-                                startAdornment: (
-                                    <InputAdornment position="start">
-                                        <SearchIcon color="action" />
-                                    </InputAdornment>
-                                ),
-                            }}
-                        />
-                    </Grid>
-                    <Grid item xs={12} md={8}>
-                        <FormControl fullWidth>
-                            <InputLabel>Filter by Interests & Skills</InputLabel>
-                            <Select
-                                multiple
-                                value={selectedInterests}
-                                onChange={(e) => setSelectedInterests(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
-                                input={<OutlinedInput label="Filter by Interests & Skills" />}
-                                renderValue={(selected) => (
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                        {selected.map((value) => (
-                                            <Chip key={value} label={value} size="small" />
-                                        ))}
-                                    </Box>
-                                )}
-                            >
-                                {allInterests.map((interest) => (
-                                    <MenuItem key={interest} value={interest}>
-                                        {interest}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                    </Grid>
-                </Grid>
-            </Paper>
-
-            {/* Results Grid */}
-            <Grid container spacing={{ xs: 2, md: 3 }}>
-                {filteredUsers.length > 0 ? (
-                    filteredUsers.map((user) => (
-                        <Grid item xs={12} sm={6} md={4} lg={3} key={user.userID}>
-                            <Card 
-                                sx={{ 
-                                    height: '100%', 
-                                    display: 'flex', 
-                                    flexDirection: 'column',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.3s ease-in-out',
-                                    border: `1px solid ${theme.palette.divider}`,
-                                    backgroundColor: 'rgba(0, 255, 0, 0.02)',
-                                    '&:hover': {
-                                        transform: 'translateY(-4px)',
-                                        boxShadow: `0 4px 20px rgba(0, 255, 0, 0.25)`,
-                                        borderColor: theme.palette.primary.main
-                                    }
-                                }}
-                                onClick={() => handleCardClick(user.userID)}
-                            >
-                                <Box sx={{ 
-                                    height: 60, 
-                                    background: `linear-gradient(180deg, ${theme.palette.action.hover} 0%, transparent 100%)`,
-                                    mb: -5
-                                }} />
-                                <CardContent sx={{ flexGrow: 1, textAlign: 'center', pt: 0 }}>
-                                    <Avatar
-                                        src={user.image || "/default-avatar.png"}
-                                        sx={{ 
-                                            width: 100, 
-                                            height: 100, 
-                                            mx: 'auto', 
-                                            mb: 2, 
-                                            border: `2px solid ${theme.palette.primary.main}`,
-                                            bgcolor: theme.palette.background.paper
-                                        }}
-                                    />
-                                    <Typography variant="h6" component="div" sx={{ fontWeight: 'bold', color: theme.palette.primary.main }}>
-                                        {user.username || `${user.firstName} ${user.lastName}`}
-                                    </Typography>
-                                    
-                                    <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap', mb: 2, mt: 1 }}>
-                                        {user.role === 'admin' && (
-                                            <Chip 
-                                                label={user.boardPosition || "Admin"} 
-                                                color="secondary" 
-                                                size="small" 
-                                                sx={{ fontWeight: 'bold' }} 
-                                            />
-                                        )}
-                                        <Chip 
-                                            label={user.membership?.type === 'co-op' ? "Co-op Member" : "Community Member"} 
-                                            color={user.membership?.type === 'co-op' ? "primary" : "default"} 
-                                            size="small" 
-                                            variant="outlined"
-                                            sx={{ fontWeight: 'bold' }} 
-                                        />
-                                    </Box>
-                                    
-                                    <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 0.5 }}>
-                                        {(user.interests || []).slice(0, 3).map((interest) => (
-                                            <Chip 
-                                                key={interest} 
-                                                label={interest} 
-                                                size="small" 
-                                                variant="outlined" 
-                                                color="primary"
-                                            />
-                                        ))}
-                                        {(user.interests || []).length > 3 && (
-                                            <Chip label={`+${user.interests.length - 3}`} size="small" variant="outlined" color="primary" />
-                                        )}
-                                    </Box>
-
-                                    <Typography variant="body2" color="text.secondary" sx={{ 
-                                        display: '-webkit-box',
-                                        WebkitLineClamp: 3,
-                                        WebkitBoxOrient: 'vertical',
-                                        overflow: 'hidden',
-                                        mb: 2,
-                                        minHeight: '3em' // Ensure consistent height for bio area
-                                    }}>
-                                        {user.bio || "No bio provided."}
-                                    </Typography>
-                                </CardContent>
-                                <Box sx={{ p: 2, pt: 0 }}>
-                                    <Button 
-                                        fullWidth 
-                                        variant="outlined" 
-                                        color="primary" 
-                                        size="small"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleSponsorClick(user);
-                                        }}
-                                        sx={{
-                                            borderRadius: 2,
-                                            '&:hover': {
-                                                bgcolor: 'rgba(0, 255, 0, 0.1)'
-                                            }
-                                        }}
-                                    >
-                                        Sponsor Member
-                                    </Button>
-                                </Box>
-                            </Card>
-                        </Grid>
-                    ))
-                ) : (
-                    <Grid item xs={12}>
-                        <Box sx={{ textAlign: 'center', py: { xs: 4, md: 8 } }}>
-                            <Typography variant="h6" color="text.secondary">
-                                No members found matching your criteria.
-                            </Typography>
-                            <Button 
-                                variant="text" 
-                                onClick={() => {
-                                    setSearchTerm('');
-                                    setSelectedSkills([]);
-                                    setSelectedInterests([]);
-                                }}
-                                sx={{ mt: 2 }}
-                            >
-                                Clear Filters
-                            </Button>
-                        </Box>
-                    </Grid>
+            {/* Filters */}
+            <div style={{ border: '1px solid var(--bd-1)', background: 'var(--bg-card)', padding: '16px 20px', marginBottom: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <input
+                    className="input"
+                    placeholder="$ search members..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    style={{ flex: '1 1 200px', minWidth: 0 }}
+                />
+                <select
+                    className="input"
+                    style={{ flex: '1 1 200px', minWidth: 0 }}
+                    value=""
+                    onChange={e => {
+                        if (e.target.value && !selectedInterests.includes(e.target.value))
+                            setSelectedInterests(prev => [...prev, e.target.value]);
+                    }}
+                >
+                    <option value="">filter by interest...</option>
+                    {allInterests.map(i => <option key={i} value={i}>{i}</option>)}
+                </select>
+                {selectedInterests.length > 0 && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                        {selectedInterests.map(i => (
+                            <span key={i} style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--green)', border: '1px solid var(--green)', padding: '2px 8px', display: 'flex', gap: 6, alignItems: 'center' }}>
+                                {i}
+                                <button onClick={() => setSelectedInterests(prev => prev.filter(x => x !== i))} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 0, fontFamily: 'var(--mono)', fontSize: 12, lineHeight: 1 }}>×</button>
+                            </span>
+                        ))}
+                        <button
+                            className="btn btn--ghost btn--sm"
+                            style={{ fontSize: 9 }}
+                            onClick={() => { setSearchTerm(''); setSelectedInterests([]); }}
+                        >clear</button>
+                    </div>
                 )}
-            </Grid>
+            </div>
 
-            {/* Pagination */}
-            {!loading && totalPages > 1 && (
-                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, mb: 2 }}>
-                    <Pagination 
-                        count={totalPages} 
-                        page={page} 
-                        onChange={handlePageChange} 
-                        color="primary" 
-                        size="large"
-                        showFirstButton 
-                        showLastButton
-                    />
-                </Box>
+            {/* Grid */}
+            {filteredUsers.length === 0 ? (
+                <div style={{ color: 'var(--text-dim)', fontSize: 12, padding: '40px 0' }}>
+                    <span style={{ color: 'var(--green)' }}>&gt;</span> no members match your search.
+                </div>
+            ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12, marginBottom: 28 }}>
+                    {filteredUsers.map(u => (
+                        <div
+                            key={u.userID}
+                            className="card"
+                            style={{ padding: '24px 18px', textAlign: 'center', cursor: 'pointer', display: 'flex', flexDirection: 'column' }}
+                            onClick={() => router.push(`/dashboard/member/${u.userID}`)}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--green)'; e.currentTarget.style.boxShadow = '0 0 12px rgba(57,255,20,0.08)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--bd)'; e.currentTarget.style.boxShadow = 'none'; }}
+                        >
+                            {/* Avatar */}
+                            <div style={{ width: 64, height: 64, margin: '0 auto 14px', border: '1px solid var(--bd-1)', background: 'var(--bg-elev)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {u.image
+                                    ? <img src={u.image} alt={u.username} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'grayscale(20%)' }} />
+                                    : <span style={{ fontFamily: 'var(--display)', fontSize: 22, color: 'var(--green)', letterSpacing: '-0.04em' }}>
+                                        {((u.firstName || u.username || '?')[0] + (u.lastName || '')[0]).toUpperCase()}
+                                      </span>
+                                }
+                            </div>
+
+                            <div style={{ color: 'var(--green)', fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', marginBottom: 4 }}>
+                                {u.username || `${u.firstName} ${u.lastName}`}
+                            </div>
+
+                            {/* Role / type pills */}
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+                                {u.role === 'admin' && (
+                                    <span className="pill" style={{ fontSize: 8, color: 'var(--amber)', borderColor: 'var(--amber)' }}>{u.boardPosition || 'admin'}</span>
+                                )}
+                                <span className="pill" style={{ fontSize: 8 }}>
+                                    {u.membership?.type === 'co-op' ? 'co-op' : 'community'}
+                                </span>
+                            </div>
+
+                            {/* Interests */}
+                            {(u.interests || []).length > 0 && (
+                                <div style={{ display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+                                    {(u.interests || []).slice(0, 3).map(i => (
+                                        <span key={i} style={{ fontSize: 9, color: 'var(--text-dim)', border: '1px solid var(--bd)', padding: '1px 6px', fontFamily: 'var(--mono)' }}>{i}</span>
+                                    ))}
+                                    {(u.interests || []).length > 3 && (
+                                        <span style={{ fontSize: 9, color: 'var(--text-dim)', border: '1px solid var(--bd)', padding: '1px 6px', fontFamily: 'var(--mono)' }}>+{u.interests.length - 3}</span>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Bio */}
+                            <div style={{ color: 'var(--text-dim)', fontSize: 11, lineHeight: 1.6, flex: 1, marginBottom: 14, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
+                                {u.bio || 'No bio provided.'}
+                            </div>
+
+                            <button
+                                className="btn btn--ghost btn--sm"
+                                style={{ width: '100%', justifyContent: 'center', fontSize: 10 }}
+                                onClick={e => { e.stopPropagation(); handleSponsorClick(u); }}
+                            >
+                                $ ./sponsor
+                            </button>
+                        </div>
+                    ))}
+                </div>
             )}
 
-            {/* Sponsorship Dialog */}
-            <Dialog open={sponsorDialogOpen} onClose={() => setSponsorDialogOpen(false)}>
-                <DialogTitle>Sponsor {selectedRecipient?.firstName} {selectedRecipient?.lastName}</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body1" gutterBottom>
-                        Choose how you would like to sponsor this member.
-                    </Typography>
-                    <RadioGroup
-                        value={sponsorshipType}
-                        onChange={(e) => setSponsorshipType(e.target.value)}
-                    >
-                        <FormControlLabel 
-                            value="one-time" 
-                            control={<Radio />} 
-                            label="One-Time Gift ($45 for 30 Days)" 
-                        />
-                        <FormControlLabel 
-                            value="subscription" 
-                            control={<Radio />} 
-                            label="Monthly Sponsorship ($45/month, Recurring)" 
-                        />
-                    </RadioGroup>
-                    <Alert severity="info" sx={{ mt: 2 }}>
-                        {sponsorshipType === 'one-time' 
-                            ? "This will grant the member 30 days of access (Basic Membership). It is a single payment."
-                            : "You will be billed $45 monthly. The member will have access as long as your subscription is active."
-                        }
-                    </Alert>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setSponsorDialogOpen(false)}>Cancel</Button>
-                    <Button onClick={handleConfirmSponsorship} variant="contained" color="primary">
-                        Proceed to Checkout
-                    </Button>
-                </DialogActions>
-            </Dialog>
-        </Container>
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center', marginTop: 12 }}>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} disabled={page <= 1} onClick={() => handlePageChange(1)}>«</button>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} disabled={page <= 1} onClick={() => handlePageChange(page - 1)}>‹</button>
+                    <span style={{ color: 'var(--text-dim)', fontSize: 11, fontFamily: 'var(--mono)', padding: '0 8px' }}>{page} / {totalPages}</span>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} disabled={page >= totalPages} onClick={() => handlePageChange(page + 1)}>›</button>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} disabled={page >= totalPages} onClick={() => handlePageChange(totalPages)}>»</button>
+                </div>
+            )}
+
+            {/* Sponsor dialog */}
+            <Modal
+                open={sponsorDialogOpen}
+                onClose={() => setSponsorDialogOpen(false)}
+                title={`sponsor ${selectedRecipient?.firstName || selectedRecipient?.username || ''}`}
+                footer={<>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setSponsorDialogOpen(false)}>cancel</button>
+                    <button className="btn btn--filled btn--sm" style={{ fontSize: 10 }} onClick={handleConfirmSponsorship}>$ proceed to checkout</button>
+                </>}
+            >
+                <p style={{ color: 'var(--text-mid)', fontSize: 12, lineHeight: 1.7, marginBottom: 16 }}>
+                    Choose how you would like to sponsor this member.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+                    {[
+                        { val: 'one-time', label: 'one-time gift', desc: '$45 for 30 days of access' },
+                        { val: 'subscription', label: 'monthly sponsorship', desc: '$45/month, recurring' },
+                    ].map(opt => (
+                        <label key={opt.val} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer', border: `1px solid ${sponsorshipType === opt.val ? 'var(--green)' : 'var(--bd)'}`, padding: '12px 14px', background: sponsorshipType === opt.val ? 'rgba(57,255,20,0.04)' : 'transparent' }}>
+                            <input type="radio" name="sponsorType" value={opt.val} checked={sponsorshipType === opt.val} onChange={() => setSponsorshipType(opt.val)} style={{ marginTop: 2 }} />
+                            <div>
+                                <div style={{ color: sponsorshipType === opt.val ? 'var(--green)' : 'var(--text)', fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{opt.label}</div>
+                                <div style={{ color: 'var(--text-dim)', fontSize: 11 }}>{opt.desc}</div>
+                            </div>
+                        </label>
+                    ))}
+                </div>
+                <div style={{ border: '1px solid var(--bd-1)', background: 'var(--bg-1)', padding: '10px 14px', fontSize: 11, color: 'var(--text-mid)', lineHeight: 1.6 }}>
+                    {sponsorshipType === 'one-time'
+                        ? 'Single payment. Grants the member 30 days of access.'
+                        : 'You are billed $45/month. Access continues while your subscription is active.'}
+                </div>
+                {sponsorError && <div style={{ color: 'var(--red)', fontSize: 11, marginTop: 10 }}>[ERROR] {sponsorError}</div>}
+            </Modal>
+        </div>
     );
 }

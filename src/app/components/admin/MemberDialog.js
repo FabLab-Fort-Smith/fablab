@@ -1,1006 +1,545 @@
-"use client";
-import React, { useState, useEffect } from 'react';
-import {
-    Dialog, DialogTitle, DialogContent, DialogActions, Button,
-    Typography, Box, Stepper, Step, StepLabel, StepContent,
-    Checkbox, FormControlLabel, TextField, Select, MenuItem,
-    InputLabel, FormControl, Chip, Divider, List, ListItem, ListItemText, CircularProgress,
-    Table, TableBody, TableCell, TableContainer, TableHead, TableRow, IconButton, Paper,
-    useTheme, useMediaQuery, Tabs, Tab, Card, CardContent, Stack, AppBar, Toolbar, Tooltip, Grid
-} from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
-import CloseIcon from '@mui/icons-material/Close';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import HistoryIcon from '@mui/icons-material/History';
-import SettingsIcon from '@mui/icons-material/Settings';
-import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
-import StarIcon from '@mui/icons-material/Star';
-import LockOpenIcon from '@mui/icons-material/LockOpen';
+'use client';
+import { useState, useEffect } from 'react';
 import NudgeConfirmDialog from './NudgeConfirmDialog';
 import Constants from '@/lib/constants';
 
-function TabPanel(props) {
-    const { children, value, index, ...other } = props;
+const STEP_DOT = ({ done, active }) => (
+    <div style={{
+        width: 16, height: 16, borderRadius: '50%', flexShrink: 0, marginTop: 2,
+        background: done ? 'var(--green)' : 'var(--bg-elev)',
+        border: `2px solid ${done ? 'var(--green)' : active ? 'var(--green)' : 'var(--bd)'}`,
+        boxShadow: done || active ? '0 0 6px var(--green)' : 'none',
+    }} />
+);
+
+function Tabs({ tabs, active, onChange }) {
     return (
-        <div
-            role="tabpanel"
-            hidden={value !== index}
-            id={`simple-tabpanel-${index}`}
-            aria-labelledby={`simple-tab-${index}`}
-            {...other}
-        >
-            {value === index && (
-                <Box sx={{ p: { xs: 2, md: 3 } }}>
-                    {children}
-                </Box>
-            )}
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--bd)', overflowX: 'auto' }}>
+            {tabs.map((t, i) => (
+                <button key={i} onClick={() => onChange(i)} style={{
+                    background: 'none', border: 'none', cursor: 'pointer', padding: '10px 16px',
+                    fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.08em',
+                    color: active === i ? 'var(--green)' : 'var(--text-dim)',
+                    borderBottom: active === i ? '2px solid var(--green)' : '2px solid transparent',
+                    marginBottom: -1, whiteSpace: 'nowrap',
+                }}>{t}</button>
+            ))}
         </div>
     );
 }
 
 export default function MemberDialog({ open, onClose, user, onUpdate }) {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState(null);
     const [newLog, setNewLog] = useState({ hours: '', description: '', date: new Date().toISOString().split('T')[0] });
-    const [tabValue, setTabValue] = useState(0);
+    const [tab, setTab] = useState(0);
     const [badges, setBadges] = useState([]);
-
-    useEffect(() => {
-        if (open) {
-            fetch('/api/v1/badges')
-                .then(res => res.json())
-                .then(data => setBadges(data.badges || []))
-                .catch(err => console.error("Failed to fetch badges", err));
-        }
-    }, [open]);
-    
-    // Nudge State
     const [nudgeDialogOpen, setNudgeDialogOpen] = useState(false);
     const [nudgeDetails, setNudgeDetails] = useState(null);
     const [nudgeLoading, setNudgeLoading] = useState(false);
-
-    // Award Stake State
-    const [awardDialogOpen, setAwardDialogOpen] = useState(false);
+    const [awardOpen, setAwardOpen] = useState(false);
     const [awardAmount, setAwardAmount] = useState(10);
     const [awardReason, setAwardReason] = useState('');
     const [awardLoading, setAwardLoading] = useState(false);
+
+    useEffect(() => {
+        if (open) {
+            fetch('/api/v1/badges').then(r => r.json()).then(d => setBadges(d.badges || [])).catch(() => {});
+        }
+    }, [open]);
 
     useEffect(() => {
         if (user) {
             setFormData({
                 ...user,
                 badges: user.badges || [],
-                membership: {
-                    status: 'registered',
-                    volunteerLog: [],
-                    accessKey: { issued: false, type: 'limited' },
-                    ...user.membership
-                }
+                membership: { status: 'registered', volunteerLog: [], accessKey: { issued: false, type: 'limited' }, ...user.membership },
             });
         }
     }, [user]);
 
-    if (!user || !formData) return null;
+    if (!open || !user || !formData) return null;
 
-    const handleMembershipChange = (field, value) => {
-        setFormData(prev => ({
-            ...prev,
-            membership: {
-                ...prev.membership,
-                [field]: value
-            }
-        }));
-    };
+    const setMem = (field, value) => setFormData(p => ({ ...p, membership: { ...p.membership, [field]: value } }));
+    const setKey = (field, value) => setFormData(p => ({ ...p, membership: { ...p.membership, accessKey: { ...p.membership.accessKey, [field]: value } } }));
 
-    const handleAddLog = () => {
-        if (!newLog.hours || !newLog.description) return;
-        
-        const log = {
-            id: crypto.randomUUID(),
-            date: newLog.date,
-            hours: Number(newLog.hours),
-            description: newLog.description,
-            verifiedBy: 'Admin', // In a real app, use session user
-            status: 'approved'
-        };
-
-        setFormData(prev => ({
-            ...prev,
-            membership: {
-                ...prev.membership,
-                volunteerLog: [log, ...(prev.membership.volunteerLog || [])]
-            }
-        }));
-        setNewLog({ hours: '', description: '', date: new Date().toISOString().split('T')[0] });
-    };
-
-    const handleVerifyEmail = async () => {
-        setLoading(true);
-        try {
-            const res = await fetch(`/api/v1/users?userID=${user.userID}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'verified' })
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setFormData(prev => ({ ...prev, status: 'verified' }));
-                if (onUpdate) onUpdate(data.user);
-            } else {
-                console.error("Failed to verify email");
-            }
-        } catch (error) {
-            console.error("Error verifying email:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleResendVerification = async () => {
-        setLoading(true);
-        try {
-            const res = await fetch('/api/auth/resend-verification', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: user.email })
-            });
-            if (res.ok) {
-                alert("Verification email sent!");
-            } else {
-                const data = await res.json();
-                alert(data.error || "Failed to send email");
-            }
-        } catch (error) {
-            console.error("Error sending verification email:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handlePairKey = async () => {
-        if (!confirm(`Using Scanner "Access Scanner 01".\n\nIs the user ready to tap their card?`)) return;
-        
-        setLoading(true);
-        try {
-            const res = await fetch('/api/admin/pair-card', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: user.userID })
-            });
-            const data = await res.json();
-            
-            if (res.ok) {
-                alert(`Pairing Mode Started!\n\nUser has 60 seconds to tap their card.\n\nMessage: ${data.message || 'Waiting...'}`);
-            } else {
-                alert(`Error: ${data.error}`);
-            }
-        } catch (error) {
-            console.error("Pairing Error:", error);
-            alert("Network Error");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleDeleteLog = (logId) => {
-        setFormData(prev => ({
-            ...prev,
-            membership: {
-                ...prev.membership,
-                volunteerLog: prev.membership.volunteerLog.filter(l => l.id !== logId)
-            }
-        }));
-    };
-
-    const handleNudge = async () => {
-        try {
-            setNudgeLoading(true);
-            // 1. Preview the nudge first
-            const previewResponse = await fetch('/api/v1/users/nudge', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userID: user.userID, preview: true })
-            });
-
-            const previewData = await previewResponse.json();
-
-            if (!previewResponse.ok) {
-                alert(`Failed to preview nudge: ${previewData.error}`);
-                return;
-            }
-
-            setNudgeDetails(previewData.details);
-            setNudgeDialogOpen(true);
-        } catch (error) {
-            console.error("Error preparing nudge:", error);
-            alert("Error preparing nudge.");
-        } finally {
-            setNudgeLoading(false);
-        }
-    };
-
-    const handleConfirmNudge = async () => {
-        try {
-            setNudgeLoading(true);
-            const response = await fetch('/api/v1/users/nudge', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userID: user.userID, preview: false })
-            });
-            
-            if (response.ok) {
-                alert(`Nudge sent to ${user.firstName}!`);
-                setNudgeDialogOpen(false);
-            } else {
-                const data = await response.json();
-                alert(`Failed to send nudge: ${data.error}`);
-            }
-        } catch (error) {
-            console.error("Error sending nudge:", error);
-            alert("Error sending nudge.");
-        } finally {
-            setNudgeLoading(false);
-        }
-    };
-
-    const totalHours = (formData.membership.volunteerLog || []).reduce((acc, log) => acc + log.hours, 0);
+    const totalHours = (formData.membership.volunteerLog || []).reduce((acc, l) => acc + (l.hours || 0), 0);
     const currentMonthHours = (formData.membership.volunteerLog || [])
-        .filter(log => new Date(log.date).getMonth() === new Date().getMonth())
-        .reduce((acc, log) => acc + log.hours, 0);
-
-    const handleAccessKeyChange = (field, value) => {
-        setFormData(prev => ({
-            ...prev,
-            membership: {
-                ...prev.membership,
-                accessKey: {
-                    ...prev.membership.accessKey,
-                    [field]: value
-                }
-            }
-        }));
-    };
-
-    const handleSave = async () => {
-        setLoading(true);
-        try {
-            const response = await fetch(`/api/v1/users?userID=${user.userID}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    firstName: formData.firstName,
-                    lastName: formData.lastName,
-                    membership: formData.membership,
-                    role: formData.role,
-                    boardPosition: formData.boardPosition,
-                    squareID: formData.squareID,
-                    badges: formData.badges
-                })
-            });
-
-            if (!response.ok) throw new Error('Failed to update user');
-            
-            const updatedUser = await response.json();
-            onUpdate(updatedUser.user);
-            onClose();
-        } catch (error) {
-            console.error("Error updating user:", error);
-            alert("Failed to update user");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleAwardStake = async () => {
-        setAwardLoading(true);
-        try {
-            const response = await fetch('/api/v1/transactions/award', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    receiverId: user.userID,
-                    amount: parseInt(awardAmount),
-                    reason: awardReason
-                })
-            });
-
-            if (!response.ok) {
-                const data = await response.json();
-                throw new Error(data.error || 'Failed to award stake');
-            }
-
-            alert(`Successfully awarded ${awardAmount} stake!`);
-            setAwardDialogOpen(false);
-            setAwardAmount(10);
-            setAwardReason('');
-            // Ideally refresh user data here, but for now we just close
-        } catch (error) {
-            console.error("Error awarding stake:", error);
-            alert(error.message);
-        } finally {
-            setAwardLoading(false);
-        }
-    };
-
-    const handleSyncSubscription = async () => {
-        if (!formData.squareID) return;
-        setLoading(true);
-        try {
-            const response = await fetch('/api/v1/square/subscriptions/sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    squareID: formData.squareID,
-                    userID: user.userID 
-                })
-            });
-            
-            if (!response.ok) throw new Error('Failed to sync subscription');
-            
-            const data = await response.json();
-            if (data.user) {
-                setFormData(prev => ({
-                    ...prev,
-                    ...data.user,
-                    membership: {
-                        ...prev.membership,
-                        ...data.user.membership
-                    }
-                }));
-                alert("Subscription synced successfully!");
-            } else {
-                alert("No active subscription found.");
-            }
-        } catch (error) {
-            console.error("Error syncing subscription:", error);
-            alert("Failed to sync subscription");
-        } finally {
-            setLoading(false);
-        }
-    };
-
+        .filter(l => new Date(l.date).getMonth() === new Date().getMonth())
+        .reduce((acc, l) => acc + (l.hours || 0), 0);
 
     const activeStep = (() => {
         const m = formData.membership;
         if (!m.applicationDate) return 1;
         if (!m.contacted) return 2;
         if (!m.onboardingComplete) return 3;
-        
-        // Check subscription status (ACTIVE from Square or manually set status or waived or valid sponsorship)
-        const isSponsorshipValid = m.sponsorshipExpiresAt && new Date(m.sponsorshipExpiresAt) > new Date();
-        const isSubscribed = m.subscriptionStatus === 'ACTIVE' || m.isWaived || isSponsorshipValid;
-        if (!isSubscribed && m.status !== 'active' && m.status !== 'probation') return 4; // Subscription
-        
-        // Profile Completion (Public or Private)
-        if (!formData.profileCompleted && !formData.isPublic) return 5; // Public Profile
-        
-        if (totalHours < 4) return 6; // Volunteer Hours
-        if (!m.accessKey?.issued) return 7; // Key
-        if (m.status !== 'active') return 8; // Full Access
+        const isSponsorValid = m.sponsorshipExpiresAt && new Date(m.sponsorshipExpiresAt) > new Date();
+        const isSubscribed = m.subscriptionStatus === 'ACTIVE' || m.isWaived || isSponsorValid;
+        if (!isSubscribed && m.status !== 'active' && m.status !== 'probation') return 4;
+        if (!formData.profileCompleted && !formData.isPublic) return 5;
+        if (totalHours < 4) return 6;
+        if (!m.accessKey?.issued) return 7;
+        if (m.status !== 'active') return 8;
         return 9;
     })();
 
     const canAssignKey = (() => {
         const m = formData.membership;
-        const isSponsorshipValid = m.sponsorshipExpiresAt && new Date(m.sponsorshipExpiresAt) > new Date();
-        const isPaidMember = m.status === 'active' || m.status === 'probation' || m.subscriptionStatus === 'ACTIVE' || m.isWaived || isSponsorshipValid;
-        const hasHours = totalHours >= 4;
-        const notSuspended = m.status !== 'suspended';
-        return isPaidMember && hasHours && notSuspended;
+        const isSponsorValid = m.sponsorshipExpiresAt && new Date(m.sponsorshipExpiresAt) > new Date();
+        const isPaid = m.status === 'active' || m.status === 'probation' || m.subscriptionStatus === 'ACTIVE' || m.isWaived || isSponsorValid;
+        return isPaid && totalHours >= 4 && m.status !== 'suspended';
     })();
 
+    const handleAddLog = () => {
+        if (!newLog.hours || !newLog.description) return;
+        const log = { id: crypto.randomUUID(), date: newLog.date, hours: Number(newLog.hours), description: newLog.description, verifiedBy: 'Admin', status: 'approved' };
+        setFormData(p => ({ ...p, membership: { ...p.membership, volunteerLog: [log, ...(p.membership.volunteerLog || [])] } }));
+        setNewLog({ hours: '', description: '', date: new Date().toISOString().split('T')[0] });
+    };
+
+    const handleDeleteLog = (logId) => setFormData(p => ({ ...p, membership: { ...p.membership, volunteerLog: p.membership.volunteerLog.filter(l => l.id !== logId) } }));
+
+    const handleVerifyEmail = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/v1/users?userID=${user.userID}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'verified' }) });
+            if (res.ok) { const d = await res.json(); setFormData(p => ({ ...p, status: 'verified' })); if (onUpdate) onUpdate(d.user); }
+        } catch {}
+        finally { setLoading(false); }
+    };
+
+    const handleResendVerification = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch('/api/auth/resend-verification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email }) });
+            if (res.ok) alert('Verification email sent!');
+            else { const d = await res.json(); alert(d.error || 'Failed to send email'); }
+        } catch {}
+        finally { setLoading(false); }
+    };
+
+    const handlePairKey = async () => {
+        if (!confirm('Using Scanner "Access Scanner 01".\n\nIs the user ready to tap their card?')) return;
+        setLoading(true);
+        try {
+            const res = await fetch('/api/admin/pair-card', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user.userID }) });
+            const d = await res.json();
+            if (res.ok) alert(`Pairing Mode Started!\n\nUser has 60 seconds to tap their card.\n\nMessage: ${d.message || 'Waiting...'}`);
+            else alert(`Error: ${d.error}`);
+        } catch { alert('Network Error'); }
+        finally { setLoading(false); }
+    };
+
+    const handleNudge = async () => {
+        setNudgeLoading(true);
+        try {
+            const res = await fetch('/api/v1/users/nudge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userID: user.userID, preview: true }) });
+            const d = await res.json();
+            if (!res.ok) { alert(`Failed to preview nudge: ${d.error}`); return; }
+            setNudgeDetails(d.details);
+            setNudgeDialogOpen(true);
+        } catch { alert('Error preparing nudge.'); }
+        finally { setNudgeLoading(false); }
+    };
+
+    const handleConfirmNudge = async () => {
+        setNudgeLoading(true);
+        try {
+            const res = await fetch('/api/v1/users/nudge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userID: user.userID, preview: false }) });
+            if (res.ok) { alert(`Nudge sent to ${user.firstName}!`); setNudgeDialogOpen(false); }
+            else { const d = await res.json(); alert(`Failed: ${d.error}`); }
+        } catch { alert('Error sending nudge.'); }
+        finally { setNudgeLoading(false); }
+    };
+
+    const handleSave = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/v1/users?userID=${user.userID}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ firstName: formData.firstName, lastName: formData.lastName, membership: formData.membership, role: formData.role, boardPosition: formData.boardPosition, squareID: formData.squareID, badges: formData.badges }),
+            });
+            if (!res.ok) throw new Error('Failed');
+            const d = await res.json();
+            onUpdate(d.user);
+            onClose();
+        } catch { alert('Failed to update user'); }
+        finally { setLoading(false); }
+    };
+
+    const handleAwardStake = async () => {
+        setAwardLoading(true);
+        try {
+            const res = await fetch('/api/v1/transactions/award', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ receiverId: user.userID, amount: parseInt(awardAmount), reason: awardReason }),
+            });
+            if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
+            alert(`Successfully awarded ${awardAmount} stake!`);
+            setAwardOpen(false); setAwardAmount(10); setAwardReason('');
+        } catch (e) { alert(e.message); }
+        finally { setAwardLoading(false); }
+    };
+
+    const handleSyncSubscription = async () => {
+        if (!formData.squareID) return;
+        setLoading(true);
+        try {
+            const res = await fetch('/api/v1/square/subscriptions/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ squareID: formData.squareID, userID: user.userID }) });
+            if (!res.ok) throw new Error('Failed');
+            const d = await res.json();
+            if (d.user) { setFormData(p => ({ ...p, ...d.user, membership: { ...p.membership, ...d.user.membership } })); alert('Subscription synced!'); }
+            else alert('No active subscription found.');
+        } catch { alert('Failed to sync subscription'); }
+        finally { setLoading(false); }
+    };
+
+    const STEPS = [
+        'account created',
+        'application submitted',
+        'initial contact / reviewed',
+        'onboarding',
+        'membership subscription',
+        'complete public profile',
+        'first month volunteer (4h)',
+        'access key issued',
+        'full active status',
+    ];
+
+    const inputStyle = { width: '100%', boxSizing: 'border-box', fontFamily: 'var(--mono)', fontSize: 12 };
+    const labelStyle = { display: 'block', fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 6 };
+
     return (
-        <Dialog 
-            open={open} 
-            onClose={onClose} 
-            maxWidth="lg" 
-            fullWidth
-            fullScreen={isMobile}
-        >
-            {isMobile ? (
-                <AppBar sx={{ position: 'relative', borderBottom: '1px solid rgba(0, 0, 0, 0.12)', boxShadow: 'none' }} color="default">
-                    <Toolbar>
-                        <IconButton edge="start" color="inherit" onClick={onClose} aria-label="close">
-                            <CloseIcon />
-                        </IconButton>
-                        <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-                            {user.firstName} {user.lastName}
-                        </Typography>
-                        <Button autoFocus color="inherit" onClick={handleSave} disabled={loading}>
-                            {loading ? <CircularProgress size={24} color="inherit" /> : 'Save'}
-                        </Button>
-                        <Tooltip title="Award Stake">
-                            <IconButton onClick={() => setAwardDialogOpen(true)} color="inherit" sx={{ ml: 1 }}>
-                                <StarIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Send Reminder (Nudge)">
-                            <IconButton onClick={handleNudge} color="warning" sx={{ ml: 1 }}>
-                                <NotificationsActiveIcon />
-                            </IconButton>
-                        </Tooltip>
-                    </Toolbar>
-                </AppBar>
-            ) : (
-                <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    Manage Member: {user.firstName} {user.lastName}
-                    <Box>
-                        <Tooltip title="Award Stake">
-                            <IconButton onClick={() => setAwardDialogOpen(true)} color="primary" sx={{ mr: 1 }}>
-                                <StarIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Send Reminder (Nudge)">
-                            <IconButton onClick={handleNudge} color="warning" sx={{ mr: 1 }}>
-                                <NotificationsActiveIcon />
-                            </IconButton>
-                        </Tooltip>
-                    </Box>
-                </DialogTitle>
-            )}
+        <>
+            {/* Backdrop */}
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
+                <div className="card" style={{ width: '100%', maxWidth: 800, maxHeight: '95vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+                    {/* Header */}
+                    <div className="card-header" style={{ flexShrink: 0 }}>
+                        <div>
+                            <span style={{ color: 'var(--text)', fontSize: 13, fontWeight: 600, fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>
+                                manage: {user.firstName} {user.lastName}
+                            </span>
+                            <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>{user.email}</div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <button className="btn btn--ghost btn--sm" style={{ fontSize: 9, borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={() => setAwardOpen(true)}>★ award</button>
+                            <button className="btn btn--ghost btn--sm" style={{ fontSize: 9 }} onClick={handleNudge} disabled={nudgeLoading}>nudge</button>
+                            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+                        </div>
+                    </div>
 
-            <DialogContent sx={{ p: 0 }}>
-                <Box sx={{ p: { xs: 2, md: 3 }, pb: 0 }}>
-                    <Box sx={{ display: 'flex', gap: 1, mb: 3, mt: 1, flexWrap: 'wrap' }}>
-                        <Chip label={formData.role} color={formData.role === 'admin' ? 'secondary' : 'default'} size={isMobile ? "small" : "medium"} />
-                        <Chip label={formData.membership.status} color="primary" variant="outlined" size={isMobile ? "small" : "medium"} />
-                        <Chip label={`Total: ${totalHours}h`} variant="outlined" size={isMobile ? "small" : "medium"} />
-                        <Chip label={`Month: ${currentMonthHours}h`} color={currentMonthHours >= 4 ? "success" : "warning"} variant="outlined" size={isMobile ? "small" : "medium"} />
-                    </Box>
-                </Box>
-
-                <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                    <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)} variant={isMobile ? "fullWidth" : "standard"} sx={{ px: { xs: 0, md: 3 } }}>
-                        <Tab icon={<AssignmentIcon />} iconPosition="start" label={isMobile ? "Progress" : "Progress"} />
-                        <Tab icon={<HistoryIcon />} iconPosition="start" label={isMobile ? "Logs" : "Volunteer Logs"} />
-                        <Tab icon={<SettingsIcon />} iconPosition="start" label={isMobile ? "Admin" : "Admin Actions"} />
-                        <Tab icon={<EmojiEventsIcon />} iconPosition="start" label={isMobile ? "Badges" : "Badges"} />
-                    </Tabs>
-                </Box>
-
-                <TabPanel value={tabValue} index={0}>
-                    <Typography variant="h6" gutterBottom>Co-op Membership Progress</Typography>
-                    <Stepper activeStep={activeStep} orientation="vertical">
-                        <Step expanded>
-                            <StepLabel>Account Created</StepLabel>
-                            <StepContent>
-                                <Typography variant="body2" color="text.secondary">
-                                    Date: {new Date(formData.createdAt).toLocaleDateString()}
-                                </Typography>
-                            </StepContent>
-                        </Step>
-
-                        <Step expanded>
-                            <StepLabel>Application Submitted</StepLabel>
-                            <StepContent>
-                                <FormControlLabel
-                                    control={
-                                        <Checkbox
-                                            checked={!!formData.membership.applicationDate}
-                                            onChange={(e) => handleMembershipChange('applicationDate', e.target.checked ? new Date().toISOString() : null)}
-                                        />
-                                    }
-                                    label={formData.membership.applicationDate 
-                                        ? `Submitted on ${new Date(formData.membership.applicationDate).toLocaleDateString()}`
-                                        : "Mark Application as Submitted"}
-                                />
-                                {!formData.membership.applicationDate && (
-                                    <Typography variant="caption" color="text.secondary" display="block">
-                                        Check this to manually force the user into the "Onboarding Reviews" queue.
-                                    </Typography>
-                                )}
-                            </StepContent>
-                        </Step>
-
-                        <Step expanded>
-                            <StepLabel>Initial Contact / Reviewed</StepLabel>
-                            <StepContent>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1, flexWrap: 'wrap' }}>
-                                    <FormControlLabel
-                                        control={
-                                            <Checkbox
-                                                checked={formData.membership.contacted}
-                                                onChange={(e) => handleMembershipChange('contacted', e.target.checked)}
-                                            />
-                                        }
-                                        label="Member has been contacted"
-                                    />
-                                    {formData.membership.reviewStatus === 'reviewed' && (
-                                        <Chip label="Reviewed" color="success" size="small" />
-                                    )}
-                                </Box>
-                                {!formData.membership.contacted && (
-                                    <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                                        <Button 
-                                            variant="outlined" 
-                                            size="small" 
-                                            href={`mailto:${formData.email}`}
-                                            target="_blank"
-                                        >
-                                            Email
-                                        </Button>
-                                        {formData.phoneNumber && (
-                                            <Button 
-                                                variant="outlined" 
-                                                size="small" 
-                                                href={`tel:${formData.phoneNumber}`}
-                                            >
-                                                Call
-                                            </Button>
-                                        )}
-                                        {formData.discordHandle && (
-                                            <Button 
-                                                variant="outlined" 
-                                                size="small"
-                                                onClick={() => {
-                                                    navigator.clipboard.writeText(formData.discordHandle);
-                                                    alert(`Copied Discord Handle: ${formData.discordHandle}`);
-                                                }}
-                                            >
-                                                Copy Discord
-                                            </Button>
-                                        )}
-                                    </Box>
-                                )}
-                            </StepContent>
-                        </Step>
-
-                        <Step expanded>
-                            <StepLabel>Onboarding</StepLabel>
-                            <StepContent>
-                                <FormControlLabel
-                                    control={
-                                        <Checkbox
-                                            checked={formData.membership.onboardingComplete}
-                                            onChange={(e) => handleMembershipChange('onboardingComplete', e.target.checked)}
-                                        />
-                                    }
-                                    label="Paperwork & Orientation Complete"
-                                />
-                            </StepContent>
-                        </Step>
-
-                        <Step expanded>
-                            <StepLabel>Membership Subscription</StepLabel>
-                            <StepContent>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                    <Typography variant="body2" color={
-                                        ['active', 'probation'].includes(formData.membership.status) || formData.membership.subscriptionStatus === 'ACTIVE' || formData.membership.isWaived || (formData.membership.sponsorshipExpiresAt && new Date(formData.membership.sponsorshipExpiresAt) > new Date())
-                                        ? "success.main" : "error.main"
-                                    }>
-                                        {['active', 'probation'].includes(formData.membership.status) || formData.membership.subscriptionStatus === 'ACTIVE'
-                                            ? "✅ Subscription Active" 
-                                            : formData.membership.isWaived 
-                                                ? "✅ Dues Waived (Admin)"
-                                                : (formData.membership.sponsorshipExpiresAt && new Date(formData.membership.sponsorshipExpiresAt) > new Date())
-                                                    ? `✅ Sponsored until ${new Date(formData.membership.sponsorshipExpiresAt).toLocaleDateString()}`
-                                                    : "❌ Pending Payment / Subscription"}
-                                    </Typography>
-                                    <FormControlLabel
-                                        control={
-                                            <Checkbox
-                                                checked={formData.membership.isWaived || false}
-                                                onChange={(e) => handleMembershipChange('isWaived', e.target.checked)}
-                                            />
-                                        }
-                                        label="Waive Membership Dues (Permanent)"
-                                    />
-                                </Box>
-                            </StepContent>
-                        </Step>
-
-                        <Step expanded>
-                            <StepLabel>Complete Public Profile</StepLabel>
-                            <StepContent>
-                                <Typography variant="body2" color={formData.profileCompleted || formData.isPublic ? "success.main" : "warning.main"}>
-                                    {formData.profileCompleted || formData.isPublic
-                                        ? `✅ Profile Setup Complete (${formData.isPublic ? "Public" : "Private"})` 
-                                        : "⚠️ Profile Setup Incomplete"}
-                                </Typography>
-                                <FormControlLabel
-                                    control={
-                                        <Checkbox
-                                            checked={formData.isPublic || false}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, isPublic: e.target.checked }))}
-                                        />
-                                    }
-                                    label="Public Profile"
-                                />
-                            </StepContent>
-                        </Step>
-
-                        <Step expanded>
-                            <StepLabel>First Month Volunteer Requirement</StepLabel>
-                            <StepContent>
-                                <Typography variant="body2" gutterBottom>
-                                    {totalHours >= 4 ? "✅ Requirement Met" : `⚠️ ${4 - totalHours} hours remaining for probation`}
-                                </Typography>
-                            </StepContent>
-                        </Step>
-
-                        <Step expanded>
-                            <StepLabel>Access Key Issued</StepLabel>
-                            <StepContent>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                                        <FormControlLabel
-                                            control={
-                                                <Checkbox
-                                                    checked={formData.membership.accessKey?.issued}
-                                                    onChange={(e) => handleAccessKeyChange('issued', e.target.checked)}
-                                                    disabled={!canAssignKey && !formData.membership.accessKey?.issued}
-                                                />
-                                            }
-                                            label="Key Issued"
-                                        />
-                                        <Button 
-                                            variant="outlined" 
-                                            size="small" 
-                                            onClick={() => {
-                                                const newKey = Math.floor(100000 + Math.random() * 900000).toString();
-                                                handleAccessKeyChange('code', newKey);
-                                                handleAccessKeyChange('issued', true);
-                                            }}
-                                            disabled={!canAssignKey}
-                                        >
-                                            Generate Key
-                                        </Button>
-                                    </Box>
-                                    
-                                    {formData.membership.accessKey?.code && (
-                                        <TextField
-                                            label="Access Key Code"
-                                            value={formData.membership.accessKey.code}
-                                            size="small"
-                                            fullWidth
-                                            InputProps={{
-                                                readOnly: true,
-                                                endAdornment: (
-                                                    <IconButton size="small" onClick={() => navigator.clipboard.writeText(formData.membership.accessKey.code)}>
-                                                        <AddIcon sx={{ transform: 'rotate(45deg)' }} />
-                                                    </IconButton>
-                                                )
-                                            }}
-                                        />
-                                    )}
-
-                                    {!canAssignKey && !formData.membership.accessKey?.issued && (
-                                        <Typography variant="caption" color="error">
-                                            Cannot assign key: User must be active/probation, have 4+ volunteer hours, and not be suspended.
-                                        </Typography>
-                                    )}
-                                    {formData.membership.accessKey?.issued && (
-                                        <FormControl size="small" fullWidth>
-                                            <InputLabel>Key Type</InputLabel>
-                                            <Select
-                                                value={formData.membership.accessKey?.type || 'limited'}
-                                                label="Key Type"
-                                                onChange={(e) => handleAccessKeyChange('type', e.target.value)}
-                                            >
-                                                <MenuItem value="limited">Limited (8am - 10pm)</MenuItem>
-                                                <MenuItem value="24h">24 Hour Access</MenuItem>
-                                            </Select>
-                                        </FormControl>
-                                    )}
-                                </Box>
-                            </StepContent>
-                        </Step>
-                    </Stepper>
-                </TabPanel>
-
-                <TabPanel value={tabValue} index={1}>
-                    <Typography variant="h6" gutterBottom>Volunteer Logs</Typography>
-                    <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, mb: 3, alignItems: { xs: 'stretch', sm: 'flex-end' } }}>
-                        <TextField
-                            label="Date"
-                            type="date"
-                            size="small"
-                            value={newLog.date}
-                            onChange={(e) => setNewLog({ ...newLog, date: e.target.value })}
-                            InputLabelProps={{ shrink: true }}
-                            fullWidth={isMobile}
-                        />
-                        <TextField
-                            label="Hours"
-                            type="number"
-                            size="small"
-                            sx={{ width: { xs: '100%', sm: 80 } }}
-                            value={newLog.hours}
-                            onChange={(e) => setNewLog({ ...newLog, hours: e.target.value })}
-                        />
-                        <TextField
-                            label="Description"
-                            size="small"
-                            fullWidth
-                            value={newLog.description}
-                            onChange={(e) => setNewLog({ ...newLog, description: e.target.value })}
-                        />
-                        <Button 
-                            variant="contained" 
-                            onClick={handleAddLog}
-                            startIcon={<AddIcon />}
-                            fullWidth={isMobile}
-                        >
-                            Add
-                        </Button>
-                    </Box>
-
-                    {isMobile ? (
-                        <Stack spacing={2}>
-                            {(formData.membership.volunteerLog || []).map((log) => (
-                                <Card key={log.id} variant="outlined">
-                                    <CardContent sx={{ pb: 1 }}>
-                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <Box>
-                                                <Typography variant="subtitle2" fontWeight="bold">
-                                                    {new Date(log.date).toLocaleDateString()}
-                                                </Typography>
-                                                <Typography variant="body2" color="text.secondary">
-                                                    {log.hours} Hours
-                                                </Typography>
-                                            </Box>
-                                            <IconButton size="small" color="error" onClick={() => handleDeleteLog(log.id)}>
-                                                <DeleteIcon />
-                                            </IconButton>
-                                        </Box>
-                                        <Typography variant="body2" sx={{ mt: 1 }}>
-                                            {log.description}
-                                        </Typography>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                            {(!formData.membership.volunteerLog || formData.membership.volunteerLog.length === 0) && (
-                                <Typography variant="body2" color="text.secondary" align="center">No logs found</Typography>
-                            )}
-                        </Stack>
-                    ) : (
-                        <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300 }}>
-                            <Table size="small" stickyHeader>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell>Date</TableCell>
-                                        <TableCell>Hours</TableCell>
-                                        <TableCell>Description</TableCell>
-                                        <TableCell align="right">Action</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {(formData.membership.volunteerLog || []).map((log) => (
-                                        <TableRow key={log.id}>
-                                            <TableCell>{new Date(log.date).toLocaleDateString()}</TableCell>
-                                            <TableCell>{log.hours}</TableCell>
-                                            <TableCell>{log.description}</TableCell>
-                                            <TableCell align="right">
-                                                <IconButton size="small" color="error" onClick={() => handleDeleteLog(log.id)}>
-                                                    <DeleteIcon fontSize="small" />
-                                                </IconButton>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                    {(!formData.membership.volunteerLog || formData.membership.volunteerLog.length === 0) && (
-                                        <TableRow>
-                                            <TableCell colSpan={4} align="center">No logs found</TableCell>
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    )}
-                </TabPanel>
-
-                <TabPanel value={tabValue} index={2}>
-                    <Typography variant="h6" gutterBottom>Admin Actions</Typography>
-                    <Box sx={{ display: 'flex', gap: 2, flexDirection: 'column' }}>
-                        <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-                            <FormControl fullWidth>
-                                <InputLabel>Role</InputLabel>
-                                <Select
-                                    value={formData.role}
-                                    label="Role"
-                                    onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
-                                >
-                                    <MenuItem value="user">User</MenuItem>
-                                    <MenuItem value="admin">Admin</MenuItem>
-                                </Select>
-                            </FormControl>
-
-                            <FormControl fullWidth>
-                                <InputLabel>Membership Status</InputLabel>
-                                <Select
-                                    value={formData.membership.status}
-                                    label="Membership Status"
-                                    onChange={(e) => handleMembershipChange('status', e.target.value)}
-                                >
-                                    <MenuItem value="registered">Registered</MenuItem>
-                                    <MenuItem value="applicant">Applicant</MenuItem>
-                                    <MenuItem value="onboarding">Onboarding</MenuItem>
-                                    <MenuItem value="probation">Probation</MenuItem>
-                                    <MenuItem value="active">Active Member</MenuItem>
-                                    <MenuItem value="suspended">Suspended</MenuItem>
-                                </Select>
-                            </FormControl>
-
-                            <FormControl fullWidth>
-                                <InputLabel>Membership Type</InputLabel>
-                                <Select
-                                    value={formData.membership.type || 'community'}
-                                    label="Membership Type"
-                                    onChange={(e) => handleMembershipChange('type', e.target.value)}
-                                >
-                                    <MenuItem value="community">Community</MenuItem>
-                                    <MenuItem value="co-op">Co-op</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Box>
-
-                        <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                            <Typography variant="subtitle2" gutterBottom>Email Verification</Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                                <Chip 
-                                    label={formData.status === 'verified' ? "Verified" : "Unverified"} 
-                                    color={formData.status === 'verified' ? "success" : "warning"} 
-                                    variant="outlined"
-                                />
-                                {formData.status !== 'verified' && (
-                                    <>
-                                        <Button variant="outlined" size="small" onClick={handleVerifyEmail} disabled={loading}>
-                                            Manually Verify
-                                        </Button>
-                                        <Button variant="outlined" size="small" onClick={handleResendVerification} disabled={loading}>
-                                            Resend Email
-                                        </Button>
-                                    </>
-                                )}
-                            </Box>
-                        </Box>
-
-                        <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                            <Typography variant="subtitle2" gutterBottom>Physical Access</Typography>
-                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                                <Chip 
-                                    icon={<LockOpenIcon />}
-                                    label={formData.membership?.accessKey?.issued ? "Key Issued" : "No Key"} 
-                                    color={formData.membership?.accessKey?.issued ? "success" : "default"} 
-                                    variant="outlined"
-                                />
-                                <Button 
-                                    variant="contained" 
-                                    color="info"
-                                    size="small" 
-                                    onClick={handlePairKey} 
-                                    disabled={loading}
-                                >
-                                    Pair New Key (NFC)
-                                </Button>
-                            </Box>
-                        </Box>
-
-                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                            <TextField
-                                fullWidth
-                                label="Square Customer ID"
-                                value={formData.squareID || ''}
-                                onChange={(e) => setFormData(prev => ({ ...prev, squareID: e.target.value }))}
-                                helperText="Enter Square Customer ID to sync subscription"
-                            />
-                            <Button 
-                                variant="outlined" 
-                                onClick={handleSyncSubscription}
-                                disabled={loading || !formData.squareID}
-                                sx={{ mt: 1, height: 40, whiteSpace: 'nowrap' }}
-                            >
-                                Sync
-                            </Button>
-                        </Box>
-
-                        {formData.role === 'admin' && (
-                            <TextField
-                                fullWidth
-                                label="Board Position / Title"
-                                value={formData.boardPosition || ''}
-                                onChange={(e) => setFormData(prev => ({ ...prev, boardPosition: e.target.value }))}
-                                helperText="e.g. President, Treasurer, Shop Manager"
-                            />
-                        )}
-                    </Box>
-                </TabPanel>
-
-                <TabPanel value={tabValue} index={3}>
-                    <Typography variant="h6" gutterBottom>Manage Badges</Typography>
-                    <Grid container spacing={2}>
-                        {badges.map((badge) => (
-                            <Grid item xs={12} sm={6} key={badge.id}>
-                                <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-                                    <Checkbox 
-                                        checked={(formData.badges || []).includes(badge.id)}
-                                        onChange={(e) => {
-                                            const newBadges = e.target.checked 
-                                                ? [...(formData.badges || []), badge.id]
-                                                : (formData.badges || []).filter(b => b !== badge.id);
-                                            setFormData(prev => ({ ...prev, badges: newBadges }));
-                                        }}
-                                    />
-                                    <Box>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            {badge.imageUrl ? (
-                                                <img src={badge.imageUrl} alt={badge.name} style={{ width: 32, height: 32, borderRadius: '50%' }} />
-                                            ) : (
-                                                <Typography variant="h5">{badge.icon}</Typography>
-                                            )}
-                                            <Typography variant="subtitle1" fontWeight="bold">{badge.name}</Typography>
-                                        </Box>
-                                        <Typography variant="body2" color="text.secondary">{badge.description}</Typography>
-                                    </Box>
-                                </Paper>
-                            </Grid>
+                    {/* Status pills */}
+                    <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--bd)', display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
+                        {[
+                            { label: formData.role, color: formData.role === 'admin' ? 'var(--magenta)' : 'var(--text-dim)' },
+                            { label: formData.membership.status, color: 'var(--cyan)' },
+                            { label: `total: ${totalHours}h`, color: 'var(--text-dim)' },
+                            { label: `month: ${currentMonthHours}h`, color: currentMonthHours >= 4 ? 'var(--green)' : 'var(--amber)' },
+                        ].map(({ label, color }) => (
+                            <span key={label} className="pill" style={{ fontSize: 10, color, border: `1px solid ${color}` }}>{label}</span>
                         ))}
-                    </Grid>
-                </TabPanel>
-            </DialogContent>
-            
-            {!isMobile && (
-                <DialogActions>
-                    <Button onClick={onClose}>Cancel</Button>
-                    <Button 
-                        onClick={handleSave} 
-                        variant="contained" 
-                        disabled={loading}
-                        startIcon={loading ? <CircularProgress size={20} /> : null}
-                    >
-                        Save Changes
-                    </Button>
-                </DialogActions>
-            )}
+                    </div>
 
-            <NudgeConfirmDialog 
-                open={nudgeDialogOpen}
-                onClose={() => setNudgeDialogOpen(false)}
-                onConfirm={handleConfirmNudge}
-                nudgeDetails={nudgeDetails}
-                loading={nudgeLoading}
-            />
+                    {/* Tabs */}
+                    <div style={{ flexShrink: 0 }}>
+                        <Tabs tabs={['progress', 'volunteer logs', 'admin actions', 'badges']} active={tab} onChange={setTab} />
+                    </div>
+
+                    {/* Tab content (scrollable) */}
+                    <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
+
+                        {/* Tab 0: Progress / Stepper */}
+                        {tab === 0 && (
+                            <div>
+                                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 16 }}>co-op membership progress</div>
+                                {STEPS.map((stepLabel, i) => {
+                                    const stepNum = i + 1;
+                                    const done = activeStep > stepNum;
+                                    const active = activeStep === stepNum;
+                                    const m = formData.membership;
+
+                                    const renderContent = () => {
+                                        if (stepNum === 1) return <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>date: {new Date(formData.createdAt).toLocaleDateString()}</div>;
+                                        if (stepNum === 2) return (
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-mid)', cursor: 'pointer' }}>
+                                                <input type="checkbox" checked={!!m.applicationDate} onChange={e => setMem('applicationDate', e.target.checked ? new Date().toISOString() : null)} />
+                                                {m.applicationDate ? `submitted on ${new Date(m.applicationDate).toLocaleDateString()}` : 'mark application as submitted'}
+                                            </label>
+                                        );
+                                        if (stepNum === 3) return (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-mid)', cursor: 'pointer' }}>
+                                                    <input type="checkbox" checked={!!m.contacted} onChange={e => setMem('contacted', e.target.checked)} />
+                                                    member has been contacted
+                                                    {m.reviewStatus === 'reviewed' && <span className="pill" style={{ fontSize: 9, color: 'var(--green)', border: '1px solid var(--green)' }}>reviewed</span>}
+                                                </label>
+                                                {!m.contacted && (
+                                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                                        <a href={`mailto:${formData.email}`} className="btn btn--ghost btn--sm" style={{ fontSize: 9 }}>email</a>
+                                                        {formData.phoneNumber && <a href={`tel:${formData.phoneNumber}`} className="btn btn--ghost btn--sm" style={{ fontSize: 9 }}>call</a>}
+                                                        {formData.discordHandle && <button className="btn btn--ghost btn--sm" style={{ fontSize: 9 }} onClick={() => { navigator.clipboard.writeText(formData.discordHandle); alert(`Copied: ${formData.discordHandle}`); }}>copy discord</button>}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                        if (stepNum === 4) return (
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-mid)', cursor: 'pointer' }}>
+                                                <input type="checkbox" checked={!!m.onboardingComplete} onChange={e => setMem('onboardingComplete', e.target.checked)} />
+                                                paperwork & orientation complete
+                                            </label>
+                                        );
+                                        if (stepNum === 5) {
+                                            const isSponsorValid = m.sponsorshipExpiresAt && new Date(m.sponsorshipExpiresAt) > new Date();
+                                            const subActive = ['active', 'probation'].includes(m.status) || m.subscriptionStatus === 'ACTIVE' || m.isWaived || isSponsorValid;
+                                            return (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                                    <div style={{ fontSize: 11, color: subActive ? 'var(--green)' : 'var(--red)' }}>
+                                                        {subActive ? '✓ subscription active' : '✕ pending payment / subscription'}
+                                                    </div>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-mid)', cursor: 'pointer' }}>
+                                                        <input type="checkbox" checked={!!m.isWaived} onChange={e => setMem('isWaived', e.target.checked)} />
+                                                        waive membership dues (permanent)
+                                                    </label>
+                                                </div>
+                                            );
+                                        }
+                                        if (stepNum === 6) return (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                                <div style={{ fontSize: 11, color: formData.profileCompleted || formData.isPublic ? 'var(--green)' : 'var(--amber)' }}>
+                                                    {formData.profileCompleted || formData.isPublic ? `✓ profile setup (${formData.isPublic ? 'public' : 'private'})` : '⚠ profile setup incomplete'}
+                                                </div>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-mid)', cursor: 'pointer' }}>
+                                                    <input type="checkbox" checked={!!formData.isPublic} onChange={e => setFormData(p => ({ ...p, isPublic: e.target.checked }))} />
+                                                    public profile
+                                                </label>
+                                            </div>
+                                        );
+                                        if (stepNum === 7) return (
+                                            <div style={{ fontSize: 11, color: totalHours >= 4 ? 'var(--green)' : 'var(--amber)' }}>
+                                                {totalHours >= 4 ? '✓ requirement met' : `⚠ ${4 - totalHours} hours remaining`}
+                                            </div>
+                                        );
+                                        if (stepNum === 8) return (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-mid)', cursor: 'pointer' }}>
+                                                        <input type="checkbox" checked={!!m.accessKey?.issued} onChange={e => setKey('issued', e.target.checked)} disabled={!canAssignKey && !m.accessKey?.issued} />
+                                                        key issued
+                                                    </label>
+                                                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 9 }} disabled={!canAssignKey} onClick={() => { const k = Math.floor(100000 + Math.random() * 900000).toString(); setKey('code', k); setKey('issued', true); }}>
+                                                        generate key
+                                                    </button>
+                                                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 9, borderColor: 'var(--cyan)', color: 'var(--cyan)' }} onClick={handlePairKey} disabled={loading}>
+                                                        pair NFC
+                                                    </button>
+                                                </div>
+                                                {m.accessKey?.code && (
+                                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                                        <input className="input" value={m.accessKey.code} readOnly style={{ flex: 1, fontSize: 12 }} />
+                                                        <button className="btn btn--ghost btn--sm" style={{ fontSize: 9 }} onClick={() => navigator.clipboard.writeText(m.accessKey.code)}>copy</button>
+                                                    </div>
+                                                )}
+                                                {m.accessKey?.issued && (
+                                                    <select className="input" value={m.accessKey?.type || 'limited'} onChange={e => setKey('type', e.target.value)} style={{ fontSize: 12 }}>
+                                                        <option value="limited">limited (8am - 10pm)</option>
+                                                        <option value="24h">24 hour access</option>
+                                                    </select>
+                                                )}
+                                                {!canAssignKey && !m.accessKey?.issued && (
+                                                    <div style={{ fontSize: 10, color: 'var(--red)' }}>cannot assign key: user must be active/probation, have 4+ hours, and not be suspended.</div>
+                                                )}
+                                            </div>
+                                        );
+                                        return null;
+                                    };
+
+                                    return (
+                                        <div key={stepNum} style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                                <STEP_DOT done={done} active={active} />
+                                                {stepNum < STEPS.length && <div style={{ width: 1, flex: 1, background: done ? 'var(--green)' : 'var(--bd)', marginTop: 4, minHeight: 20 }} />}
+                                            </div>
+                                            <div style={{ flex: 1, paddingBottom: 12 }}>
+                                                <div style={{ fontSize: 11, color: done ? 'var(--green)' : active ? 'var(--text-bright)' : 'var(--text-dim)', fontWeight: active ? 600 : 400, marginBottom: 6, fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>
+                                                    {stepLabel}
+                                                </div>
+                                                {(active || done) && renderContent()}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* Tab 1: Volunteer Logs */}
+                        {tab === 1 && (
+                            <div>
+                                <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                                    <div>
+                                        <label style={labelStyle}>DATE</label>
+                                        <input className="input" type="date" value={newLog.date} onChange={e => setNewLog(p => ({ ...p, date: e.target.value }))} style={{ fontSize: 12 }} />
+                                    </div>
+                                    <div>
+                                        <label style={labelStyle}>HOURS</label>
+                                        <input className="input" type="number" value={newLog.hours} onChange={e => setNewLog(p => ({ ...p, hours: e.target.value }))} style={{ width: 70, fontSize: 12 }} />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={labelStyle}>DESCRIPTION</label>
+                                        <input className="input" value={newLog.description} onChange={e => setNewLog(p => ({ ...p, description: e.target.value }))} placeholder="what did they do?" style={inputStyle} />
+                                    </div>
+                                    <button className="btn btn--filled btn--sm" style={{ fontSize: 10 }} onClick={handleAddLog}>$ add</button>
+                                </div>
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table className="term-table" style={{ width: '100%' }}>
+                                        <thead><tr><th>DATE</th><th>HOURS</th><th>DESCRIPTION</th><th>STATUS</th><th></th></tr></thead>
+                                        <tbody>
+                                            {(formData.membership.volunteerLog || []).length === 0 ? (
+                                                <tr><td colSpan={5} style={{ color: 'var(--text-dim)', textAlign: 'center' }}>no logs</td></tr>
+                                            ) : (formData.membership.volunteerLog || []).map(log => (
+                                                <tr key={log.id}>
+                                                    <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{new Date(log.date).toLocaleDateString()}</td>
+                                                    <td style={{ color: 'var(--amber)' }}>{log.hours}</td>
+                                                    <td style={{ color: 'var(--text-mid)' }}>{log.description}</td>
+                                                    <td><span style={{ fontSize: 9, color: log.status === 'approved' ? 'var(--green)' : log.status === 'pending' ? 'var(--amber)' : 'var(--red)', fontFamily: 'var(--mono)' }}>{log.status || 'approved'}</span></td>
+                                                    <td><button onClick={() => handleDeleteLog(log.id)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 12 }}>✕</button></td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Tab 2: Admin Actions */}
+                        {tab === 2 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
+                                    <div>
+                                        <label style={labelStyle}>ROLE</label>
+                                        <select className="input" value={formData.role} onChange={e => setFormData(p => ({ ...p, role: e.target.value }))} style={inputStyle}>
+                                            <option value="user">user</option>
+                                            <option value="admin">admin</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={labelStyle}>MEMBERSHIP_STATUS</label>
+                                        <select className="input" value={formData.membership.status} onChange={e => setMem('status', e.target.value)} style={inputStyle}>
+                                            <option value="registered">registered</option>
+                                            <option value="applicant">applicant</option>
+                                            <option value="onboarding">onboarding</option>
+                                            <option value="probation">probation</option>
+                                            <option value="active">active member</option>
+                                            <option value="suspended">suspended</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={labelStyle}>MEMBERSHIP_TYPE</label>
+                                        <select className="input" value={formData.membership.type || 'community'} onChange={e => setMem('type', e.target.value)} style={inputStyle}>
+                                            <option value="community">community</option>
+                                            <option value="co-op">co-op</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div style={{ border: '1px solid var(--bd)', padding: '14px 16px' }}>
+                                    <div style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 10 }}>EMAIL_VERIFICATION</div>
+                                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                                        <span className="pill" style={{ fontSize: 10, color: formData.status === 'verified' ? 'var(--green)' : 'var(--amber)', border: `1px solid ${formData.status === 'verified' ? 'var(--green)' : 'var(--amber)'}` }}>
+                                            {formData.status === 'verified' ? 'verified' : 'unverified'}
+                                        </span>
+                                        {formData.status !== 'verified' && (
+                                            <>
+                                                <button className="btn btn--ghost btn--sm" style={{ fontSize: 9 }} onClick={handleVerifyEmail} disabled={loading}>manually verify</button>
+                                                <button className="btn btn--ghost btn--sm" style={{ fontSize: 9 }} onClick={handleResendVerification} disabled={loading}>resend email</button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={labelStyle}>SQUARE_CUSTOMER_ID</label>
+                                        <input className="input" value={formData.squareID || ''} onChange={e => setFormData(p => ({ ...p, squareID: e.target.value }))} placeholder="square customer id" style={inputStyle} />
+                                    </div>
+                                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={handleSyncSubscription} disabled={loading || !formData.squareID}>$ sync</button>
+                                </div>
+
+                                {formData.role === 'admin' && (
+                                    <div>
+                                        <label style={labelStyle}>BOARD_POSITION</label>
+                                        <input className="input" value={formData.boardPosition || ''} onChange={e => setFormData(p => ({ ...p, boardPosition: e.target.value }))} placeholder="e.g. President, Treasurer" style={inputStyle} />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Tab 3: Badges */}
+                        {tab === 3 && (
+                            <div>
+                                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 14 }}>select badges to assign to this member</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
+                                    {badges.map(badge => {
+                                        const hasIt = (formData.badges || []).includes(badge.id);
+                                        return (
+                                            <label key={badge.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: `1px solid ${hasIt ? 'var(--green)' : 'var(--bd)'}`, cursor: 'pointer', background: hasIt ? 'rgba(57,255,20,0.04)' : 'transparent' }}>
+                                                <input type="checkbox" checked={hasIt} onChange={e => {
+                                                    const next = e.target.checked ? [...(formData.badges || []), badge.id] : (formData.badges || []).filter(b => b !== badge.id);
+                                                    setFormData(p => ({ ...p, badges: next }));
+                                                }} />
+                                                {badge.imageUrl ? <img src={badge.imageUrl} alt={badge.name} style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 2 }} /> : <span style={{ fontSize: 22 }}>{badge.icon}</span>}
+                                                <div>
+                                                    <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>{badge.name}</div>
+                                                    <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{badge.description}</div>
+                                                </div>
+                                            </label>
+                                        );
+                                    })}
+                                    {badges.length === 0 && <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>[no badges in system]</div>}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <div style={{ padding: '12px 24px', borderTop: '1px solid var(--bd)', display: 'flex', justifyContent: 'flex-end', gap: 10, flexShrink: 0 }}>
+                        <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={onClose}>cancel</button>
+                        <button className="btn btn--filled btn--sm" style={{ fontSize: 10 }} onClick={handleSave} disabled={loading}>{loading ? '$ saving...' : '$ save changes'}</button>
+                    </div>
+                </div>
+            </div>
+
+            <NudgeConfirmDialog open={nudgeDialogOpen} onClose={() => setNudgeDialogOpen(false)} onConfirm={handleConfirmNudge} nudgeDetails={nudgeDetails} loading={nudgeLoading} />
 
             {/* Award Stake Dialog */}
-            <Dialog open={awardDialogOpen} onClose={() => setAwardDialogOpen(false)}>
-                <DialogTitle>Award Stake to {user.firstName}</DialogTitle>
-                <DialogContent>
-                    <Box sx={{ pt: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 300 }}>
-                        <TextField
-                            label="Amount"
-                            type="number"
-                            fullWidth
-                            value={awardAmount}
-                            onChange={(e) => setAwardAmount(e.target.value)}
-                            InputProps={{
-                                startAdornment: <StarIcon color="warning" sx={{ mr: 1 }} />
-                            }}
-                        />
-                        <TextField
-                            label="Reason / Note"
-                            fullWidth
-                            multiline
-                            rows={2}
-                            value={awardReason}
-                            onChange={(e) => setAwardReason(e.target.value)}
-                            placeholder="e.g. Volunteer work, Workshop host"
-                        />
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setAwardDialogOpen(false)}>Cancel</Button>
-                    <Button 
-                        onClick={handleAwardStake} 
-                        variant="contained" 
-                        disabled={awardLoading || !awardAmount}
-                    >
-                        {awardLoading ? <CircularProgress size={24} /> : "Award Stake"}
-                    </Button>
-                </DialogActions>
-            </Dialog>
-        </Dialog>
+            {awardOpen && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setAwardOpen(false)}>
+                    <div className="card" style={{ maxWidth: 400, width: '100%' }} onClick={e => e.stopPropagation()}>
+                        <div className="card-header">
+                            <span style={{ color: 'var(--text)', fontSize: 13, fontWeight: 600, fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>award stake to {user.firstName}</span>
+                            <button onClick={() => setAwardOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18 }}>×</button>
+                        </div>
+                        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            <div>
+                                <label style={labelStyle}>AMOUNT</label>
+                                <input className="input" type="number" value={awardAmount} onChange={e => setAwardAmount(e.target.value)} style={inputStyle} />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>REASON</label>
+                                <textarea className="input" rows={2} value={awardReason} onChange={e => setAwardReason(e.target.value)} placeholder="e.g. volunteer work, workshop host" style={{ ...inputStyle, resize: 'vertical' }} />
+                            </div>
+                        </div>
+                        <div style={{ padding: '12px 24px', borderTop: '1px solid var(--bd)', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                            <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setAwardOpen(false)}>cancel</button>
+                            <button className="btn btn--filled btn--sm" style={{ fontSize: 10, borderColor: 'var(--amber)', background: 'rgba(255,170,0,0.1)', color: 'var(--amber)' }} onClick={handleAwardStake} disabled={awardLoading || !awardAmount}>
+                                {awardLoading ? '$ awarding...' : '$ award stake'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
     );
 }

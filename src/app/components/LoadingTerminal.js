@@ -1,56 +1,41 @@
-import React, { useEffect, useState } from 'react';
-import { Box, Typography } from '@mui/material';
+'use client';
+import { useEffect, useState } from 'react';
 
 const LoadingTerminal = ({ steps = ['Loading...'] }) => {
   const [lines, setLines] = useState([]);
   const [dots, setDots] = useState('');
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setDots((prev) => (prev.length < 3 ? prev + '.' : ''));
-    }, 500);
-
-    return () => clearInterval(interval);
+    const id = setInterval(() => setDots(d => d.length < 3 ? d + '.' : ''), 500);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
-    let currentLine = 0;
-    const interval = setInterval(() => {
-      if (currentLine < steps.length) {
-        setLines((prevLines) => [...prevLines, steps[currentLine]]);
-        currentLine++;
-      } else {
-        clearInterval(interval);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
+    let i = 0;
+    const id = setInterval(() => {
+      if (i < steps.length) { setLines(l => [...l, steps[i]]); i++; }
+      else clearInterval(id);
+    }, 800);
+    return () => clearInterval(id);
   }, [steps]);
 
   return (
-    <Box
-      sx={{
-        backgroundColor: '#000000',
-        color: '#00ff00',
-        fontFamily: 'Roboto Mono, monospace',
-        padding: '2rem',
-        borderRadius: '8px',
-        boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        overflow: 'hidden',
-      }}
-    >
-      {lines.map((line, index) => (
-        <Typography key={index} variant="body2">
-          {line}
-        </Typography>
+    <div style={{
+      background: 'var(--bg)', color: 'var(--text)', fontFamily: 'var(--mono)',
+      padding: '2rem', minHeight: '100vh',
+      display: 'flex', flexDirection: 'column', justifyContent: 'center',
+    }}>
+      {lines.map((line, i) => (
+        <div key={i} style={{ fontSize: 13, marginBottom: 4, color: line.includes('successfully') || line.includes('Stake') ? 'var(--green)' : 'var(--text-mid)' }}>
+          <span style={{ color: 'var(--green)' }}>&gt;</span> {line}
+        </div>
       ))}
-      <Typography variant="body2">Loading{dots}</Typography>
-    </Box>
+      <div style={{ fontSize: 13, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ color: 'var(--green)' }}>&gt;</span>
+        <span className="dot pulse" style={{ background: 'var(--green)', width: 6, height: 6, borderRadius: '50%', display: 'inline-block' }} />
+        processing{dots}
+      </div>
+    </div>
   );
 };
 

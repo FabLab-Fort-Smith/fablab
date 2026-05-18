@@ -1,3 +1,4 @@
+"use client";
 import React, { useRef, useEffect, useState } from 'react';
 
 const GAME_WIDTH = 1200;

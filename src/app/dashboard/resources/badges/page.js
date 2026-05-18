@@ -1,90 +1,85 @@
-"use client";
-import React, { useState, useEffect } from 'react';
-import { 
-    Box, Typography, Grid, Card, CardContent, Avatar, 
-    Container, Paper, Chip, useTheme, CircularProgress
-} from '@mui/material';
+'use client';
+import { useState, useEffect } from 'react';
 
 export default function BadgeDirectoryPage() {
-    const theme = useTheme();
     const [badges, setBadges] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
     useEffect(() => {
         fetch('/api/v1/badges')
-            .then(res => res.json())
+            .then(r => r.ok ? r.json() : Promise.reject())
             .then(data => setBadges(data.badges || []))
-            .catch(err => console.error("Failed to fetch badges", err))
+            .catch(() => setError('Failed to load badges.'))
             .finally(() => setLoading(false));
     }, []);
 
-    if (loading) {
-        return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-                <CircularProgress />
-            </Box>
-        );
-    }
-
     return (
-        <Container maxWidth="lg" sx={{ py: 4 }}>
-            <Box sx={{ mb: 4, textAlign: 'center' }}>
-                <Typography variant="h4" gutterBottom fontWeight="bold">
-                    Badge Directory
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                    Explore the achievements and certifications available at The Lab.
-                </Typography>
-            </Box>
+        <div style={{ padding: '20px 24px', maxWidth: 1100 }}>
+            <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}>
+                <span style={{ color: 'var(--green)' }}>$</span> ls ./badges/
+            </div>
+            <h1 style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.4rem, 3vw, 2rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)', marginBottom: 8 }}>
+                badge directory
+            </h1>
+            <p style={{ color: 'var(--text-mid)', fontSize: 13, marginBottom: 36 }}>
+                Achievements and certifications available at The Lab.
+            </p>
 
-            <Grid container spacing={3}>
-                {badges.map((badge) => (
-                    <Grid item xs={12} sm={6} md={4} key={badge.id}>
-                        <Card 
-                            sx={{ 
-                                height: '100%', 
-                                display: 'flex', 
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                textAlign: 'center',
-                                p: 2,
-                                transition: 'transform 0.2s',
-                                '&:hover': {
-                                    transform: 'translateY(-4px)',
-                                    boxShadow: theme.shadows[4]
+            {loading && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-mid)', fontSize: 12 }}>
+                    <span className="dot pulse" style={{ background: 'var(--green)', width: 6, height: 6, borderRadius: '50%', display: 'inline-block' }} />
+                    loading badges...
+                </div>
+            )}
+
+            {error && (
+                <div style={{ border: '1px solid var(--red)', color: 'var(--red)', padding: '10px 14px', fontSize: 11 }}>[ERROR] {error}</div>
+            )}
+
+            {!loading && !error && badges.length === 0 && (
+                <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>
+                    <span style={{ color: 'var(--green)' }}>&gt;</span> no badges found.
+                </div>
+            )}
+
+            {!loading && !error && badges.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+                    {badges.map(badge => (
+                        <div key={badge.id} className="card" style={{ padding: '24px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            {/* Badge icon / image */}
+                            <div style={{
+                                width: 64, height: 64, border: '1px solid var(--bd-1)',
+                                background: 'var(--bg-elev)', display: 'flex', alignItems: 'center',
+                                justifyContent: 'center', marginBottom: 16,
+                                fontSize: badge.imageUrl ? 0 : 28,
+                                color: 'var(--green)',
+                                overflow: 'hidden',
+                            }}>
+                                {badge.imageUrl
+                                    ? <img src={badge.imageUrl} alt={badge.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'grayscale(20%)' }} />
+                                    : (badge.icon || '★')
                                 }
-                            }}
-                        >
-                            <Avatar 
-                                src={badge.imageUrl}
-                                sx={{ 
-                                    width: 80, 
-                                    height: 80, 
-                                    bgcolor: theme.palette.primary.main,
-                                    fontSize: '2.5rem',
-                                    mb: 2
-                                }}
-                            >
-                                {!badge.imageUrl && (badge.icon || '🏅')}
-                            </Avatar>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom>
-                                    {badge.name}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                                    {badge.description}
-                                </Typography>
-                                <Chip 
-                                    label={badge.id.toUpperCase().replace(/_/g, ' ')} 
-                                    size="small" 
-                                    variant="outlined" 
-                                    sx={{ fontSize: '0.7rem' }}
-                                />
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                ))}
-            </Grid>
-        </Container>
+                            </div>
+
+                            <div style={{ color: 'var(--text)', fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', marginBottom: 6 }}>
+                                {badge.name}
+                            </div>
+                            <div style={{ color: 'var(--text-mid)', fontSize: 11, lineHeight: 1.6, marginBottom: 12, flex: 1 }}>
+                                {badge.description}
+                            </div>
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.1em', border: '1px solid var(--bd)', padding: '2px 8px' }}>
+                                {badge.id.toUpperCase().replace(/_/g, ' ')}
+                            </span>
+                            {badge.stakeReward && (
+                                <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--amber)', letterSpacing: '0.08em', marginTop: 6 }}>
+                                    +{badge.stakeReward} stake
+                                </span>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
     );
 }

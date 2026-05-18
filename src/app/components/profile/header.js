@@ -1,3 +1,4 @@
+"use client";
 import React, { useState, useRef, useEffect } from 'react';
 
 const TABS = ['User Details', 'Membership', 'Public Profile', 'Settings'];

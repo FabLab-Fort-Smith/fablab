@@ -1,7 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
-import { Box, Typography, CircularProgress, Alert, Container, Button } from '@mui/material';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import UsersService from '@/services/users';
 import UserProfileView from '@/app/components/profile/UserProfileView';
@@ -16,46 +14,24 @@ export default function MemberProfilePage() {
     const router = useRouter();
 
     useEffect(() => {
-        const fetchUser = async () => {
-            if (!userID) return;
-            try {
-                // Fetch by custom userID
-                const fetchedUser = await UsersService.getUserByQuery({ property: 'userID', value: userID });
-                
-                if (fetchedUser) {
-                    setUser(fetchedUser);
-                } else {
-                    setError("User not found.");
-                }
-            } catch (err) {
-                console.error("Error fetching member profile:", err);
-                setError("Could not load member profile.");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchUser();
+        if (!userID) return;
+        UsersService.getUserByQuery({ property: 'userID', value: userID })
+            .then(u => { if (u) setUser(u); else setError('User not found.'); })
+            .catch(() => setError('Could not load member profile.'))
+            .finally(() => setLoading(false));
     }, [userID]);
 
-    if (loading) {
-        return <LoadingTerminal />;
-    }
+    if (loading) return <LoadingTerminal />;
 
-    if (error || !user) {
-        return (
-            <Container maxWidth="md" sx={{ py: 8, textAlign: 'center' }}>
-                <Alert severity="error" sx={{ mb: 2 }}>{error || "User not found"}</Alert>
-                <Button startIcon={<ArrowBackIcon />} onClick={() => router.back()}>
-                    Go Back
-                </Button>
-            </Container>
-        );
-    }
-
-    return (
-        <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-            <UserProfileView user={user} isPublicView={true} />
-        </Box>
+    if (error || !user) return (
+        <div style={{ padding: '60px 24px', textAlign: 'center' }}>
+            <div style={{ border: '1px solid var(--red)', color: 'var(--red)', padding: '14px 18px', marginBottom: 20, fontFamily: 'var(--mono)', fontSize: 12, display: 'inline-block' }}>
+                ✕ {error || 'User not found'}
+            </div>
+            <br />
+            <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => router.back()}>← go back</button>
+        </div>
     );
+
+    return <UserProfileView user={user} isPublicView={true} />;
 }

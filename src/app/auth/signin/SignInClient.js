@@ -1,161 +1,147 @@
-"use client";
-import React, { useState } from "react";
-import { SignInPage } from "@toolpad/core/SignInPage";
-import { Link, Snackbar, Alert, Box, Typography } from "@mui/material";
+'use client';
+import { useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { signIn } from "next-auth/react";
-import { AppProvider } from "@toolpad/core/AppProvider";
-import theme from "../../../../theme";
+import { signIn } from 'next-auth/react';
 
-const ForgotPasswordLink = () => (
-    <Link href="/auth/forgot-password" underline="hover" sx={{ color: 'primary.main' }}>
-        Forgot password?
-    </Link>
-);
+const OAUTH_LABELS = { discord: '$ ./signin --discord', google: '$ ./signin --google', github: '$ ./signin --github' };
 
-const SignInClient = ({ providers }) => {
-    const searchParams = useSearchParams();
-    const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
-    const [snackbarOpen, setSnackbarOpen] = useState(false);
-    const [error, setError] = useState("");
+export default function SignInClient({ providers }) {
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
+  const [form, setForm] = useState({ identifier: '', password: '' });
+  const [status, setStatus] = useState('idle');
+  const [error, setError] = useState('');
 
-    const handleSnackbarClose = () => {
-        setSnackbarOpen(false);
-    };
+  const oauthProviders = providers ? Object.values(providers).filter(p => p.id !== 'credentials') : [];
 
-
-    const CreateAnAccount = () => {
-        return (
-            <Typography variant="body2" sx={{ color: 'primary.main' }}>
-                Need an account? 
-            <Link href={`/auth/register?callbackUrl=${encodeURIComponent(callbackUrl)}`} variant="body2">
-                Sign up
-            </Link>
-            </Typography>
-        );
+  const handleSubmit = async e => {
+    e.preventDefault();
+    setStatus('submitting');
+    setError('');
+    try {
+      const res = await signIn('credentials', {
+        redirect: false,
+        identifier: form.identifier,
+        password: form.password,
+        callbackUrl,
+      });
+      if (res?.error) {
+        setError(res.error === 'CredentialsSignin'
+          ? 'Invalid email/username or password.'
+          : res.error);
+        setStatus('idle');
+      } else {
+        window.location.href = res?.url || callbackUrl;
+      }
+    } catch {
+      setError('An unexpected error occurred. Please try again.');
+      setStatus('idle');
     }
+  };
 
-    const Title = () => {
-        return <h2 style={{ marginBottom: 8 }}>Login</h2>;
-    }
+  const set = field => e => setForm(f => ({ ...f, [field]: e.target.value }));
 
-    const handleSignIn = async (provider, formData) => {
-        try {
-            if (provider.id === 'credentials') {
-                const response = await signIn("credentials", {
-                    redirect: false,
-                    identifier: formData.get('identifier'),
-                    password: formData.get('password'),
-                    callbackUrl
-                });
-                if (response.error) {
-                    throw new Error(response.error);
-                }
-                window.location.href = response.url || callbackUrl;
-                return response;
-            } else {
-                return signIn(provider.id, { callbackUrl });
-            }
-        } catch (error) {
-            console.error("SignIn Error:", error);
-            let errorMessage = error.message || "An unknown error occurred during sign-in.";
-            // Map the generic NextAuth Credentials error to a detailed user-friendly message.
-            if (errorMessage === "CredentialsSignin") {
-                errorMessage =
-                    "Invalid credentials. Please double-check your email/username and password.";
-            }
-            setError(errorMessage);
-            setSnackbarOpen(true);
-        }
-    };
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', flexDirection: 'column', gap: 16 }}>
 
-    return (
-        <AppProvider theme={theme}>
-            <Box
-                sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    minHeight: '100vh',
-                    backgroundColor: theme.palette.background.default,
-                    color: theme.palette.text.primary,
-                    padding: '2rem',
-                }}
+      {/* Account-cleanup notice */}
+      <div style={{ maxWidth: 400, width: '100%', border: '1px solid var(--amber)', background: 'rgba(255,176,0,0.06)', padding: '12px 16px', fontSize: 11, color: 'var(--amber)', lineHeight: 1.6 }}>
+        <span style={{ letterSpacing: '0.1em' }}>[NOTICE]</span> Inactive accounts without an active membership have been removed. If you cannot sign in, <Link href="/auth/register" style={{ color: 'var(--amber)' }}>create a new account</Link>.
+      </div>
+
+      <div style={{ maxWidth: 400, width: '100%' }}>
+        <div className="card" style={{ padding: '32px 28px' }}>
+          {/* Header */}
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}>
+              <span style={{ color: 'var(--green)' }}>$</span> ./auth signin
+            </div>
+            <h1 style={{ fontFamily: 'var(--display)', fontSize: '1.6rem', letterSpacing: '-0.04em', color: 'var(--text-bright)', margin: 0 }}>
+              login
+            </h1>
+          </div>
+
+          {error && (
+            <div style={{ border: '1px solid var(--red)', background: 'rgba(255,56,56,0.06)', padding: '10px 14px', fontSize: 11, color: 'var(--red)', marginBottom: 20, lineHeight: 1.5 }}>
+              <span style={{ letterSpacing: '0.1em' }}>[ERROR]</span> {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 6 }}>EMAIL_OR_USERNAME</label>
+              <input
+                className="input"
+                type="text"
+                name="identifier"
+                value={form.identifier}
+                onChange={set('identifier')}
+                required
+                autoFocus
+                placeholder="you@example.com"
+                style={{ width: '100%', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <label style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)' }}>PASSWORD</label>
+                <Link href="/auth/forgot-password" style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.08em', textDecoration: 'none' }}
+                  onMouseEnter={e => e.target.style.color = 'var(--green)'}
+                  onMouseLeave={e => e.target.style.color = 'var(--text-dim)'}
+                >forgot?</Link>
+              </div>
+              <input
+                className="input"
+                type="password"
+                name="password"
+                value={form.password}
+                onChange={set('password')}
+                required
+                placeholder="••••••••"
+                style={{ width: '100%', boxSizing: 'border-box' }}
+              />
+            </div>
+            <button
+              type="submit"
+              className="btn btn--filled"
+              disabled={status === 'submitting'}
+              style={{ width: '100%', justifyContent: 'center', fontSize: 11, marginTop: 4 }}
             >
-                <Alert severity="warning" sx={{ mb: 3, maxWidth: '400px', width: '100%' }}>
-                    <Typography variant="body2">
-                        <strong>Notice:</strong> Inactive accounts without a paid membership have been removed. If you cannot sign in, please <Link href="/auth/register">create a new account</Link>.
-                    </Typography>
-                </Alert>
+              {status === 'submitting' ? '$ authenticating...' : '$ ./login --submit'}
+            </button>
+          </form>
 
-                <SignInPage
-                    signIn={handleSignIn}
-                    providers={providers}
-                    slots={{ // change from 'components' back to 'slots'
-                        title: Title,
-                        forgotPasswordLink: ForgotPasswordLink,
-                        signUpLink: CreateAnAccount
-                    }}
-                    slotProps={{
-                        emailField: { autoFocus: true, type: 'text', label: 'Email or Username', name: 'identifier' }
-                    }}
-                    sx={{
-                        '& .MuiBox-root': {
-                            padding: { xs: '10px', sm: '20px' },
-                            backgroundColor: theme.palette.background.paper,
-                            color: theme.palette.text.primary,
-                            borderColor: theme.palette.primary.main,
-                            borderRadius: '8px',
-                            boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.5)',
-                            maxWidth: '400px',
-                            width: '100%',
-                        },
-                        '& .MuiInputBase-root': {
-                            color: theme.palette.text.primary,
-                        },
-                        '& .MuiInputLabel-root': {
-                            color: theme.palette.text.primary,
-                        },
-                        '& .MuiOutlinedInput-root': {
-                            '& fieldset': {
-                                borderColor: theme.palette.primary.main,
-                            },
-                            '&:hover fieldset': {
-                                borderColor: theme.palette.primary.main,
-                            },
-                            '&.Mui-focused fieldset': {
-                                borderColor: theme.palette.primary.main,
-                            },
-                        },
-                        '& .MuiButton-root': {
-                            color: theme.palette.primary.main,
-                            borderColor: theme.palette.primary.main,
-                            backgroundColor: theme.palette.background.default,
-                            '&:hover': {
-                                backgroundColor: theme.palette.primary.main,
-                                color: theme.palette.background.default,
-                            },
-                        },
-                        '& .MuiTypography-root': {
-                            color: theme.palette.primary.main,
-                        },
-                    }}
-                />
+          {oauthProviders.length > 0 && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0' }}>
+                <div style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+                <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: '0.14em' }}>OR</span>
+                <div style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {oauthProviders.map(p => (
+                  <button
+                    key={p.id}
+                    className="btn btn--ghost"
+                    style={{ width: '100%', justifyContent: 'center', fontSize: 10 }}
+                    onClick={() => signIn(p.id, { callbackUrl })}
+                  >
+                    {OAUTH_LABELS[p.id] || `$ ./signin --${p.id}`}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
-                <Snackbar
-                    open={snackbarOpen}
-                    autoHideDuration={6000}
-                    onClose={handleSnackbarClose}
-                    anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-                >
-                    <Alert onClose={handleSnackbarClose} severity="error" sx={{ width: '100%' }}>
-                        {error}
-                    </Alert>
-                </Snackbar>
-            </Box>
-        </AppProvider>
-    );
-};
-
-export default SignInClient;
+          <div style={{ marginTop: 20, textAlign: 'center', fontSize: 11, color: 'var(--text-dim)' }}>
+            no account?{' '}
+            <Link href={`/auth/register?callbackUrl=${encodeURIComponent(callbackUrl)}`} style={{ color: 'var(--green)', textDecoration: 'none' }}>
+              register
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
