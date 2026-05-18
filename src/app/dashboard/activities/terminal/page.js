@@ -1,10 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Typography, TextField, Alert, Snackbar } from '@mui/material';
 import { useSession } from 'next-auth/react';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import { useTheme } from '@mui/material/styles';
 
 const INITIAL_OUTPUT = [
   "Welcome to The Lab Terminal v1.0.0",
@@ -205,16 +202,12 @@ export default function TerminalPage() {
   const [awaitingPassword, setAwaitingPassword] = useState(null);
   const [userMembership, setUserMembership] = useState(null);
   const bottomRef = useRef(null);
-  
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [showMobileWarning, setShowMobileWarning] = useState(false);
+  const [notification, setNotification] = useState(null);
 
   useEffect(() => {
-    if (isMobile) {
-      setShowMobileWarning(true);
-    }
-  }, [isMobile]);
+    const isMobile = window.innerWidth < 768;
+    if (isMobile) setNotification({ open: true, message: 'For the best hacking experience, use a desktop or rotate your device to landscape mode.', severity: 'warning' });
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -2050,7 +2043,7 @@ export default function TerminalPage() {
                   newHistory.push("CHECK /usr/local/bin FOR RESTORATION TOOLS.");
                   newHistory.push("NEW COMMANDS UNLOCKED: grep, curl");
                   newHistory.push("------------------------------------------------");
-                  setNotification({ open: true, message: "New Commands Unlocked: grep, curl", severity: "success" });
+                  setNotification({ open: true, message: "New Commands Unlocked: grep, curl", severity: "success" }); setTimeout(() => setNotification(null), 4000);
               } else if (missionLevel === 3 && MISSION_3_FLAGS.includes(args[1])) {
                   setMissionLevel(4);
                   unlockMission4();
@@ -2072,7 +2065,7 @@ export default function TerminalPage() {
                   newHistory.push("HINT: Search through documents and project files.");
                   newHistory.push("NEW COMMANDS UNLOCKED: crack, unzip");
                   newHistory.push("------------------------------------------------");
-                  setNotification({ open: true, message: "New Commands Unlocked: crack, unzip", severity: "success" });
+                  setNotification({ open: true, message: "New Commands Unlocked: crack, unzip", severity: "success" }); setTimeout(() => setNotification(null), 4000);
               } else if (missionLevel === 5) {
                   const stateRes = await fetch('/api/v1/terminal/state');
                   const stateData = await stateRes.json();
@@ -2088,7 +2081,7 @@ export default function TerminalPage() {
                       newHistory.push("HINT: Check your inbox.");
                       newHistory.push("NEW COMMANDS UNLOCKED: su, exit");
                       newHistory.push("------------------------------------------------");
-                      setNotification({ open: true, message: "New Commands Unlocked: su, exit", severity: "success" });
+                      setNotification({ open: true, message: "New Commands Unlocked: su, exit", severity: "success" }); setTimeout(() => setNotification(null), 4000);
                   }
               } else if (missionLevel === 6) {
                   const stateRes = await fetch('/api/v1/terminal/state');
@@ -2332,71 +2325,36 @@ export default function TerminalPage() {
   };
 
   return (
-    <Box
-      sx={{
-        backgroundColor: '#0d0d0d',
-        color: '#00ff00',
-        fontFamily: "'Roboto Mono', monospace",
-        height: { xs: 'calc(100vh - 140px)', md: '75vh' },
-        width: { xs: '100%', md: '90%' },
-        maxWidth: { md: '1000px' },
-        mx: 'auto',
-        my: { xs: 0, md: 2 },
-        borderRadius: { xs: '4px', md: '12px' },
-        p: 2,
-        overflowY: 'auto',
-        fontSize: '1rem',
-        boxShadow: { md: '0 4px 30px rgba(0, 255, 0, 0.1)' },
-        border: '1px solid #333'
-      }}
-      onClick={() => {
-        const selection = window.getSelection();
-        if (!selection || selection.toString().length === 0) {
-          document.getElementById('terminal-input')?.focus();
-        }
-      }}
+    <div
+      style={{ background: '#0d0d0d', color: 'var(--green)', fontFamily: 'var(--mono)', height: 'calc(100vh - 140px)', maxWidth: 1000, margin: '0 auto', padding: 16, overflowY: 'auto', fontSize: '0.95rem', border: '1px solid var(--bd)', boxShadow: '0 4px 30px rgba(57,255,20,0.08)' }}
+      onClick={() => { const sel = window.getSelection(); if (!sel || sel.toString().length === 0) document.getElementById('terminal-input')?.focus(); }}
     >
-      <Snackbar 
-        open={showMobileWarning} 
-        autoHideDuration={6000} 
-        onClose={() => setShowMobileWarning(false)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-      >
-        <Alert onClose={() => setShowMobileWarning(false)} severity="warning" sx={{ width: '100%' }}>
-          For the best hacking experience, use a desktop or rotate your device to landscape mode.
-        </Alert>
-      </Snackbar>
+      {notification?.open && (
+        <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--bg-card)', border: `1px solid ${notification.severity === 'warning' ? 'var(--amber)' : 'var(--green)'}`, color: notification.severity === 'warning' ? 'var(--amber)' : 'var(--green)', padding: '10px 18px', fontFamily: 'var(--mono)', fontSize: 11 }}>
+          {notification.message}
+        </div>
+      )}
 
       {history.map((line, i) => (
-        <Typography key={i} component="div" sx={{ whiteSpace: 'pre-wrap', mb: 0.5 }}>
-          {line}
-        </Typography>
+        <div key={i} style={{ whiteSpace: 'pre-wrap', marginBottom: 2 }}>{line}</div>
       ))}
-      
-      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-        <Typography sx={{ mr: 1, color: '#00ff00', fontWeight: 'bold' }}>
+
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <span style={{ marginRight: 6, color: 'var(--green)', fontWeight: 700 }}>
           {terminalUser}@thelab:{currentPath.length === 0 ? '/' : currentPath.join('/')}{terminalUser === 'root' ? '#' : '$'}
-        </Typography>
+        </span>
         <input
           id="terminal-input"
           type={awaitingPassword ? "password" : "text"}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          style={{
-            backgroundColor: 'transparent',
-            border: 'none',
-            color: '#00ff00',
-            fontFamily: "'Roboto Mono', monospace",
-            fontSize: '1rem',
-            flex: 1,
-            outline: 'none'
-          }}
+          style={{ background: 'transparent', border: 'none', color: 'var(--green)', fontFamily: 'var(--mono)', fontSize: '0.95rem', flex: 1, outline: 'none' }}
           autoFocus
           autoComplete="off"
         />
-      </Box>
+      </div>
       <div ref={bottomRef} />
-    </Box>
+    </div>
   );
 }

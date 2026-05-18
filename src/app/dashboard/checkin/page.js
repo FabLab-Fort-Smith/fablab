@@ -1,11 +1,5 @@
-"use client";
-import React, { useState, useEffect } from 'react';
-import { 
-    Box, Typography, Button, Container, Paper, CircularProgress, Alert, Divider 
-} from '@mui/material';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ExitToAppIcon from '@mui/icons-material/ExitToApp';
-import LocationOnIcon from '@mui/icons-material/LocationOn';
+'use client';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { UnlockButton } from '@/app/components/dashboard/LabControls';
@@ -19,124 +13,93 @@ export default function CheckInPage() {
     const [error, setError] = useState('');
 
     useEffect(() => {
-        if (status === 'unauthenticated') {
-            router.push('/auth/signin?callbackUrl=/dashboard/checkin');
-        } else if (status === 'authenticated') {
-            fetchStatus();
+        if (status === 'unauthenticated') router.push('/auth/signin?callbackUrl=/dashboard/checkin');
+        else if (status === 'authenticated') {
+            fetch('/api/v1/checkin')
+                .then(r => r.ok ? r.json() : {})
+                .then(d => setIsCheckedIn(d.isCheckedIn || false))
+                .catch(() => {})
+                .finally(() => setLoading(false));
         }
     }, [status, router]);
-
-    const fetchStatus = async () => {
-        try {
-            const res = await fetch('/api/v1/checkin');
-            if (res.ok) {
-                const data = await res.json();
-                setIsCheckedIn(data.isCheckedIn);
-            }
-        } catch (err) {
-            console.error("Failed to fetch check-in status", err);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const handleToggle = async () => {
         setActionLoading(true);
         setError('');
         try {
-            const action = isCheckedIn ? 'checkout' : 'checkin';
             const res = await fetch('/api/v1/checkin', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action })
+                body: JSON.stringify({ action: isCheckedIn ? 'checkout' : 'checkin' }),
             });
-
-            if (res.ok) {
-                const data = await res.json();
-                setIsCheckedIn(data.isCheckedIn);
-            } else {
-                const data = await res.json();
-                setError(data.error || "Failed to update status");
-            }
-        } catch (err) {
-            console.error("Error toggling check-in", err);
-            setError("Network error");
-        } finally {
-            setActionLoading(false);
-        }
+            const data = await res.json();
+            if (res.ok) setIsCheckedIn(data.isCheckedIn);
+            else setError(data.error || 'Failed to update status.');
+        } catch { setError('Network error.'); }
+        finally { setActionLoading(false); }
     };
 
-    if (loading) {
-        return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-                <CircularProgress />
-            </Box>
-        );
-    }
+    if (loading) return (
+        <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-mid)', fontSize: 12 }}>
+                <span className="dot pulse" style={{ background: 'var(--green)', width: 6, height: 6, borderRadius: '50%', display: 'inline-block' }} />
+                loading...
+            </div>
+        </div>
+    );
 
     return (
-        <Container maxWidth="sm" sx={{ py: 8 }}>
-            <Paper 
-                elevation={3} 
-                sx={{ 
-                    p: 4, 
-                    textAlign: 'center', 
-                    borderRadius: 4,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 3
-                }}
-            >
-                <Box sx={{ 
-                    width: 80, 
-                    height: 80, 
-                    borderRadius: '50%', 
-                    bgcolor: isCheckedIn ? 'success.light' : 'grey.200',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    color: isCheckedIn ? 'success.dark' : 'grey.500'
-                }}>
-                    <LocationOnIcon sx={{ fontSize: 40 }} />
-                </Box>
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+            <div style={{ maxWidth: 440, width: '100%' }}>
+                <div className="card" style={{ padding: '40px 32px', textAlign: 'center' }}>
+                    {/* Status indicator */}
+                    <div style={{
+                        width: 72, height: 72, margin: '0 auto 24px',
+                        border: `2px solid ${isCheckedIn ? 'var(--green)' : 'var(--bd-1)'}`,
+                        background: isCheckedIn ? 'rgba(57,255,20,0.08)' : 'var(--bg-1)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: isCheckedIn ? '0 0 24px rgba(57,255,20,0.2)' : 'none',
+                        transition: 'all 0.2s',
+                    }}>
+                        <span style={{ fontFamily: 'var(--display)', fontSize: 28, color: isCheckedIn ? 'var(--green)' : 'var(--text-dim)', letterSpacing: '-0.04em' }}>
+                            {isCheckedIn ? '◉' : '◌'}
+                        </span>
+                    </div>
 
-                <Typography variant="h4" fontWeight="bold">
-                    {isCheckedIn ? "You are Checked In" : "Check In to The Lab"}
-                </Typography>
+                    <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}>
+                        <span style={{ color: 'var(--green)' }}>$</span> ./checkin --status
+                    </div>
+                    <h1 style={{ fontFamily: 'var(--display)', fontSize: '1.6rem', letterSpacing: '-0.04em', color: isCheckedIn ? 'var(--green)' : 'var(--text-bright)', marginBottom: 10 }}>
+                        {isCheckedIn ? 'checked in' : 'not checked in'}
+                    </h1>
+                    <p style={{ color: 'var(--text-mid)', fontSize: 12, marginBottom: 28, lineHeight: 1.6 }}>
+                        {isCheckedIn ? "don't forget to check out when you leave." : 'welcome! check in to track your visit.'}
+                    </p>
 
-                <Typography variant="body1" color="text.secondary">
-                    {isCheckedIn 
-                        ? "Don't forget to check out when you leave!" 
-                        : "Welcome! Please check in to track your visit."}
-                </Typography>
+                    {error && (
+                        <div style={{ border: '1px solid var(--red)', color: 'var(--red)', fontSize: 11, padding: '8px 12px', marginBottom: 16 }}>
+                            [ERROR] {error}
+                        </div>
+                    )}
 
-                {error && <Alert severity="error" sx={{ width: '100%' }}>{error}</Alert>}
+                    <button
+                        className={`btn ${isCheckedIn ? 'btn--red' : 'btn--filled'}`}
+                        style={{ width: '100%', justifyContent: 'center', fontSize: 11, marginBottom: 16 }}
+                        onClick={handleToggle}
+                        disabled={actionLoading}
+                    >
+                        {actionLoading ? '$ processing...' : isCheckedIn ? '$ check out' : '$ check in now'}
+                    </button>
 
-                <Button
-                    variant="contained"
-                    color={isCheckedIn ? "error" : "success"}
-                    size="large"
-                    fullWidth
-                    onClick={handleToggle}
-                    disabled={actionLoading}
-                    startIcon={isCheckedIn ? <ExitToAppIcon /> : <CheckCircleIcon />}
-                    sx={{ 
-                        py: 2, 
-                        fontSize: '1.2rem',
-                        borderRadius: 2,
-                        textTransform: 'none'
-                    }}
-                >
-                    {actionLoading 
-                        ? <CircularProgress size={24} color="inherit" /> 
-                        : (isCheckedIn ? "Check Out" : "Check In Now")}
-                </Button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                        <div style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+                        <span style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: '0.14em' }}>OR</span>
+                        <div style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+                    </div>
 
-                <Divider sx={{ width: '100%', my: 1 }}>OR</Divider>
-
-                <UnlockButton sx={{ width: '100%', py: 1.5 }} />
-            </Paper>
-        </Container>
+                    <UnlockButton style={{ width: '100%', justifyContent: 'center', fontSize: 11 }} />
+                </div>
+            </div>
+        </div>
     );
 }

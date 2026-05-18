@@ -38,38 +38,29 @@ export default class UserController {
      */
     static getUserByQuery = async (req) => {
         try {
-            console.log("🔍 Received request for getUserByQuery:", req.url);
             const { searchParams } = new URL(req.url);
             const query = {};
 
-            // Extract all possible query parameters
             ['email', 'username', 'userID', 'phoneNumber', 'firstName', 'lastName'].forEach(param => {
                 const value = searchParams.get(param);
-                if (value) {
-                    query[param] = value;
-                }
+                if (value) query[param] = value;
             });
 
             if (Object.keys(query).length === 0) {
-                console.warn("⚠️ Query parameter missing in request.");
                 return new Response(
                     JSON.stringify({ error: "At least one query parameter is required." }),
                     { status: 400 }
                 );
             }
 
-            console.log("✅ Query parameters received:", query);
             const user = await UserService.getUserByQuery(query);
-            
+
             if (!user) {
-                console.warn("⚠️ No user found for query:", query);
                 return new Response(
                     JSON.stringify({ error: "User not found." }),
                     { status: 404 }
                 );
             }
-
-            console.log("✅ User found:", user);
             return new Response(
                 JSON.stringify({ user }),
                 { status: 200 }

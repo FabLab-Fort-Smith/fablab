@@ -1,137 +1,40 @@
 "use client";
-import React, { useState, useEffect } from 'react';
-import { 
-    Box, Typography, Grid, Card, CardMedia, 
-    Container, Button, TextField, Dialog, DialogTitle, 
-    DialogContent, DialogActions, IconButton, Avatar, 
-    CircularProgress, Alert, MobileStepper, List, ListItem, 
-    ListItemAvatar, ListItemText, Snackbar, Chip, Menu, MenuItem
-} from '@mui/material';
-import FavoriteIcon from '@mui/icons-material/Favorite';
-import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
-import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
-import SendIcon from '@mui/icons-material/Send';
-import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
-import ShareIcon from '@mui/icons-material/Share';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import StarIcon from '@mui/icons-material/Star';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 
-const ImageCarousel = ({ images, alt, onClick }) => {
+function ImageCarousel({ images, alt }) {
     const [activeStep, setActiveStep] = useState(0);
     const [touchStart, setTouchStart] = useState(null);
     const [touchEnd, setTouchEnd] = useState(null);
     const maxSteps = images?.length || 0;
-
     if (!images || images.length === 0) return null;
-
-    const minSwipeDistance = 50;
-
-    const onTouchStart = (e) => {
-        setTouchEnd(null);
-        setTouchStart(e.targetTouches[0].clientX);
-    };
-
-    const onTouchMove = (e) => {
-        setTouchEnd(e.targetTouches[0].clientX);
-    };
-
     const onTouchEnd = () => {
         if (!touchStart || !touchEnd) return;
         const distance = touchStart - touchEnd;
-        const isLeftSwipe = distance > minSwipeDistance;
-        const isRightSwipe = distance < -minSwipeDistance;
-        
-        if (isLeftSwipe && activeStep < maxSteps - 1) {
-            setActiveStep(prev => prev + 1);
-        }
-        if (isRightSwipe && activeStep > 0) {
-            setActiveStep(prev => prev - 1);
-        }
+        if (distance > 50 && activeStep < maxSteps - 1) setActiveStep(p => p + 1);
+        if (distance < -50 && activeStep > 0) setActiveStep(p => p - 1);
     };
-
-    const handleNext = (e) => {
-        e.stopPropagation();
-        setActiveStep((prevStep) => prevStep + 1);
-    };
-
-    const handleBack = (e) => {
-        e.stopPropagation();
-        setActiveStep((prevStep) => prevStep - 1);
-    };
-
     return (
-        <Box 
-            sx={{ position: 'relative', width: '100%', bgcolor: 'black' }}
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
-        >
-            <CardMedia
-                component="img"
-                image={images[activeStep]}
-                alt={alt}
-                sx={{ 
-                    width: '100%', 
-                    height: 'auto',
-                    maxHeight: '80vh',
-                    objectFit: 'contain',
-                    cursor: onClick ? 'pointer' : 'default'
-                }}
-                onClick={onClick}
-            />
+        <div style={{ position: 'relative', background: 'var(--bg)' }}
+            onTouchStart={e => { setTouchEnd(null); setTouchStart(e.targetTouches[0].clientX); }}
+            onTouchMove={e => setTouchEnd(e.targetTouches[0].clientX)}
+            onTouchEnd={onTouchEnd}>
+            <img src={images[activeStep]} alt={alt} style={{ width: '100%', maxHeight: '80vh', objectFit: 'contain', display: 'block' }} />
             {maxSteps > 1 && (
                 <>
-                    <IconButton
-                        size="small"
-                        onClick={handleBack}
-                        disabled={activeStep === 0}
-                        sx={{
-                            display: { xs: 'none', md: 'flex' },
-                            position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
-                            bgcolor: 'rgba(0,0,0,0.5)', color: 'white',
-                            '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
-                            '&.Mui-disabled': { display: 'none' }
-                        }}
-                    >
-                        <ChevronLeftIcon />
-                    </IconButton>
-                    <IconButton
-                        size="small"
-                        onClick={handleNext}
-                        disabled={activeStep === maxSteps - 1}
-                        sx={{
-                            display: { xs: 'none', md: 'flex' },
-                            position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-                            bgcolor: 'rgba(0,0,0,0.5)', color: 'white',
-                            '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
-                            '&.Mui-disabled': { display: 'none' }
-                        }}
-                    >
-                        <ChevronRightIcon />
-                    </IconButton>
-                    <MobileStepper
-                        steps={maxSteps}
-                        position="static"
-                        activeStep={activeStep}
-                        sx={{
-                            maxWidth: 400, flexGrow: 1, bgcolor: 'transparent',
-                            position: 'absolute', bottom: 0, width: '100%', justifyContent: 'center',
-                            '.MuiMobileStepper-dot': { bgcolor: 'rgba(255,255,255,0.5)' },
-                            '.MuiMobileStepper-dotActive': { bgcolor: 'white' }
-                        }}
-                        nextButton={null}
-                        backButton={null}
-                    />
+                    <button onClick={e => { e.stopPropagation(); setActiveStep(p => p - 1); }} disabled={activeStep === 0}
+                        style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.6)', border: 'none', color: 'var(--green)', cursor: 'pointer', fontSize: 18, padding: '4px 8px', display: activeStep === 0 ? 'none' : undefined }}>‹</button>
+                    <button onClick={e => { e.stopPropagation(); setActiveStep(p => p + 1); }} disabled={activeStep === maxSteps - 1}
+                        style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.6)', border: 'none', color: 'var(--green)', cursor: 'pointer', fontSize: 18, padding: '4px 8px', display: activeStep === maxSteps - 1 ? 'none' : undefined }}>›</button>
+                    <div style={{ position: 'absolute', bottom: 8, width: '100%', display: 'flex', justifyContent: 'center', gap: 4 }}>
+                        {images.map((_, i) => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === activeStep ? '#fff' : 'rgba(255,255,255,0.4)' }} />)}
+                    </div>
                 </>
             )}
-        </Box>
+        </div>
     );
-};
+}
 
 export default function PostPage() {
     const { data: session } = useSession();
@@ -142,371 +45,220 @@ export default function PostPage() {
     const [item, setItem] = useState(null);
     const [loading, setLoading] = useState(true);
     const [commentText, setCommentText] = useState('');
-    
-    // Share State
     const [openShare, setOpenShare] = useState(false);
     const [users, setUsers] = useState([]);
     const [loadingUsers, setLoadingUsers] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-
-    // Tip State
+    const [toast, setToast] = useState(null);
     const [tipDialogOpen, setTipDialogOpen] = useState(false);
     const [tipAmount, setTipAmount] = useState(10);
     const [tipLoading, setTipLoading] = useState(false);
     const [tipRecipient, setTipRecipient] = useState(null);
+    const [menuOpen, setMenuOpen] = useState(false);
 
-    // Menu State
-    const [menuAnchorEl, setMenuAnchorEl] = useState(null);
+    const showToast = (msg, color = 'var(--green)') => { setToast({ msg, color }); setTimeout(() => setToast(null), 3000); };
 
-    useEffect(() => {
-        if (postID) fetchPost();
-    }, [postID]);
+    useEffect(() => { if (postID) fetchPost(); }, [postID]);
 
     const fetchPost = async () => {
         setLoading(true);
         try {
             const res = await fetch(`/api/v1/portfolio?id=${postID}`);
-            if (res.ok) {
-                const data = await res.json();
-                if (Array.isArray(data) && data.length > 0) {
-                    setItem(data[0]);
-                } else {
-                    setItem(null); // Not found
-                }
-            }
-        } catch (error) {
-            console.error("Failed to fetch post:", error);
-        } finally {
-            setLoading(false);
-        }
+            if (res.ok) { const data = await res.json(); setItem(Array.isArray(data) && data.length > 0 ? data[0] : null); }
+        } catch {}
+        finally { setLoading(false); }
     };
 
-    // Actions
     const handleLike = async () => {
         if (!session || !item) return;
-        const id = item.id;
         const isLiked = item.likes?.includes(session.user.userID);
-        
-        // Optimistic
-        const newLikes = isLiked 
-            ? item.likes.filter(uid => uid !== session.user.userID)
-            : [...(item.likes || []), session.user.userID];
-            
+        const newLikes = isLiked ? item.likes.filter(uid => uid !== session.user.userID) : [...(item.likes || []), session.user.userID];
         setItem(prev => ({ ...prev, likes: newLikes }));
-
-        try {
-            await fetch(`/api/v1/portfolio`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id, userID: session.user.userID })
-            });
-        } catch (error) {
-            console.error("Error liking item:", error);
-            fetchPost();
-        }
+        try { await fetch('/api/v1/portfolio', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, userID: session.user.userID }) }); }
+        catch { fetchPost(); }
     };
 
     const handleCommentSubmit = async () => {
         if (!session || !commentText.trim() || !item) return;
-        const id = item.id;
         const text = commentText;
-
-        // Optimistic
-        const newComment = {
-            id: crypto.randomUUID(),
-            userID: session.user.userID,
-            text,
-            createdAt: new Date().toISOString(),
-            user: {
-                firstName: session.user.firstName,
-                lastName: session.user.lastName,
-                image: session.user.image
-            }
-        };
-
+        const newComment = { id: crypto.randomUUID(), userID: session.user.userID, text, createdAt: new Date().toISOString(), user: { firstName: session.user.firstName, lastName: session.user.lastName } };
         setItem(prev => ({ ...prev, comments: [...(prev.comments || []), newComment] }));
         setCommentText('');
-
-        try {
-            await fetch(`/api/v1/portfolio?action=comment`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id, userID: session.user.userID, action: 'comment', text })
-            });
-        } catch (error) {
-            console.error("Error posting comment:", error);
-            fetchPost();
-        }
+        try { await fetch('/api/v1/portfolio?action=comment', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, userID: session.user.userID, action: 'comment', text }) }); }
+        catch { fetchPost(); }
     };
-
-    // Share/Tip/Menu
-    const handleOpenShare = () => {
-        setOpenShare(true);
-        fetchUsers();
-    };
-
-    const handleCloseShare = () => setOpenShare(false);
 
     const fetchUsers = async () => {
         if (users.length > 0) return;
         setLoadingUsers(true);
-        try {
-            const res = await fetch('/api/v1/users?limit=100');
-            if (res.ok) {
-                const data = await res.json();
-                setUsers(data.users || []);
-            }
-        } catch (error) {
-            console.error("Failed to fetch users:", error);
-        } finally {
-            setLoadingUsers(false);
-        }
+        try { const res = await fetch('/api/v1/users?limit=100'); if (res.ok) { const data = await res.json(); setUsers(data.users || []); } } catch {}
+        finally { setLoadingUsers(false); }
     };
 
-    const handleCopyLink = () => {
-        const url = `${window.location.origin}/dashboard/community/feed/${item.id}`;
-        navigator.clipboard.writeText(url);
-        setSnackbar({ open: true, message: 'Link copied!', severity: 'success' });
-        handleCloseShare();
-    };
+    const handleCopyLink = () => { navigator.clipboard.writeText(`${window.location.origin}/dashboard/community/feed/${item.id}`); showToast('Link copied!'); setOpenShare(false); };
 
     const handleNativeShare = async () => {
-        if (navigator.share && item) {
-            try {
-                await navigator.share({
-                    title: item.title,
-                    text: `Check this out: ${item.title}`,
-                    url: `${window.location.origin}/dashboard/community/feed/${item.id}`
-                });
-                handleCloseShare();
-            } catch (error) {
-                console.error('Error sharing:', error);
-            }
-        }
-    };
-    
-    const handleShareToUser = async (recipientID) => {
-        try {
-            const res = await fetch('/api/v1/portfolio', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: item.id, action: 'share', senderID: session.user.userID, recipientID })
-            });
-            if (res.ok) {
-                setSnackbar({ open: true, message: 'Sent!', severity: 'success' });
-                handleCloseShare();
-            }
-        } catch (error) {
-            setSnackbar({ open: true, message: 'Failed to send.', severity: 'error' });
+        if (typeof navigator !== 'undefined' && navigator.share && item) {
+            try { await navigator.share({ title: item.title, text: `Check this out: ${item.title}`, url: `${window.location.origin}/dashboard/community/feed/${item.id}` }); setOpenShare(false); } catch {}
         }
     };
 
-    const handleOpenTip = () => {
-        setTipRecipient(item.creator);
-        setTipDialogOpen(true);
+    const handleShareToUser = async (recipientID) => {
+        try {
+            const res = await fetch('/api/v1/portfolio', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, action: 'share', senderID: session.user.userID, recipientID }) });
+            if (res.ok) { showToast('Sent!'); setOpenShare(false); }
+        } catch { showToast('Failed to send.', 'var(--red)'); }
     };
 
     const handleTip = async () => {
         if (!tipRecipient) return;
         setTipLoading(true);
         try {
-            const res = await fetch('/api/v1/transactions/tip', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ receiverId: tipRecipient.userID, amount: parseInt(tipAmount) })
-            });
+            const res = await fetch('/api/v1/transactions/tip', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ receiverId: tipRecipient.userID, amount: parseInt(tipAmount) }) });
             const data = await res.json();
             if (data.error) throw new Error(data.error);
-            setSnackbar({ open: true, message: `Sent ${tipAmount} stake!`, severity: 'success' });
+            showToast(`Sent ${tipAmount} stake!`);
             setTipDialogOpen(false);
-        } catch (err) {
-            setSnackbar({ open: true, message: err.message, severity: 'error' });
-        } finally {
-            setTipLoading(false);
-        }
+        } catch (err) { showToast(err.message || 'Failed.', 'var(--red)'); }
+        finally { setTipLoading(false); }
     };
 
-    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>;
-    if (!item) return <Box sx={{ p: 4, textAlign: 'center' }}><Typography>Post not found</Typography><Button onClick={() => router.push('/dashboard/community/feed')}>Back to Feed</Button></Box>;
+    if (loading) return (
+        <div style={{ padding: '20px 24px' }}><div style={{ color: 'var(--text-dim)', fontSize: 12 }}>loading<span className="caret-block" style={{ marginLeft: 4 }} /></div></div>
+    );
+
+    if (!item) return (
+        <div style={{ padding: '40px 24px', textAlign: 'center' }}>
+            <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 12 }}>[post not found]</div>
+            <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => router.push('/dashboard/community/feed')}>← back to feed</button>
+        </div>
+    );
 
     const creator = item.creator || {};
+    const isLiked = item.likes?.includes(session?.user?.userID);
 
     return (
-        <Container maxWidth="md" sx={{ py: 4 }}>
-            <Button startIcon={<ArrowBackIcon />} onClick={() => router.push('/dashboard/community/feed')} sx={{ mb: 2 }}>
-                Back to Feed
-            </Button>
-            
-            <Card sx={{ width: '100%', borderRadius: 2, boxShadow: 3 }}>
-                {/* Header */}
-                <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Avatar src={creator.image} sx={{ width: 40, height: 40, border: '1px solid #333' }} />
-                        <Box>
-                            <Typography variant="subtitle1" fontWeight="bold">
-                                {creator.firstName} {creator.lastName}
-                            </Typography>
-                            <Typography variant="caption" color="secondary.main" fontWeight="bold">
-                                SHARED A PROJECT
-                            </Typography>
-                        </Box>
-                    </Box>
-                    <IconButton onClick={(e) => setMenuAnchorEl(e.currentTarget)}>
-                        <MoreHorizIcon />
-                    </IconButton>
-                </Box>
+        <div style={{ padding: '20px 24px', maxWidth: 680, margin: '0 auto' }}>
+            {toast && <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 400, background: 'var(--bg-card)', border: `1px solid ${toast.color}`, color: toast.color, padding: '12px 18px', fontFamily: 'var(--mono)', fontSize: 12 }}>{toast.msg}</div>}
 
-                {/* Content */}
+            <button className="btn btn--ghost btn--sm" style={{ fontSize: 9, marginBottom: 16 }} onClick={() => router.push('/dashboard/community/feed')}>← back to feed</button>
+
+            <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)' }}>
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--bd)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bg-elev)', border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--text-mid)' }}>
+                            {creator.firstName?.[0]}{creator.lastName?.[0]}
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{creator.firstName} {creator.lastName}</div>
+                            <div style={{ fontSize: 9, fontFamily: 'var(--mono)', color: 'var(--cyan)' }}>SHARED_PROJECT</div>
+                        </div>
+                    </div>
+                    <div style={{ position: 'relative' }}>
+                        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: 16, padding: '4px 8px' }} onClick={() => setMenuOpen(o => !o)}>···</button>
+                        {menuOpen && (
+                            <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--bg-card)', border: '1px solid var(--bd)', zIndex: 100, minWidth: 110 }}>
+                                <button style={{ display: 'block', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '10px 14px', textAlign: 'left', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text)' }} onClick={() => { handleCopyLink(); setMenuOpen(false); }}>copy link</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 <ImageCarousel images={item.imageUrls} alt={item.title} />
 
                 {/* Actions */}
-                <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                        <IconButton onClick={handleLike} color={item.likes?.includes(session?.user?.userID) ? "error" : "default"}>
-                            {item.likes?.includes(session?.user?.userID) ? <FavoriteIcon /> : <FavoriteBorderIcon />}
-                        </IconButton>
-                        <IconButton>
-                            <ChatBubbleOutlineIcon />
-                        </IconButton>
-                        <IconButton onClick={handleOpenShare} sx={{ transform: 'rotate(-30deg)', mt: -0.5 }}>
-                            <SendIcon />
-                        </IconButton>
-                        <IconButton onClick={handleOpenTip} color="primary">
-                            <StarIcon />
-                        </IconButton>
-                    </Box>
-                    <Chip label="Project Showcase" size="small" variant="outlined" />
-                </Box>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px' }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? 'var(--red)' : 'var(--text-dim)', fontSize: 18, padding: '4px 6px' }} onClick={handleLike}>{isLiked ? '♥' : '♡'}</button>
+                        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: 14, padding: '4px 6px' }}>💬</button>
+                        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: 14, padding: '4px 6px' }} onClick={() => { setOpenShare(true); fetchUsers(); }}>↗</button>
+                        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--amber)', fontSize: 14, padding: '4px 6px' }} onClick={() => { setTipRecipient(creator); setTipAmount(10); setTipDialogOpen(true); }}>★</button>
+                    </div>
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--cyan)', border: '1px solid var(--cyan)', padding: '2px 6px' }}>project showcase</span>
+                </div>
 
                 {/* Details */}
-                <Box sx={{ px: 2, mb: 2 }}>
-                    <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-                        {item.likes?.length || 0} likes
-                    </Typography>
-                    <Typography variant="body1">
-                        <Box component="span" fontWeight="bold" sx={{ mr: 1 }}>
-                            {creator.firstName} {creator.lastName}
-                        </Box>
-                        {item.title} - {item.description}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                <div style={{ padding: '0 16px 12px' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>{item.likes?.length || 0} likes</div>
+                    <div style={{ fontSize: 13 }}>
+                        <span style={{ fontWeight: 700, color: 'var(--text)', marginRight: 6 }}>{creator.firstName} {creator.lastName}</span>
+                        <span style={{ color: 'var(--text-mid)' }}>{item.title} — {item.description}</span>
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--mono)', marginTop: 6 }}>
                         {new Date(item.createdAt).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                    </Typography>
-                </Box>
+                    </div>
+                </div>
 
-                {/* Comments Section - Full */}
-                <Box sx={{ px: 2, pb: 3 }}>
-                    <Typography variant="h6" sx={{ mb: 2 }}>Comments ({item.comments?.length || 0})</Typography>
-                    
-                    <List disablePadding>
-                        {(item.comments || []).map(comment => (
-                            <ListItem key={comment.id} alignItems="flex-start" sx={{ px: 0 }}>
-                                <ListItemAvatar>
-                                    <Avatar src={comment.user?.image} sx={{ width: 32, height: 32 }}>{comment.user?.firstName?.[0]}</Avatar>
-                                </ListItemAvatar>
-                                <ListItemText 
-                                    primary={
-                                        <Typography variant="subtitle2" component="span" fontWeight="bold">
-                                            {comment.user?.firstName} {comment.user?.lastName}
-                                        </Typography>
-                                    }
-                                    secondary={
-                                        <>
-                                            <Typography variant="body2" component="span" color="text.primary" display="block">
-                                                {comment.text}
-                                            </Typography>
-                                            <Typography variant="caption" color="text.secondary">
-                                                {new Date(comment.createdAt).toLocaleDateString()}
-                                            </Typography>
-                                        </>
-                                    }
-                                />
-                            </ListItem>
-                        ))}
-                    </List>
+                {/* Full comments */}
+                <div style={{ borderTop: '1px solid var(--bd)', padding: '16px' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--mono)', letterSpacing: '0.1em', marginBottom: 12 }}>COMMENTS ({item.comments?.length || 0})</div>
+                    {(item.comments || []).map(c => (
+                        <div key={c.id} style={{ display: 'flex', gap: 10, marginBottom: 12, alignItems: 'flex-start' }}>
+                            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--bg-elev)', border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, flexShrink: 0 }}>
+                                {c.user?.firstName?.[0]}
+                            </div>
+                            <div>
+                                <div style={{ fontSize: 12, marginBottom: 2 }}>
+                                    <span style={{ fontWeight: 700, color: 'var(--text)', marginRight: 6 }}>{c.user?.firstName} {c.user?.lastName}</span>
+                                    <span style={{ color: 'var(--text-mid)' }}>{c.text}</span>
+                                </div>
+                                <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--mono)' }}>{new Date(c.createdAt).toLocaleDateString()}</div>
+                            </div>
+                        </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <textarea className="input" rows={2} style={{ flex: 1, resize: 'vertical', fontSize: 12 }} placeholder="Add a comment..." value={commentText} onChange={e => setCommentText(e.target.value)} />
+                        <button className="btn btn--sm" style={{ fontSize: 10, alignSelf: 'flex-end' }} onClick={handleCommentSubmit} disabled={!commentText.trim()}>post</button>
+                    </div>
+                </div>
+            </div>
 
-                    {/* Add Comment */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, gap: 1 }}>
-                        <TextField 
-                            placeholder="Add a comment..." 
-                            variant="outlined" 
-                            fullWidth 
-                            size="small"
-                            value={commentText}
-                            onChange={(e) => setCommentText(e.target.value)}
-                            multiline
-                            maxRows={4}
-                        />
-                        <Button 
-                            variant="contained" 
-                            disabled={!commentText.trim()}
-                            onClick={handleCommentSubmit}
-                        >
-                            Post
-                        </Button>
-                    </Box>
-                </Box>
-            </Card>
+            {/* Share modal */}
+            {openShare && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setOpenShare(false)}>
+                    <div className="card" style={{ maxWidth: 400, width: '100%' }} onClick={e => e.stopPropagation()}>
+                        <div className="card-header">
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>SHARE_PROJECT</span>
+                            <button onClick={() => setOpenShare(false)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18 }}>×</button>
+                        </div>
+                        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <button className="btn btn--ghost" style={{ justifyContent: 'flex-start', gap: 10, fontSize: 12 }} onClick={handleCopyLink}><span style={{ color: 'var(--green)' }}>⊞</span> Copy Link</button>
+                            {typeof navigator !== 'undefined' && navigator.share && (
+                                <button className="btn btn--ghost" style={{ justifyContent: 'flex-start', gap: 10, fontSize: 12 }} onClick={handleNativeShare}><span style={{ color: 'var(--cyan)' }}>↗</span> Share via...</button>
+                            )}
+                            <div style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-dim)', marginTop: 8, marginBottom: 4 }}>SEND_TO_MEMBER</div>
+                            {loadingUsers ? <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>loading...</div> : users.filter(u => u.userID !== session?.user?.userID).map(u => (
+                                <button key={u.userID} className="btn btn--ghost" style={{ justifyContent: 'flex-start', gap: 10, fontSize: 12 }} onClick={() => handleShareToUser(u.userID)}>
+                                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--bg-elev)', border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9 }}>{u.firstName?.[0]}</div>
+                                    {u.firstName} {u.lastName}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
 
-            {/* Reuse User Share Dialog & Tip Dialog via Copy/Paste or extraction. 
-                For brevity in this turn, I'm including simple implementations inline or skipping complex reiterations if possible.
-                I included Share Dialog state/logic above, need to include the Dialog JSX.
-            */}
-             <Dialog open={openShare} onClose={handleCloseShare} maxWidth="xs" fullWidth>
-                <DialogTitle>Share Project</DialogTitle>
-                <DialogContent>
-                    <List>
-                        <ListItem button onClick={handleCopyLink}>
-                            <ListItemAvatar><Avatar sx={{ bgcolor: 'primary.main' }}><ContentCopyIcon /></Avatar></ListItemAvatar>
-                            <ListItemText primary="Copy Link" />
-                        </ListItem>
-                        {typeof navigator !== 'undefined' && navigator.share && (
-                            <ListItem button onClick={handleNativeShare}>
-                                <ListItemAvatar><Avatar sx={{ bgcolor: 'secondary.main' }}><ShareIcon /></Avatar></ListItemAvatar>
-                                <ListItemText primary="Share via..." />
-                            </ListItem>
-                        )}
-                        <Typography variant="subtitle2" sx={{ mt: 2, mb: 1, color: 'text.secondary' }}>Send to Member</Typography>
-                        {loadingUsers ? <CircularProgress /> : users.map(user => (
-                            <ListItem button key={user.userID} onClick={() => handleShareToUser(user.userID)}>
-                                <ListItemAvatar><Avatar src={user.image}>{user.firstName?.[0]}</Avatar></ListItemAvatar>
-                                <ListItemText primary={`${user.firstName} ${user.lastName}`} secondary={user.discordId ? "Discord" : "App"} />
-                            </ListItem>
-                        ))}
-                    </List>
-                </DialogContent>
-                <DialogActions><Button onClick={handleCloseShare}>Cancel</Button></DialogActions>
-            </Dialog>
-
-             <Dialog open={tipDialogOpen} onClose={() => setTipDialogOpen(false)}>
-                <DialogTitle>Tip Stake to {tipRecipient?.username}</DialogTitle>
-                <DialogContent>
-                    <TextField
-                        autoFocus margin="dense" label="Stake Amount" type="number" fullWidth
-                        value={tipAmount} onChange={(e) => setTipAmount(e.target.value)}
-                    />
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
-                        <Button onClick={() => setTipDialogOpen(false)}>Cancel</Button>
-                        <Button variant="contained" onClick={handleTip} disabled={tipLoading}>Send</Button>
-                    </Box>
-                </DialogContent>
-            </Dialog>
-
-            <Menu
-                anchorEl={menuAnchorEl}
-                open={Boolean(menuAnchorEl)}
-                onClose={() => setMenuAnchorEl(null)}
-            >
-                <MenuItem onClick={handleCopyLink}>Copy Link</MenuItem>
-            </Menu>
-
-            <Snackbar 
-                open={snackbar.open} 
-                autoHideDuration={3000} 
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-            >
-                <Alert severity={snackbar.severity}>{snackbar.message}</Alert>
-            </Snackbar>
-        </Container>
+            {/* Tip modal */}
+            {tipDialogOpen && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setTipDialogOpen(false)}>
+                    <div className="card" style={{ maxWidth: 380, width: '100%' }} onClick={e => e.stopPropagation()}>
+                        <div className="card-header">
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>TIP_STAKE</span>
+                            <button onClick={() => setTipDialogOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18 }}>×</button>
+                        </div>
+                        <div style={{ padding: '16px 20px' }}>
+                            <label style={{ display: 'block', fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 6 }}>STAKE_AMOUNT</label>
+                            <input className="input" type="number" min={1} style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} value={tipAmount} onChange={e => setTipAmount(e.target.value)} autoFocus />
+                        </div>
+                        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--bd)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                            <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={() => setTipDialogOpen(false)}>cancel</button>
+                            <button className="btn btn--sm" style={{ fontSize: 10, borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={handleTip} disabled={tipLoading || !tipAmount || parseInt(tipAmount) <= 0}>
+                                {tipLoading ? '$ sending...' : `★ send ${tipAmount || 0} stake`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }

@@ -1,40 +1,31 @@
-// src/utils/axiosInstance.js
-import axios from 'axios';
+const BASE = process.env.NEXT_PUBLIC_URL ? `${process.env.NEXT_PUBLIC_URL}/api/v1` : '/api/v1';
 
-export const runtime = "nodejs";
+async function apiFetch(path, options = {}) {
+    const url = path.startsWith('http') ? path : `${BASE}${path}`;
+    const headers = { ...options.headers };
 
-// Create an Axios instance
-const axiosInstance = axios.create({
-    baseURL: `${process.env.NEXT_PUBLIC_URL}/api/v1`, // Keep your base URL in .env file
-    headers: {
-        'Content-Type': 'application/json'
+    if (!(options.body instanceof FormData)) {
+        headers['Content-Type'] = headers['Content-Type'] || 'application/json';
     }
-});
 
-// ✅ Request Interceptor
-axiosInstance.interceptors.request.use(
-    (config) => {
+    if (typeof window !== 'undefined') {
         const token = localStorage.getItem('token');
-        if (token) {
-            config.headers['Authorization'] = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
+        if (token) headers['Authorization'] = `Bearer ${token}`;
     }
-);
 
-// ✅ Response Interceptor
-axiosInstance.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        if (error.response.status === 401) {
-            alert('Session expired. Please log in again.');
-            window.location.href = '/login';
-        }
-        return Promise.reject(error);
+    const res = await fetch(url, { ...options, headers });
+
+    if (res.status === 401 && typeof window !== 'undefined') {
+        alert('Session expired. Please log in again.');
+        window.location.href = '/login';
     }
-);
 
-export default axiosInstance;
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${text}`);
+    }
+
+    return res.json();
+}
+
+export default apiFetch;

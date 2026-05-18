@@ -10,8 +10,8 @@ const s3Client = new S3Client({
     endpoint: process.env.S3_ENDPOINT || 'https://s3.crittercodes.dev',
     forcePathStyle: true,
     credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY || 'admin',
-        secretAccessKey: process.env.S3_SECRET_KEY || 'Beyond66_Secure_Minio_2025',
+        accessKeyId: process.env.S3_ACCESS_KEY,
+        secretAccessKey: process.env.S3_SECRET_KEY,
     }
 });
 
@@ -38,12 +38,6 @@ export async function POST(req) {
 
         // Fallback to hardcoded bucket if env var is missing (temporary fix)
         const bucketName = process.env.S3_BUCKET_NAME || 'fablab-bounties';
-
-        console.log("DEBUG: S3 Env Vars:", {
-            bucket: bucketName,
-            endpoint: process.env.S3_ENDPOINT || 'https://s3.crittercodes.dev',
-            region: process.env.S3_REGION || 'us-east-1'
-        });
 
         if (!file) {
             return NextResponse.json({ error: "No file provided" }, { status: 400 });

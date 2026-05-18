@@ -3,6 +3,9 @@ FROM ubuntu:22.04
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Flag 3: readable via `env` — rewards knowing about environment variables
+ENV SYSTEM_FLAG=flag{hack_the_planet}
+
 # Install dependencies
 RUN apt-get update && apt-get install -y \
     curl \
@@ -30,6 +33,10 @@ RUN mkdir /home/hacker/data && chown hacker:hacker /home/hacker/data
 
 # Set up a nice prompt
 RUN echo 'export PS1="\[\033[01;32m\]\u@thelab\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' >> /home/hacker/.bashrc
+
+# Run mission setup (creates README, flag files, easter eggs)
+COPY setup.sh /tmp/setup.sh
+RUN bash /tmp/setup.sh && rm /tmp/setup.sh
 
 # Switch to user
 USER hacker

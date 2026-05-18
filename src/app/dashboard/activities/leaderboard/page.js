@@ -1,228 +1,105 @@
 "use client";
-import React, { useState, useEffect } from 'react';
-import { 
-    Box, Typography, Grid, Card, CardContent, Avatar, 
-    Container, CircularProgress, Alert, useTheme, Chip,
-    Tabs, Tab, useMediaQuery
-} from '@mui/material';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
-import StarIcon from '@mui/icons-material/Star';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import GpsFixedIcon from '@mui/icons-material/GpsFixed';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
+const BOARDS = [
+    { key: 'topStake', label: 'Top Stake Holders', valueKey: 'stake', valueLabel: 'Stake', color: 'var(--amber)' },
+    { key: 'topVolunteers', label: 'Top Volunteers', valueKey: 'totalHours', valueLabel: 'Hrs', color: 'var(--green)' },
+    { key: 'topBountyHunters', label: 'Top Bounty Hunters', valueKey: 'count', valueLabel: 'Bounties', color: 'var(--cyan)' },
+];
+
 export default function LeaderboardPage() {
-    const theme = useTheme();
     const router = useRouter();
-    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const [activeTab, setActiveTab] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [data, setData] = useState({
-        topStake: [],
-        topVolunteers: [],
-        topBountyHunters: []
-    });
+    const [data, setData] = useState({ topStake: [], topVolunteers: [], topBountyHunters: [] });
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const res = await fetch('/api/v1/leaderboard');
-                if (!res.ok) throw new Error('Failed to fetch leaderboard data');
-                const result = await res.json();
-                setData(result);
-            } catch (err) {
-                console.error(err);
-                setError('Failed to load leaderboards.');
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
+        fetch('/api/v1/leaderboard')
+            .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+            .then(d => setData(d))
+            .catch(() => setError('Failed to load leaderboards.'))
+            .finally(() => setLoading(false));
     }, []);
 
-    const handleUserClick = (userID) => {
-        if (userID) {
-            router.push(`/dashboard/member/${userID}`);
-        }
-    };
-
-    const LeaderboardCard = ({ title, icon, users, valueKey, valueLabel, color }) => (
-        <Card sx={{ 
-            height: '100%', 
-            display: 'flex', 
-            flexDirection: 'column', 
-            position: 'relative', 
-            overflow: 'visible',
-            mt: { xs: 3, md: 0 }
-        }}>
-            <Box sx={{ 
-                position: 'absolute', 
-                top: -20, 
-                left: '50%', 
-                transform: 'translateX(-50%)',
-                bgcolor: color,
-                color: 'white',
-                borderRadius: '50%',
-                p: 1.5,
-                boxShadow: 3,
-                zIndex: 1
-            }}>
-                {icon}
-            </Box>
-            <CardContent sx={{ pt: 4, flexGrow: 1, px: { xs: 1, md: 2 } }}>
-                <Typography variant={isMobile ? "h6" : "h5"} align="center" gutterBottom fontWeight="bold" sx={{ mt: 1, mb: 3 }}>
-                    {title}
-                </Typography>
-                
-                {users.length === 0 ? (
-                    <Typography align="center" color="text.secondary">No data yet.</Typography>
-                ) : (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        {users.map((user, index) => (
-                            <Box 
-                                key={user.userID || index} 
-                                onClick={() => handleUserClick(user.userID)}
-                                sx={{ 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    gap: { xs: 1, md: 2 },
-                                    p: 1.5,
-                                    borderRadius: 2,
-                                    bgcolor: index === 0 ? `${color}15` : 'transparent',
-                                    border: index === 0 ? `1px solid ${color}40` : 'none',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s',
-                                    '&:hover': {
-                                        bgcolor: 'action.hover',
-                                        transform: 'translateX(4px)'
-                                    }
-                                }}
-                            >
-                                <Typography 
-                                    variant="h6" 
-                                    fontWeight="bold" 
-                                    color={index === 0 ? color : 'text.secondary'}
-                                    sx={{ minWidth: 24, fontSize: { xs: '1rem', md: '1.25rem' } }}
-                                >
-                                    #{index + 1}
-                                </Typography>
-                                <Avatar 
-                                    src={user.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.firstName)}&background=random`} 
-                                    sx={{ 
-                                        width: index === 0 ? { xs: 40, md: 48 } : 40, 
-                                        height: index === 0 ? { xs: 40, md: 48 } : 40,
-                                        border: index === 0 ? `2px solid ${color}` : 'none'
-                                    }}
-                                />
-                                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                                    <Typography variant="subtitle1" fontWeight="bold" noWrap>
-                                        {user.firstName} {user.lastName}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary" noWrap display="block">
-                                        @{user.username || 'user'}
-                                    </Typography>
-                                </Box>
-                                <Chip 
-                                    label={isMobile ? user[valueKey] : `${user[valueKey]} ${valueLabel}`} 
-                                    size="small" 
-                                    sx={{ 
-                                        bgcolor: index === 0 ? color : 'action.selected',
-                                        color: index === 0 ? 'white' : 'text.primary',
-                                        fontWeight: 'bold',
-                                        minWidth: 'fit-content'
-                                    }} 
-                                />
-                            </Box>
-                        ))}
-                    </Box>
-                )}
-            </CardContent>
-        </Card>
+    if (loading) return (
+        <div style={{ padding: '20px 24px' }}>
+            <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>loading<span className="caret-block" style={{ marginLeft: 4 }} /></div>
+        </div>
     );
 
-    if (loading) {
-        return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
-                <CircularProgress />
-            </Box>
-        );
-    }
-
     return (
-        <Container maxWidth="xl" sx={{ py: 4, pb: { xs: 10, md: 4 } }}>
-            <Box sx={{ mb: { xs: 3, md: 6 }, textAlign: 'center' }}>
-                <Typography variant="h3" component="h1" gutterBottom fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, fontSize: { xs: '2rem', md: '3rem' } }}>
-                    <EmojiEventsIcon fontSize="large" color="primary" />
-                    Leaderboards
-                </Typography>
-                <Typography variant="h6" color="text.secondary" sx={{ display: { xs: 'none', md: 'block' } }}>
-                    Celebrating our top contributors, makers, and volunteers.
-                </Typography>
-            </Box>
+        <div style={{ padding: '20px 24px', maxWidth: 1100 }}>
+            <div style={{ marginBottom: 28 }}>
+                <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}><span style={{ color: 'var(--green)' }}>$</span> ./leaderboard --all</div>
+                <h1 style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.4rem, 3vw, 2rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)', margin: 0 }}>leaderboards</h1>
+                <p style={{ color: 'var(--text-mid)', fontSize: 12, marginTop: 6 }}>celebrating top contributors, makers, and volunteers.</p>
+            </div>
 
             {error && (
-                <Alert severity="error" sx={{ mb: 4 }} onClose={() => setError('')}>
-                    {error}
-                </Alert>
+                <div style={{ border: '1px solid var(--red)', color: 'var(--red)', padding: '10px 14px', marginBottom: 20, fontSize: 12 }}>{error}</div>
             )}
 
-            {isMobile && (
-                <Tabs 
-                    value={activeTab} 
-                    onChange={(e, v) => setActiveTab(v)} 
-                    variant="fullWidth" 
-                    sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
-                >
-                    <Tab icon={<StarIcon />} label="Stake" />
-                    <Tab icon={<AccessTimeIcon />} label="Hours" />
-                    <Tab icon={<GpsFixedIcon />} label="Bounties" />
-                </Tabs>
-            )}
+            {/* Mobile tab selector */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--bd)', marginBottom: 24 }} className="leaderboard-tabs">
+                {BOARDS.map((b, i) => (
+                    <button key={b.key} onClick={() => setActiveTab(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '10px 14px', fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.08em', color: activeTab === i ? b.color : 'var(--text-dim)', borderBottom: activeTab === i ? `2px solid ${b.color}` : '2px solid transparent', marginBottom: -1 }}>
+                        {b.label.toUpperCase()}
+                    </button>
+                ))}
+            </div>
 
-            <Grid container spacing={4}>
-                {/* Top Stake Holders */}
-                {(!isMobile || activeTab === 0) && (
-                    <Grid item xs={12} md={4}>
-                        <LeaderboardCard 
-                            title="Top Stake Holders" 
-                            icon={<StarIcon fontSize="large" />} 
-                            users={data.topStake} 
-                            valueKey="stake" 
-                            valueLabel="Stake"
-                            color="#FFD700" // Gold
-                        />
-                    </Grid>
-                )}
+            {/* Desktop: show all 3 columns; Mobile: show active tab only */}
+            <div style={{ display: 'grid', gap: 24 }} className="leaderboard-grid">
+                {BOARDS.map((board, i) => (
+                    <div key={board.key} className={`leaderboard-col${i}`} style={{ display: activeTab === i ? 'block' : 'none' }}>
+                        <LeaderboardCard board={board} users={data[board.key] || []} onUserClick={uid => router.push(`/dashboard/member/${uid}`)} />
+                    </div>
+                ))}
+            </div>
 
-                {/* Top Volunteers */}
-                {(!isMobile || activeTab === 1) && (
-                    <Grid item xs={12} md={4}>
-                        <LeaderboardCard 
-                            title="Top Volunteers" 
-                            icon={<AccessTimeIcon fontSize="large" />} 
-                            users={data.topVolunteers} 
-                            valueKey="totalHours" 
-                            valueLabel="Hours"
-                            color="#4caf50" // Green
-                        />
-                    </Grid>
-                )}
+            <style>{`
+                @media (min-width: 769px) {
+                    .leaderboard-tabs { display: none !important; }
+                    .leaderboard-grid { grid-template-columns: repeat(3, 1fr) !important; }
+                    .leaderboard-col0, .leaderboard-col1, .leaderboard-col2 { display: block !important; }
+                }
+            `}</style>
+        </div>
+    );
+}
 
-                {/* Top Bounty Hunters */}
-                {(!isMobile || activeTab === 2) && (
-                    <Grid item xs={12} md={4}>
-                        <LeaderboardCard 
-                            title="Top Bounty Hunters" 
-                            icon={<GpsFixedIcon fontSize="large" />} 
-                            users={data.topBountyHunters} 
-                            valueKey="count" 
-                            valueLabel="Bounties"
-                            color="#f44336" // Red
-                        />
-                    </Grid>
-                )}
-            </Grid>
-        </Container>
+function LeaderboardCard({ board, users, onUserClick }) {
+    const { label, valueKey, valueLabel, color } = board;
+    return (
+        <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)' }}>
+            <div className="card-header" style={{ borderBottom: `1px solid ${color}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.12em', color }}>{label.toUpperCase()}</span>
+            </div>
+            <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {users.length === 0 ? (
+                    <div style={{ color: 'var(--text-dim)', fontSize: 12, textAlign: 'center', padding: '16px 0' }}>[no data yet]</div>
+                ) : users.map((user, idx) => (
+                    <div
+                        key={user.userID || idx}
+                        onClick={() => user.userID && onUserClick(user.userID)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', cursor: user.userID ? 'pointer' : 'default', background: idx === 0 ? `${color}10` : 'transparent', border: idx === 0 ? `1px solid ${color}40` : '1px solid transparent' }}
+                    >
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: idx === 0 ? color : 'var(--text-dim)', minWidth: 20 }}>#{idx + 1}</span>
+                        <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--bg-elev)', border: `1px solid ${idx === 0 ? color : 'var(--bd)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--text-mid)', flexShrink: 0 }}>
+                            {user.firstName?.[0]}{user.lastName?.[0]}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.firstName} {user.lastName}</div>
+                            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--mono)' }}>@{user.username || 'member'}</div>
+                        </div>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: idx === 0 ? color : 'var(--text-mid)', border: `1px solid ${idx === 0 ? color : 'var(--bd)'}`, padding: '2px 6px', whiteSpace: 'nowrap' }}>
+                            {user[valueKey]} {valueLabel}
+                        </span>
+                    </div>
+                ))}
+            </div>
+        </div>
     );
 }

@@ -1,312 +1,205 @@
+"use client";
 import React, { useState, useEffect } from 'react';
-import { Box, TextField, Grid, Switch, FormControlLabel, Typography, useTheme, Paper, FormControl, FormLabel, FormGroup, Checkbox, Chip, Autocomplete, Tooltip, Link, Avatar, Alert, Button } from '@mui/material';
-import GitHubIcon from '@mui/icons-material/GitHub';
-import LinkedInIcon from '@mui/icons-material/LinkedIn';
-import TwitterIcon from '@mui/icons-material/Twitter';
-import LanguageIcon from '@mui/icons-material/Language';
-import InstagramIcon from '@mui/icons-material/Instagram';
 import Constants from '@/lib/constants';
 
+const COMMON_INTERESTS = [
+    "3D Printing", "Laser Cutting", "CNC Machining", "Woodworking", "Metalworking",
+    "Electronics", "Arduino", "Raspberry Pi", "Programming", "Web Development",
+    "Graphic Design", "CAD/CAM", "Sewing", "Embroidery", "Vinyl Cutting",
+    "Gaming", "Reading", "Hiking", "Cooking", "Traveling", "Photography",
+    "Music", "Art", "Gardening", "DIY", "Robotics", "Cosplay", "Board Games"
+];
+
+const CREATOR_TYPES = ['Maker', 'Crafter', 'Artist', 'Hacker', 'Other'];
+
+const SOCIAL_PLATFORMS = [
+    { key: 'github', label: 'GitHub URL', icon: '⌥' },
+    { key: 'linkedin', label: 'LinkedIn URL', icon: 'in' },
+    { key: 'twitter', label: 'Twitter/X URL', icon: '𝕏' },
+    { key: 'instagram', label: 'Instagram URL', icon: '◎' },
+    { key: 'website', label: 'Personal Website', icon: '⊕' },
+];
+
 const PublicProfileTab = ({ user, onEdit, setActiveTab }) => {
-    const theme = useTheme();
-    const [skillInput, setSkillInput] = useState('');
+    const [interestInput, setInterestInput] = useState('');
+    const [showSuggestions, setShowSuggestions] = useState(false);
     const [dbBadges, setDbBadges] = useState([]);
 
     useEffect(() => {
-        const fetchBadges = async () => {
-            try {
-                const res = await fetch('/api/v1/badges');
-                if (res.ok) {
-                    const data = await res.json();
-                    setDbBadges(data.badges || []);
-                }
-            } catch (err) {
-                console.error("Failed to fetch badges", err);
-            }
-        };
-        fetchBadges();
+        fetch('/api/v1/badges')
+            .then(res => res.ok ? res.json() : { badges: [] })
+            .then(data => setDbBadges(data.badges || []))
+            .catch(() => {});
     }, []);
 
-    // Helper to get badge details
     const getBadgeDetails = (badgeId) => {
-        // Check DB first
         const dbBadge = dbBadges.find(b => b.id === badgeId);
         if (dbBadge) return dbBadge;
-
-        // Fallback to Constants
-        const badgeKey = Object.keys(Constants.BADGES).find(key => Constants.BADGES[key].id === badgeId);
+        const badgeKey = Object.keys(Constants.BADGES || {}).find(key => Constants.BADGES[key].id === badgeId);
         return badgeKey ? Constants.BADGES[badgeKey] : null;
     };
 
-    const handleCreatorTypeChange = (event) => {
-        const { value, checked } = event.target;
-        const currentTypes = Array.isArray(user.creatorType) ? user.creatorType : (user.creatorType ? [user.creatorType] : []);
-        
-        let newTypes;
-        if (checked) {
-            newTypes = [...currentTypes, value];
-        } else {
-            newTypes = currentTypes.filter((type) => type !== value);
-        }
-        onEdit("creatorType", newTypes);
-    };
-
     const handleSocialChange = (platform, value) => {
-        const currentSocials = user.socials || {};
-        onEdit("socials", { ...currentSocials, [platform]: value });
+        onEdit("socials", { ...(user.socials || {}), [platform]: value });
     };
 
-    const handleInterestsChange = (event, newValue) => {
-        onEdit("interests", newValue);
+    const toggleCreatorType = (type) => {
+        const current = Array.isArray(user.creatorType) ? user.creatorType : (user.creatorType ? [user.creatorType] : []);
+        onEdit("creatorType", current.includes(type) ? current.filter(t => t !== type) : [...current, type]);
     };
 
-    const commonInterests = [
-        "3D Printing", "Laser Cutting", "CNC Machining", "Woodworking", "Metalworking",
-        "Electronics", "Arduino", "Raspberry Pi", "Programming", "Web Development",
-        "Graphic Design", "CAD/CAM", "Sewing", "Embroidery", "Vinyl Cutting",
-        "Gaming", "Reading", "Hiking", "Cooking", "Traveling", "Photography", 
-        "Music", "Art", "Gardening", "DIY", "Robotics", "Cosplay", "Board Games"
-    ];
+    const addInterest = (val) => {
+        const v = val.trim();
+        const current = Array.isArray(user.interests) ? user.interests : [];
+        if (v && !current.includes(v)) onEdit("interests", [...current, v]);
+        setInterestInput('');
+        setShowSuggestions(false);
+    };
+
+    const removeInterest = (val) => {
+        onEdit("interests", (user.interests || []).filter(i => i !== val));
+    };
+
+    const filteredSuggestions = COMMON_INTERESTS.filter(i => i.toLowerCase().includes(interestInput.toLowerCase()) && !(user.interests || []).includes(i));
+
+    const labelStyle = { display: 'block', fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 6 };
 
     if (!user?.membership?.onboardingComplete) {
         return (
-             <Box sx={{ padding: { xs: 2, md: 3 }, backgroundColor: theme.palette.background.paper, color: theme.palette.text.primary }}>
-                <Alert 
-                    severity="info"
-                    action={
-                        <Button color="inherit" size="small" href={`/dashboard/${user.userID}/onboarding`}>
-                            Go to Questionnaire
-                        </Button>
-                    }
-                >
-                    <strong>Onboarding Required:</strong> You must complete the onboarding questionnaire before you can set up your public profile.
-                </Alert>
-            </Box>
+            <div style={{ padding: '20px 24px' }}>
+                <div style={{ border: '1px solid var(--cyan)', color: 'var(--cyan)', padding: '12px 16px', fontSize: 12, fontFamily: 'var(--mono)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                    <span><strong>Onboarding Required:</strong> Complete the onboarding questionnaire before setting up your public profile.</span>
+                    <a href={`/dashboard/${user.userID}/onboarding`} style={{ color: 'var(--cyan)', textDecoration: 'none', fontWeight: 700, fontSize: 11 }}>Go to Questionnaire →</a>
+                </div>
+            </div>
         );
     }
 
     const isProfileComplete = user.bio && user.image;
 
     return (
-        <Box sx={{ padding: { xs: 2, md: 3 }, backgroundColor: theme.palette.background.paper, color: theme.palette.text.primary }}>
-            <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main }}>
+        <div style={{ padding: '20px 24px' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--green)', marginBottom: 4 }}>
                 {isProfileComplete ? "Public Profile Settings" : "Complete Your Public Profile"}
-            </Typography>
-            <Typography variant="body2" paragraph sx={{ color: theme.palette.text.secondary }}>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-mid)', marginBottom: 20 }}>
                 {isProfileComplete ? "Manage what information is visible to other members." : "Tell the community about yourself to get started!"}
-            </Typography>
+            </div>
 
             {!isProfileComplete && (
-                <Box sx={{ mb: 4 }}>
-                    <Alert severity="info" sx={{ mb: 2 }}>
-                        Please complete the questionnaire below to set up your public profile.
-                    </Alert>
+                <div style={{ marginBottom: 24 }}>
+                    <div style={{ border: '1px solid var(--cyan)', color: 'var(--cyan)', padding: '10px 14px', fontSize: 12, fontFamily: 'var(--mono)', marginBottom: 12 }}>
+                        ℹ Please complete the questionnaire below to set up your public profile.
+                    </div>
                     {!user.image && (
-                        <Alert 
-                            severity="warning"
-                            action={
-                                <Button color="inherit" size="small" onClick={() => setActiveTab && setActiveTab(0)}>
-                                    Go to User Details
-                                </Button>
-                            }
-                        >
-                            <strong>Profile Picture Required:</strong> Please go to the "User Details" tab to upload a profile picture.
-                        </Alert>
+                        <div style={{ border: '1px solid var(--amber)', color: 'var(--amber)', padding: '10px 14px', fontSize: 12, fontFamily: 'var(--mono)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                            <span><strong>Profile Picture Required</strong> — go to User Details to upload one.</span>
+                            <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={() => setActiveTab && setActiveTab(0)}>Go to User Details</button>
+                        </div>
                     )}
-                </Box>
+                </div>
             )}
 
             {user.isPublic !== false && user.username && (
-                <Box sx={{ mb: 3, p: 2, bgcolor: 'rgba(0,255,0,0.05)', borderRadius: 1, border: '1px solid rgba(0,255,0,0.2)' }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                        Your Public Profile Link:
-                    </Typography>
-                    <Link href={`/u/${user.username}`} target="_blank" rel="noopener noreferrer" sx={{ wordBreak: 'break-all', fontWeight: 'bold' }}>
+                <div style={{ border: '1px solid rgba(57,255,20,0.2)', background: 'rgba(57,255,20,0.03)', padding: '12px 16px', marginBottom: 20 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>YOUR PUBLIC PROFILE LINK</div>
+                    <a href={`/u/${user.username}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)', fontFamily: 'var(--mono)', fontSize: 12, textDecoration: 'none', wordBreak: 'break-all' }}>
                         {typeof window !== 'undefined' ? `${window.location.origin}/u/${user.username}` : `/u/${user.username}`}
-                    </Link>
-                </Box>
+                    </a>
+                </div>
             )}
 
             {isProfileComplete && (
                 <>
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={user.isPublic !== false} // Default to true if undefined
-                                onChange={(e) => onEdit("isPublic", e.target.checked)}
-                                sx={{
-                                    '& .MuiSwitch-switchBase.Mui-checked': {
-                                        color: theme.palette.primary.main,
-                                    },
-                                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                                        backgroundColor: theme.palette.primary.main,
-                                    },
-                                }}
-                            />
-                        }
-                        label={user.isPublic !== false ? "Profile is Public" : "Profile is Private"}
-                        sx={{ mb: 1, color: theme.palette.text.primary }}
-                    />
-                    <Typography variant="caption" display="block" sx={{ mb: 3, color: theme.palette.text.secondary }}>
-                        Profiles are public by default. You can toggle this off to keep your profile private.
-                    </Typography>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                        <div onClick={() => onEdit("isPublic", user.isPublic === false)} style={{ width: 36, height: 20, background: user.isPublic !== false ? 'var(--green)' : 'var(--bg-1)', border: '1px solid var(--bd)', borderRadius: 10, cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}>
+                            <div style={{ position: 'absolute', top: 2, left: user.isPublic !== false ? 18 : 2, width: 14, height: 14, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
+                        </div>
+                        <span style={{ fontSize: 12, color: 'var(--text)' }}>{user.isPublic !== false ? "Profile is Public" : "Profile is Private"}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 20 }}>Profiles are public by default. Toggle to keep your profile private.</div>
 
-                    {/* Badges Section */}
-                    <Paper sx={{ p: 2, mb: 3, bgcolor: 'rgba(0,0,0,0.02)' }}>
-                        <Typography variant="subtitle1" gutterBottom>Earned Badges</Typography>
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                            {user.badges && user.badges.length > 0 ? (
-                                user.badges.map((badgeId) => {
-                                    const badge = getBadgeDetails(badgeId);
-                                    if (!badge) return null;
-                                    return (
-                                        <Tooltip key={badgeId} title={badge.description}>
-                                            <Chip 
-                                                avatar={badge.imageUrl ? <Avatar src={badge.imageUrl} alt={badge.name} /> : null}
-                                                label={badge.imageUrl ? badge.name : `${badge.icon || ''} ${badge.name}`} 
-                                                variant="outlined" 
-                                                color="primary"
-                                                sx={{ fontWeight: 'bold' }}
-                                            />
-                                        </Tooltip>
-                                    );
-                                })
-                            ) : (
-                                <Typography variant="body2" color="text.secondary">
-                                    No badges earned yet. Complete bounties and volunteer hours to earn them!
-                                </Typography>
+                    <div style={{ border: '1px solid var(--bd)', padding: '16px 20px', marginBottom: 20 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-bright)', marginBottom: 12 }}>Earned Badges</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                            {user.badges && user.badges.length > 0 ? user.badges.map((badgeId) => {
+                                const badge = getBadgeDetails(badgeId);
+                                if (!badge) return null;
+                                return (
+                                    <span key={badgeId} title={badge.description} style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--green)', border: '1px solid var(--green)', padding: '3px 10px' }}>
+                                        {badge.imageUrl ? '' : (badge.icon || '')} {badge.name}
+                                    </span>
+                                );
+                            }) : (
+                                <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No badges earned yet. Complete bounties and volunteer hours to earn them!</div>
                             )}
-                        </Box>
-                    </Paper>
+                        </div>
+                    </div>
                 </>
             )}
 
-            <Grid container spacing={3}>
-                <Grid item xs={12}>
-                    <TextField
-                        fullWidth
-                        label="Bio"
-                        multiline
-                        rows={4}
-                        value={user.bio || ''}
-                        onChange={(e) => onEdit("bio", e.target.value)}
-                        helperText="Tell the community about yourself."
-                    />
-                </Grid>
+            {/* Bio */}
+            <div style={{ marginBottom: 20 }}>
+                <label style={labelStyle}>BIO</label>
+                <textarea className="input" rows={4} style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', fontSize: 12 }} value={user.bio || ''} onChange={e => onEdit("bio", e.target.value)} />
+                <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>Tell the community about yourself.</div>
+            </div>
 
-                <Grid item xs={12}>
-                    <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>Interests & Skills</Typography>
-                    <Autocomplete
-                        multiple
-                        freeSolo
-                        options={commonInterests}
-                        value={Array.isArray(user.interests) ? user.interests : []}
-                        onChange={handleInterestsChange}
-                        renderTags={(value, getTagProps) =>
-                            value.map((option, index) => (
-                                <Chip variant="outlined" label={option} {...getTagProps({ index })} />
-                            ))
-                        }
-                        renderInput={(params) => (
-                            <TextField 
-                                {...params} 
-                                variant="outlined" 
-                                label="Interests & Skills" 
-                                placeholder="Add interests..." 
-                                helperText="Press Enter to add custom interests"
-                            />
-                        )}
-                    />
-                </Grid>
-
-                <Grid item xs={12}>
-                    <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>Social Links</Typography>
-                    <Grid container spacing={2}>
-                        <Grid item xs={12} md={6}>
-                            <Box sx={{ display: 'flex', alignItems: 'flex-end' }}>
-                                <GitHubIcon sx={{ color: 'text.secondary', mr: 1, my: 0.5 }} />
-                                <TextField
-                                    fullWidth
-                                    label="GitHub URL"
-                                    variant="standard"
-                                    value={user.socials?.github || ''}
-                                    onChange={(e) => handleSocialChange('github', e.target.value)}
-                                />
-                            </Box>
-                        </Grid>
-                        <Grid item xs={12} md={6}>
-                            <Box sx={{ display: 'flex', alignItems: 'flex-end' }}>
-                                <LinkedInIcon sx={{ color: 'text.secondary', mr: 1, my: 0.5 }} />
-                                <TextField
-                                    fullWidth
-                                    label="LinkedIn URL"
-                                    variant="standard"
-                                    value={user.socials?.linkedin || ''}
-                                    onChange={(e) => handleSocialChange('linkedin', e.target.value)}
-                                />
-                            </Box>
-                        </Grid>
-                        <Grid item xs={12} md={6}>
-                            <Box sx={{ display: 'flex', alignItems: 'flex-end' }}>
-                                <TwitterIcon sx={{ color: 'text.secondary', mr: 1, my: 0.5 }} />
-                                <TextField
-                                    fullWidth
-                                    label="Twitter/X URL"
-                                    variant="standard"
-                                    value={user.socials?.twitter || ''}
-                                    onChange={(e) => handleSocialChange('twitter', e.target.value)}
-                                />
-                            </Box>
-                        </Grid>
-                        <Grid item xs={12} md={6}>
-                            <Box sx={{ display: 'flex', alignItems: 'flex-end' }}>
-                                <InstagramIcon sx={{ color: 'text.secondary', mr: 1, my: 0.5 }} />
-                                <TextField
-                                    fullWidth
-                                    label="Instagram URL"
-                                    variant="standard"
-                                    value={user.socials?.instagram || ''}
-                                    onChange={(e) => handleSocialChange('instagram', e.target.value)}
-                                />
-                            </Box>
-                        </Grid>
-                        <Grid item xs={12} md={6}>
-                            <Box sx={{ display: 'flex', alignItems: 'flex-end' }}>
-                                <LanguageIcon sx={{ color: 'text.secondary', mr: 1, my: 0.5 }} />
-                                <TextField
-                                    fullWidth
-                                    label="Personal Website"
-                                    variant="standard"
-                                    value={user.socials?.website || ''}
-                                    onChange={(e) => handleSocialChange('website', e.target.value)}
-                                />
-                            </Box>
-                        </Grid>
-                    </Grid>
-                </Grid>
-
-                <Grid item xs={12}>
-                    <FormControl component="fieldset" sx={{ mt: 2 }}>
-                        <FormLabel component="legend">Creator Type</FormLabel>
-                        <FormGroup row>
-                            {['Maker', 'Crafter', 'Artist', 'Hacker', 'Other'].map((type) => (
-                                <FormControlLabel
-                                    key={type}
-                                    control={
-                                        <Checkbox
-                                            checked={(user.creatorType || []).includes(type)}
-                                            onChange={handleCreatorTypeChange}
-                                            value={type}
-                                        />
-                                    }
-                                    label={type}
-                                />
+            {/* Interests */}
+            <div style={{ marginBottom: 20 }}>
+                <label style={labelStyle}>INTERESTS &amp; SKILLS</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                    {(user.interests || []).map(i => (
+                        <span key={i} style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--green)', border: '1px solid var(--green)', padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {i} <button type="button" onClick={() => removeInterest(i)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 10, padding: 0 }}>×</button>
+                        </span>
+                    ))}
+                </div>
+                <div style={{ position: 'relative' }}>
+                    <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12 }} placeholder="Add interests... (press Enter)" value={interestInput}
+                        onChange={e => { setInterestInput(e.target.value); setShowSuggestions(true); }}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (interestInput.trim()) addInterest(interestInput); } }}
+                        onFocus={() => setShowSuggestions(true)} onBlur={() => setTimeout(() => setShowSuggestions(false), 150)} />
+                    {showSuggestions && interestInput && filteredSuggestions.length > 0 && (
+                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-card)', border: '1px solid var(--bd)', zIndex: 100, maxHeight: 180, overflowY: 'auto' }}>
+                            {filteredSuggestions.slice(0, 8).map(s => (
+                                <button key={s} type="button" onMouseDown={() => addInterest(s)} style={{ display: 'block', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '8px 12px', textAlign: 'left', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text)', borderBottom: '1px solid var(--bd)' }}>{s}</button>
                             ))}
-                        </FormGroup>
-                    </FormControl>
-                </Grid>
-            </Grid>
-        </Box>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Social Links */}
+            <div style={{ marginBottom: 20 }}>
+                <label style={labelStyle}>SOCIAL LINKS</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    {SOCIAL_PLATFORMS.map(({ key, label, icon }) => (
+                        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ color: 'var(--text-dim)', fontSize: 13, width: 20, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+                            <div style={{ flex: 1 }}>
+                                <label style={{ ...labelStyle, marginBottom: 4 }}>{label.toUpperCase()}</label>
+                                <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 11 }} value={user.socials?.[key] || ''} onChange={e => handleSocialChange(key, e.target.value)} />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Creator Type */}
+            <div>
+                <label style={labelStyle}>CREATOR TYPE</label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {CREATOR_TYPES.map(type => (
+                        <button key={type} type="button" onClick={() => toggleCreatorType(type)}
+                            className={`btn btn--sm ${(user.creatorType || []).includes(type) ? '' : 'btn--ghost'}`}
+                            style={{ fontSize: 10, borderColor: (user.creatorType || []).includes(type) ? 'var(--green)' : undefined, color: (user.creatorType || []).includes(type) ? 'var(--green)' : undefined }}>
+                            {type}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
     );
 };
 

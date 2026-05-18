@@ -1,422 +1,157 @@
-"use client";
-import React, { useState, useEffect } from 'react';
-import { 
-    Box, Typography, Paper, Chip, IconButton, Tooltip, LinearProgress, Button,
-    Container, Card, CardContent, Stack, Avatar, useTheme, useMediaQuery,
-    TextField, InputAdornment, Grid
-} from '@mui/material';
-import { DataGrid, GridToolbar } from '@mui/x-data-grid';
-import EditIcon from '@mui/icons-material/Edit';
-import EmailIcon from '@mui/icons-material/Email';
-import WarningIcon from '@mui/icons-material/Warning';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import CheckIcon from '@mui/icons-material/Check';
-import CloseIcon from '@mui/icons-material/Close';
-import SearchIcon from '@mui/icons-material/Search';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import MemberDialog from '../../../components/admin/MemberDialog';
+'use client';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import MemberDialog from '../../../components/admin/MemberDialog';
+
+const STATUS_COLOR = { active: 'var(--green)', probation: 'var(--amber)', suspended: 'var(--red)', registered: 'var(--text-dim)' };
 
 export default function VolunteersPage() {
     const { data: session, status } = useSession();
     const router = useRouter();
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedUser, setSelectedUser] = useState(null);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [search, setSearch] = useState('');
+    const [toast, setToast] = useState(null);
 
     useEffect(() => {
-        if (status === 'unauthenticated') {
-            router.push('/auth/signin');
-        } else if (status === 'authenticated') {
-            if (session.user.role !== 'admin') {
-                router.push('/dashboard');
-            } else {
-                fetchUsers();
-            }
+        if (status === 'unauthenticated') router.push('/auth/signin');
+        else if (status === 'authenticated') {
+            if (session.user.role !== 'admin') router.push('/dashboard');
+            else fetchUsers();
         }
     }, [status, session, router]);
 
+    const showToast = (msg, color = 'var(--green)') => { setToast({ msg, color }); setTimeout(() => setToast(null), 3000); };
+
     const fetchUsers = async () => {
         try {
-            const response = await fetch('/api/v1/users');
-            if (response.ok) {
-                const data = await response.json();
-                setUsers(data.users || []);
-            }
-        } catch (error) {
-            console.error("Failed to fetch users", error);
-        } finally {
-            setLoading(false);
-        }
+            const res = await fetch('/api/v1/users');
+            if (res.ok) { const data = await res.json(); setUsers(data.users || []); }
+        } catch {}
+        finally { setLoading(false); }
     };
 
-    const handleEditClick = (user) => {
-        setSelectedUser(user);
-        setDialogOpen(true);
-    };
-
-    const handleUserUpdate = (updatedUser) => {
-        setUsers(prev => prev.map(u => u.userID === updatedUser.userID ? updatedUser : u));
-    };
+    const handleUserUpdate = (updatedUser) => setUsers(prev => prev.map(u => u.userID === updatedUser.userID ? updatedUser : u));
 
     const handleLogAction = async (user, logId, action) => {
+        const updatedLogs = user.membership.volunteerLog.map(log =>
+            log.id === logId ? { ...log, status: action === 'approve' ? 'approved' : 'rejected', verifiedBy: session.user.firstName } : log
+        );
         try {
-            const updatedLogs = user.membership.volunteerLog.map(log => {
-                if (log.id === logId) {
-                    return {
-                        ...log,
-                        status: action === 'approve' ? 'approved' : 'rejected',
-                        verifiedBy: session.user.firstName
-                    };
-                }
-                return log;
-            });
-
-            const response = await fetch(`/api/v1/users?userID=${user.userID}`, {
+            const res = await fetch(`/api/v1/users?userID=${user.userID}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    membership: {
-                        ...user.membership,
-                        volunteerLog: updatedLogs
-                    }
-                })
+                body: JSON.stringify({ membership: { ...user.membership, volunteerLog: updatedLogs } }),
             });
-
-            if (response.ok) {
-                const data = await response.json();
-                handleUserUpdate(data.user);
-            }
-        } catch (error) {
-            console.error("Failed to update log status", error);
-        }
+            if (res.ok) { const d = await res.json(); handleUserUpdate(d.user); showToast(`Log ${action}d.`); }
+        } catch { showToast('Error.', 'var(--red)'); }
     };
 
     const getMonthlyHours = (user) => {
         const logs = user.membership?.volunteerLog || [];
-        const currentMonth = new Date().getMonth();
-        const currentYear = new Date().getFullYear();
-        return logs
-            .filter(log => {
-                const d = new Date(log.date);
-                // Only count approved logs
-                const isApproved = !log.status || log.status === 'approved';
-                return isApproved && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-            })
-            .reduce((acc, log) => acc + (log.hours || 0), 0);
+        const now = new Date();
+        return logs.filter(l => { const d = new Date(l.date); const ok = !l.status || l.status === 'approved'; return ok && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }).reduce((a, l) => a + (l.hours || 0), 0);
     };
 
-    // Extract pending logs
-    const pendingLogs = users.flatMap(user => 
-        (user.membership?.volunteerLog || [])
-            .filter(log => log.status === 'pending')
-            .map(log => ({ ...log, user }))
-    );
+    const pendingLogs = users.flatMap(u => (u.membership?.volunteerLog || []).filter(l => l.status === 'pending').map(l => ({ ...l, user: u })));
 
-    const filteredUsers = users.filter(user => 
-        user.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    const filtered = users.filter(u =>
+        !search || u.firstName?.toLowerCase().includes(search.toLowerCase()) || u.lastName?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase())
     );
-
-    const columns = [
-        { 
-            field: 'fullName', 
-            headerName: 'Member', 
-            flex: 1,
-            valueGetter: (value, row) => `${row.firstName} ${row.lastName}`
-        },
-        {
-            field: 'membershipStatus',
-            headerName: 'Status',
-            width: 120,
-            valueGetter: (value, row) => row.membership?.status || 'N/A',
-            renderCell: (params) => {
-                const status = params.value;
-                let color = 'default';
-                if (status === 'active') color = 'success';
-                if (status === 'probation') color = 'warning';
-                if (status === 'suspended') color = 'error';
-                return <Chip label={status} color={color} size="small" variant="outlined" />;
-            }
-        },
-        {
-            field: 'monthlyHours',
-            headerName: 'Current Month',
-            width: 130,
-            valueGetter: (value, row) => getMonthlyHours(row),
-            renderCell: (params) => {
-                const hours = params.value;
-                const target = 4;
-                const progress = Math.min((hours / target) * 100, 100);
-                const isComplete = hours >= target;
-                
-                return (
-                    <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box sx={{ flex: 1 }}>
-                            <LinearProgress 
-                                variant="determinate" 
-                                value={progress} 
-                                color={isComplete ? "success" : "warning"}
-                                sx={{ height: 8, borderRadius: 4 }}
-                            />
-                        </Box>
-                        <Typography variant="caption" sx={{ minWidth: 35 }}>{hours}/{target}</Typography>
-                    </Box>
-                );
-            }
-        },
-        {
-            field: 'hoursNeeded',
-            headerName: 'Needed',
-            width: 100,
-            valueGetter: (value, row) => {
-                const hours = getMonthlyHours(row);
-                return Math.max(0, 4 - hours);
-            },
-            renderCell: (params) => {
-                return params.value > 0 ? (
-                    <Typography color="error.main" fontWeight="bold">{params.value} hrs</Typography>
-                ) : (
-                    <CheckCircleIcon color="success" fontSize="small" />
-                );
-            }
-        },
-        {
-            field: 'lastVolunteerDate',
-            headerName: 'Last Active',
-            width: 150,
-            valueGetter: (value, row) => {
-                const logs = row.membership?.volunteerLog || [];
-                if (logs.length === 0) return null;
-                // Sort by date desc
-                const sorted = [...logs].sort((a, b) => new Date(b.date) - new Date(a.date));
-                return sorted[0].date;
-            },
-            renderCell: (params) => {
-                if (!params.value) return <Typography variant="caption" color="text.secondary">Never</Typography>;
-                return new Date(params.value).toLocaleDateString();
-            }
-        },
-        {
-            field: 'actions',
-            headerName: 'Actions',
-            width: 150,
-            sortable: false,
-            renderCell: (params) => (
-                <Box>
-                    <Tooltip title="Contact Member">
-                        <IconButton 
-                            size="small" 
-                            href={`mailto:${params.row.email}`}
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <EmailIcon fontSize="small" />
-                        </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Manage Member">
-                        <IconButton size="small" onClick={() => handleEditClick(params.row)}>
-                            <EditIcon fontSize="small" />
-                        </IconButton>
-                    </Tooltip>
-                </Box>
-            )
-        }
-    ];
 
     return (
-        <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 }, px: { xs: 2, md: 3 } }}>
-            <Box sx={{ mb: 4 }}>
-                <Typography variant="h4" fontWeight="bold" sx={{ fontSize: { xs: '1.75rem', md: '2.125rem' } }}>
-                    Volunteer Compliance
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                    Track monthly volunteer hours and manage member status. Requirement: 4 hours/month.
-                </Typography>
-            </Box>
+        <div style={{ padding: '20px 24px', maxWidth: 1100 }}>
+            {toast && <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 400, background: 'var(--bg-card)', border: `1px solid ${toast.color}`, color: toast.color, padding: '12px 18px', fontFamily: 'var(--mono)', fontSize: 12 }}>{toast.msg}</div>}
+
+            <div style={{ marginBottom: 28 }}>
+                <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}><span style={{ color: 'var(--green)' }}>$</span> ./volunteers --compliance</div>
+                <h1 style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.4rem, 3vw, 2rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)', margin: 0 }}>volunteer compliance</h1>
+                <p style={{ color: 'var(--text-mid)', fontSize: 12, marginTop: 6 }}>track monthly volunteer hours. requirement: 4 hours/month.</p>
+            </div>
 
             {pendingLogs.length > 0 && (
-                <Paper sx={{ mb: 4, p: 2, border: '1px solid #ed6c02', bgcolor: '#fff4e5' }}>
-                    <Typography variant="h6" color="warning.main" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <WarningIcon /> Pending Approvals ({pendingLogs.length})
-                    </Typography>
-                    <Stack spacing={1}>
-                        {pendingLogs.map((item) => (
-                            <Paper key={item.id} elevation={0} sx={{ p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
-                                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 2 }}>
-                                    <Box>
-                                        <Typography variant="subtitle2" fontWeight="bold">{item.user.firstName} {item.user.lastName}</Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            {item.hours} hrs on {new Date(item.date).toLocaleDateString()} - "{item.description}"
-                                        </Typography>
-                                    </Box>
-                                    <Box sx={{ display: 'flex', gap: 1, width: { xs: '100%', sm: 'auto' } }}>
-                                        <Button 
-                                            size="small" 
-                                            variant="contained" 
-                                            color="success" 
-                                            startIcon={<CheckIcon />}
-                                            onClick={() => handleLogAction(item.user, item.id, 'approve')}
-                                            fullWidth={isMobile}
-                                        >
-                                            Approve
-                                        </Button>
-                                        <Button 
-                                            size="small" 
-                                            variant="outlined" 
-                                            color="error" 
-                                            startIcon={<CloseIcon />}
-                                            onClick={() => handleLogAction(item.user, item.id, 'reject')}
-                                            fullWidth={isMobile}
-                                        >
-                                            Reject
-                                        </Button>
-                                    </Box>
-                                </Box>
-                            </Paper>
+                <div style={{ border: '1px solid var(--amber)', background: 'rgba(255,170,0,0.05)', padding: '14px 18px', marginBottom: 24 }}>
+                    <div style={{ fontSize: 10, letterSpacing: '0.14em', color: 'var(--amber)', marginBottom: 12 }}>⚠ PENDING_APPROVALS ({pendingLogs.length})</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {pendingLogs.map(item => (
+                            <div key={item.id} style={{ background: 'var(--bg-card)', border: '1px solid var(--bd)', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                                <div>
+                                    <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>{item.user.firstName} {item.user.lastName}</div>
+                                    <div style={{ fontSize: 11, color: 'var(--text-mid)' }}>{item.hours}h on {new Date(item.date).toLocaleDateString()} — "{item.description}"</div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <button className="btn btn--sm" style={{ fontSize: 9, borderColor: 'var(--green)', color: 'var(--green)' }} onClick={() => handleLogAction(item.user, item.id, 'approve')}>✓ approve</button>
+                                    <button className="btn btn--sm" style={{ fontSize: 9, borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => handleLogAction(item.user, item.id, 'reject')}>✕ reject</button>
+                                </div>
+                            </div>
                         ))}
-                    </Stack>
-                </Paper>
+                    </div>
+                </div>
             )}
 
-            {isMobile ? (
-                <Box>
-                    <TextField
-                        fullWidth
-                        placeholder="Search volunteers..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        sx={{ mb: 3, bgcolor: 'background.paper' }}
-                        InputProps={{
-                            startAdornment: (
-                                <InputAdornment position="start">
-                                    <SearchIcon color="action" />
-                                </InputAdornment>
-                            ),
-                        }}
-                    />
-                    <Stack spacing={2}>
-                        {filteredUsers.map((user) => {
-                            const monthlyHours = getMonthlyHours(user);
-                            const hoursNeeded = Math.max(0, 4 - monthlyHours);
-                            const progress = Math.min((monthlyHours / 4) * 100, 100);
-                            const isComplete = monthlyHours >= 4;
-                            const status = user.membership?.status || 'N/A';
-                            
-                            // Get last active date
-                            const logs = user.membership?.volunteerLog || [];
-                            const sortedLogs = [...logs].sort((a, b) => new Date(b.date) - new Date(a.date));
-                            const lastActive = sortedLogs.length > 0 ? new Date(sortedLogs[0].date).toLocaleDateString() : 'Never';
+            <div style={{ marginBottom: 16 }}>
+                <input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder="search members..." style={{ width: '100%', maxWidth: 320, boxSizing: 'border-box', fontSize: 12 }} />
+            </div>
 
-                            return (
-                                <Card key={user.userID} elevation={2}>
-                                    <CardContent>
-                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                                            <Box sx={{ display: 'flex', gap: 2 }}>
-                                                <Avatar sx={{ bgcolor: theme.palette.primary.main }}>
-                                                    {user.firstName?.[0]}{user.lastName?.[0]}
-                                                </Avatar>
-                                                <Box>
-                                                    <Typography variant="subtitle1" fontWeight="bold">
-                                                        {user.firstName} {user.lastName}
-                                                    </Typography>
-                                                    <Chip 
-                                                        label={status} 
-                                                        size="small" 
-                                                        color={status === 'active' ? 'success' : status === 'probation' ? 'warning' : 'error'}
-                                                        variant="outlined"
-                                                        sx={{ height: 20, fontSize: '0.7rem' }}
-                                                    />
-                                                </Box>
-                                            </Box>
-                                            <Box>
-                                                <IconButton size="small" href={`mailto:${user.email}`}>
-                                                    <EmailIcon fontSize="small" />
-                                                </IconButton>
-                                                <IconButton size="small" onClick={() => handleEditClick(user)}>
-                                                    <EditIcon fontSize="small" />
-                                                </IconButton>
-                                            </Box>
-                                        </Box>
-
-                                        <Box sx={{ mb: 2 }}>
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                                <Typography variant="caption" color="text.secondary">Monthly Progress</Typography>
-                                                <Typography variant="caption" fontWeight="bold">
-                                                    {monthlyHours}/4 hrs
-                                                </Typography>
-                                            </Box>
-                                            <LinearProgress 
-                                                variant="determinate" 
-                                                value={progress} 
-                                                color={isComplete ? "success" : "warning"}
-                                                sx={{ height: 8, borderRadius: 4 }}
-                                            />
-                                            {hoursNeeded > 0 ? (
-                                                <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
-                                                    {hoursNeeded} hours still needed
-                                                </Typography>
-                                            ) : (
-                                                <Typography variant="caption" color="success.main" sx={{ mt: 0.5, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                    <CheckCircleIcon fontSize="inherit" /> Monthly goal met
-                                                </Typography>
-                                            )}
-                                        </Box>
-
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', pt: 1, borderTop: 1, borderColor: 'divider' }}>
-                                            <CalendarTodayIcon fontSize="small" />
-                                            <Typography variant="body2">
-                                                Last Active: {lastActive}
-                                            </Typography>
-                                        </Box>
-                                    </CardContent>
-                                </Card>
-                            );
-                        })}
-                    </Stack>
-                </Box>
+            {loading ? (
+                <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>loading<span className="caret-block" style={{ marginLeft: 4 }} /></div>
             ) : (
-                <Paper sx={{ height: 600, width: '100%' }}>
-                    <DataGrid
-                        rows={users}
-                        columns={columns}
-                        getRowId={(row) => row.userID}
-                        loading={loading}
-                        slots={{ toolbar: GridToolbar }}
-                        slotProps={{
-                            toolbar: {
-                                showQuickFilter: true,
-                            },
-                        }}
-                        initialState={{
-                            sorting: {
-                                sortModel: [{ field: 'hoursNeeded', sort: 'desc' }],
-                            },
-                            filter: {
-                                filterModel: {
-                                    items: [
-                                        { field: 'membershipStatus', operator: 'isAnyOf', value: ['active', 'probation'] }
-                                    ]
-                                }
-                            }
-                        }}
-                    />
-                </Paper>
+                <div style={{ overflowX: 'auto' }}>
+                    <table className="term-table" style={{ width: '100%' }}>
+                        <thead>
+                            <tr>
+                                <th>MEMBER</th>
+                                <th>STATUS</th>
+                                <th>MONTH_HRS</th>
+                                <th>NEEDED</th>
+                                <th>LAST_ACTIVE</th>
+                                <th>ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filtered.length === 0 ? (
+                                <tr><td colSpan={6} style={{ color: 'var(--text-dim)', textAlign: 'center' }}>no members found</td></tr>
+                            ) : filtered.map(u => {
+                                const monthHrs = getMonthlyHours(u);
+                                const needed = Math.max(0, 4 - monthHrs);
+                                const ms = u.membership?.status || 'N/A';
+                                const logs = u.membership?.volunteerLog || [];
+                                const sorted = [...logs].sort((a, b) => new Date(b.date) - new Date(a.date));
+                                const lastActive = sorted.length > 0 ? new Date(sorted[0].date).toLocaleDateString() : 'never';
+                                return (
+                                    <tr key={u.userID}>
+                                        <td style={{ color: 'var(--text)', fontWeight: 600 }}>{u.firstName} {u.lastName}</td>
+                                        <td><span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: STATUS_COLOR[ms] || 'var(--text-dim)', border: `1px solid ${STATUS_COLOR[ms] || 'var(--bd)'}`, padding: '2px 6px' }}>{ms}</span></td>
+                                        <td>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                <div style={{ width: 60, height: 4, background: 'var(--bg-elev)', position: 'relative', overflow: 'hidden' }}>
+                                                    <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${Math.min(100, (monthHrs / 4) * 100)}%`, background: monthHrs >= 4 ? 'var(--green)' : 'var(--amber)', transition: 'width 0.3s' }} />
+                                                </div>
+                                                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: monthHrs >= 4 ? 'var(--green)' : 'var(--amber)' }}>{monthHrs}/4</span>
+                                            </div>
+                                        </td>
+                                        <td style={{ fontFamily: 'var(--mono)', fontSize: 11, color: needed > 0 ? 'var(--red)' : 'var(--green)' }}>
+                                            {needed > 0 ? `${needed}h` : '✓'}
+                                        </td>
+                                        <td style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--mono)' }}>{lastActive}</td>
+                                        <td>
+                                            <div style={{ display: 'flex', gap: 8 }}>
+                                                <a href={`mailto:${u.email}`} className="btn btn--ghost btn--sm" style={{ fontSize: 9 }}>email</a>
+                                                <button className="btn btn--ghost btn--sm" style={{ fontSize: 9 }} onClick={() => { setSelectedUser(u); setDialogOpen(true); }}>manage</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
             )}
 
-            <MemberDialog 
-                open={dialogOpen} 
-                onClose={() => setDialogOpen(false)} 
-                user={selectedUser}
-                onUpdate={handleUserUpdate}
-            />
-        </Container>
+            <MemberDialog open={dialogOpen} onClose={() => setDialogOpen(false)} user={selectedUser} onUpdate={handleUserUpdate} />
+        </div>
     );
 }

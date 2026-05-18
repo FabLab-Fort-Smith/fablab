@@ -1,9 +1,7 @@
-"use client";
-import React, { useState, useEffect } from 'react';
+'use client';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { Box, Typography, Button, Breadcrumbs, Link, Snackbar, useTheme, Fab, Zoom, Alert } from '@mui/material';
-import SaveIcon from '@mui/icons-material/Save';
 import UserHeader from '@/app/components/profile/header';
 import UserDetailsForm from '@/app/components/profile/details';
 import UserImage from '@/app/components/profile/image';
@@ -13,141 +11,105 @@ import PublicProfileTab from '@/app/components/profile/tabs/publicProfile';
 import SettingsTab from '@/app/components/profile/tabs/settings';
 import LoadingTerminal from '@/app/components/LoadingTerminal';
 
-const ViewUserPage = () => {
+const LOADING_STEPS = [
+    'Initializing...', 'Loading user data...', 'Fetching membership plans...',
+    'Connecting to database...', 'Retrieving session information...', 'Ready.',
+];
+
+function StatusToast({ status, onClose }) {
+    if (!status) return null;
+    const color = status.type === 'success' ? 'var(--green)' : status.type === 'error' ? 'var(--red)' : 'var(--amber)';
+    return (
+        <div style={{
+            position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+            border: `1px solid ${color}`, background: 'var(--bg-card)', color,
+            padding: '10px 18px', fontSize: 11, fontFamily: 'var(--mono)',
+            letterSpacing: '0.06em', zIndex: 200, display: 'flex', gap: 16, alignItems: 'center',
+            boxShadow: `0 0 16px ${color}40`, whiteSpace: 'nowrap',
+        }}>
+            <span>[{status.type.toUpperCase()}]</span>
+            <span style={{ color: 'var(--text)' }}>{status.message}</span>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 14 }}>×</button>
+        </div>
+    );
+}
+
+export default function ViewUserPage() {
     const { data: session } = useSession();
     const params = useParams();
     const searchParams = useSearchParams();
-    const [userID, setUserID] = useState(params?.userID);
+    const router = useRouter();
+    const [userID] = useState(params?.userID);
     const [user, setUser] = useState(null);
     const [updatedUser, setUpdatedUser] = useState({});
-    const [snackbarOpen, setSnackbarOpen] = useState(false);
-    const [snackbarMessage, setSnackbarMessage] = useState('');
-    const [snackbarSeverity, setSnackbarSeverity] = useState('info');
+    const [toast, setToast] = useState(null);
     const [hasChanges, setHasChanges] = useState(false);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState(parseInt(searchParams.get('tab')) || 0);
-    const [open, setOpen] = useState(false);
-    const router = useRouter();
-    const theme = useTheme();
-
-    const loadingSteps = [
-        'Initializing...',
-        'Loading user data...',
-        'Fetching membership plans...',
-        'Connecting to database...',
-        'Retrieving session information...',
-        'Finalizing setup...',
-        'Almost there...'
-    ];
 
     useEffect(() => {
-        const fetchUser = async () => {
-            if (userID) {
-                try {
-                    console.log("🔍 Fetching User Data for ID:", userID);
-                    const query = {
-                        property: 'userID',
-                        value: userID
-                    }
-                    const fetchedUser = await UsersService.getUserByQuery(query);
-                    console.log("✅ Fetched User Data:", fetchedUser);
-                    setUser(fetchedUser);
-                    setUpdatedUser(fetchedUser);
-                    setLoading(false);
-                } catch (error) {
-                    console.error("❌ Failed to fetch user:", error);
-                }
-            }
-        };
-
-        fetchUser();
+        if (!userID) return;
+        UsersService.getUserByQuery({ property: 'userID', value: userID })
+            .then(fetchedUser => { setUser(fetchedUser); setUpdatedUser(fetchedUser); })
+            .catch(() => setToast({ type: 'error', message: 'Failed to load user data.' }))
+            .finally(() => setLoading(false));
     }, [userID]);
 
-    const handleTabChange = (event, newValue) => {
-        console.log("🟡 Tab Changed:", newValue);
-        setActiveTab(newValue);
-    };
-
     const handleEditChange = (field, value) => {
-        console.log(`✏️ Editing Field: ${field}, Value: ${value}`);
         setUpdatedUser(prev => ({ ...prev, [field]: value }));
         setHasChanges(true);
-        setSnackbarMessage("⚠️ Unsaved changes detected! Please save.");
-        setSnackbarSeverity('warning');
-        setSnackbarOpen(true);
+        setToast({ type: 'warning', message: 'Unsaved changes — save before leaving.' });
     };
 
     const handleMembershipUpdate = (updatedUserData) => {
-        console.log("✅ Membership Updated:", updatedUserData);
         setUser(updatedUserData);
         setUpdatedUser(updatedUserData);
-        setSnackbarMessage("Membership updated successfully!");
-        setSnackbarSeverity('success');
-        setSnackbarOpen(true);
+        setToast({ type: 'success', message: 'Membership updated successfully.' });
     };
 
     const handleSaveChanges = async () => {
+        if (!userID) { setToast({ type: 'error', message: 'User ID missing.' }); return; }
+        setLoading(true);
         try {
-            if (!userID) {
-                console.error("❌ Missing User ID");
-                setSnackbarMessage("❌ User ID is missing.");
-                setSnackbarSeverity('error');
-                setSnackbarOpen(true);
-                return;
-            }
-
-            setLoading(true);
-            
-            // If on Public Profile tab (index 2), mark profile as completed
             const dataToSave = { ...updatedUser };
             if (activeTab === 2) {
                 dataToSave.profileCompleted = true;
-                // Ensure isPublic defaults to true if not set, though the switch handles the UI
                 if (dataToSave.isPublic === undefined) dataToSave.isPublic = true;
             }
-
-            console.log("📦 Saving Updated User Data:", dataToSave);
             await UsersService.updateUser(userID, dataToSave);
-
-            setSnackbarMessage("✅ User saved successfully!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
+            setToast({ type: 'success', message: 'Profile saved.' });
             setHasChanges(false);
-            
-            // Update local state
             setUser(dataToSave);
             setUpdatedUser(dataToSave);
         } catch (error) {
-            console.error("❌ Error Saving User:", error);
-            setSnackbarMessage(`❌ Error saving user: ${error.message}`);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
+            setToast({ type: 'error', message: `Save failed: ${error.message}` });
         } finally {
             setLoading(false);
         }
     };
 
-    const handleNewRepair = (newRepair) => {
-        console.log("🛠️ New Repair Added:", newRepair);
-        setRepairs((prev) => [...prev, newRepair]);
-    };
-
-    if (loading) {
-        console.log("⏳ Loading User Data...");
-        return <LoadingTerminal steps={loadingSteps} />;
-    }
+    if (loading) return <LoadingTerminal steps={LOADING_STEPS} />;
 
     return (
-        <Box sx={{ padding: { xs: 2, md: 4 }, backgroundColor: theme.palette.background.default, color: theme.palette.text.primary }}>
-            {/* Breadcrumbs */}
-            <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2, color: theme.palette.text.primary }}>
-                <Link underline="hover" color="inherit" onClick={() => router.push('/dashboard')} sx={{ cursor: 'pointer', color: theme.palette.text.primary }}>
-                    Dashboard
-                </Link>
-                <Typography sx={{ color: theme.palette.primary }}>Profile</Typography>
-            </Breadcrumbs>
+        <div style={{ padding: '20px 24px', maxWidth: 1100 }}>
+            {/* Breadcrumb */}
+            <div style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.12em', marginBottom: 16, display: 'flex', gap: 8 }}>
+                <span
+                    style={{ color: 'var(--green)', cursor: 'pointer', textDecoration: 'none' }}
+                    onClick={() => router.push('/dashboard')}
+                >dashboard</span>
+                <span>/</span>
+                <span>profile</span>
+            </div>
 
-            {/* User Header with Tabs Integrated */}
+            {/* Profile completion nudge */}
+            {(!updatedUser?.bio || !updatedUser?.image) && (
+                <div style={{ border: '1px solid var(--green)', background: 'rgba(57,255,20,0.05)', padding: '10px 14px', fontSize: 11, color: 'var(--green)', letterSpacing: '0.06em', marginBottom: 20 }}>
+                    <span style={{ letterSpacing: '0.1em' }}>[REWARD]</span> Complete your bio and profile picture to earn <strong>10 Stake</strong>.
+                </div>
+            )}
+
+            {/* Header with tabs */}
             <UserHeader
                 onSave={handleSaveChanges}
                 hasChanges={hasChanges}
@@ -156,92 +118,46 @@ const ViewUserPage = () => {
                 setActiveTab={setActiveTab}
             />
 
-            {/* Profile Completion Reward Alert */}
-            {(!updatedUser?.bio || !updatedUser?.image) && (
-                <Alert severity="info" sx={{ mt: 2, mx: { xs: 2, md: 0 } }}>
-                    ✨ <strong>Complete your profile</strong> (Bio & Profile Picture) to earn <strong>10 Stake</strong>!
-                </Alert>
-            )}
+            {/* Tab content */}
+            <div style={{ marginTop: 24 }}>
+                {activeTab === 0 && (
+                    <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                        <UserImage
+                            picture={updatedUser.image || session?.user?.image}
+                            onUpload={(url) => handleEditChange('image', url)}
+                            editable
+                        />
+                        <div style={{ flex: 1, minWidth: 280 }}>
+                            <UserDetailsForm user={updatedUser} onEdit={handleEditChange} />
+                        </div>
+                    </div>
+                )}
+                {activeTab === 1 && <MembershipTab user={user} onUpdateMembership={handleMembershipUpdate} />}
+                {activeTab === 2 && <PublicProfileTab user={updatedUser} onEdit={handleEditChange} setActiveTab={setActiveTab} />}
+                {activeTab === 3 && <SettingsTab user={updatedUser} />}
+            </div>
 
-            {/* Tab Content Handling */}
-            {/* User Details Tab */}
-            {activeTab === 0 && (
-                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'center', md: 'flex-start' }, gap: 4, mt: 3 }}>
-                    <UserImage 
-                        picture={updatedUser.image || session?.user?.image} 
-                        onUpload={(url) => handleEditChange('image', url)}
-                        editable={true}
-                    />
-                    <UserDetailsForm user={updatedUser} onEdit={handleEditChange} />
-                </Box>
-            )}
-            {/* Membership Tab */}
-            {activeTab === 1 && (
-                <Box sx={{ mt: 3 }}>
-                  <MembershipTab user={user} onUpdateMembership={handleMembershipUpdate} />
-                </Box>
-            )}
-            {/* Public Profile Tab */}
-            {activeTab === 2 && (
-                <Box sx={{ mt: 3 }}>
-                  <PublicProfileTab user={updatedUser} onEdit={handleEditChange} setActiveTab={setActiveTab} />
-                </Box>
-            )}
-            {/* Settings Tab */}
-            {activeTab === 3 && (
-                <Box sx={{ mt: 3 }}>
-                  <SettingsTab user={updatedUser} />
-                </Box>
-            )}
-            {/* Mobile Save FAB */}
-            <Zoom in={hasChanges}>
-                <Fab 
-                    color="primary" 
-                    aria-label="save" 
+            {/* Mobile sticky save button */}
+            {hasChanges && (
+                <button
+                    className="btn btn--filled"
                     onClick={handleSaveChanges}
-                    sx={{ 
-                        position: 'fixed', 
-                        bottom: 24, 
-                        right: 24, 
-                        display: { xs: 'flex', md: 'none' } 
+                    style={{
+                        position: 'fixed', bottom: 24, right: 24,
+                        fontSize: 11, zIndex: 150,
+                        display: 'none',
                     }}
+                    id="mobile-save-fab"
                 >
-                    <SaveIcon />
-                </Fab>
-            </Zoom>
+                    $ save
+                </button>
+            )}
 
-            {/* Snackbar */}
-            <Snackbar
-                open={snackbarOpen}
-                autoHideDuration={6000}
-                onClose={() => setSnackbarOpen(false)}
-                message={snackbarMessage}
-                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-                ContentProps={{
-                    sx: {
-                        backgroundColor: snackbarSeverity === "success"
-                            ? "green"
-                            : snackbarSeverity === "error"
-                                ? "red"
-                                : "orange",
-                        color: "white",
-                        fontWeight: "bold"
-                    }
-                }}
-                action={
-                    hasChanges && snackbarSeverity === "warning" ? (
-                        <Button color="inherit" size="small" onClick={handleSaveChanges}>
-                            Save Now
-                        </Button>
-                    ) : (
-                        <Button color="inherit" size="small" onClick={() => setSnackbarOpen(false)}>
-                            Close
-                        </Button>
-                    )
-                }
-            />
-        </Box>
+            <StatusToast status={toast} onClose={() => setToast(null)} />
+
+            <style>{`
+                @media (max-width: 768px) { #mobile-save-fab { display: flex !important; } }
+            `}</style>
+        </div>
     );
-};
-
-export default ViewUserPage;
+}

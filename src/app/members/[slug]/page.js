@@ -1,9 +1,9 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Box, Container, CircularProgress, Alert } from '@mui/material';
 import { useSession } from 'next-auth/react';
 import { useParams } from 'next/navigation';
 import UserProfileView from '@/app/components/profile/UserProfileView';
+import LoadingTerminal from '@/app/components/LoadingTerminal';
 
 export default function PublicProfilePage() {
     const { slug } = useParams();
@@ -15,10 +15,7 @@ export default function PublicProfilePage() {
     useEffect(() => {
         const fetchUser = async () => {
             try {
-                // Try fetching by username first
                 let res = await fetch(`/api/v1/users?username=${slug}`);
-                
-                // If not found, try fetching by userID (backward compatibility)
                 if (!res.ok && res.status === 404) {
                     res = await fetch(`/api/v1/users?userID=${slug}`);
                 }
@@ -26,17 +23,12 @@ export default function PublicProfilePage() {
                 if (res.ok) {
                     const data = await res.json();
                     const userProfile = data.user;
-                    
-                    if (!userProfile) {
-                        setError("User not found.");
-                        return;
-                    }
+                    if (!userProfile) { setError("User not found."); return; }
 
-                    // Check if profile is public or if viewer is admin/self
                     const isSelf = session?.user?.userID === userProfile.userID;
                     const isAdmin = session?.user?.role === 'admin';
                     const isActiveMember = ['active', 'probation'].includes(userProfile.membership?.status) || userProfile.membership?.isWaived === true || userProfile.membership?.subscriptionStatus === 'ACTIVE';
-                    
+
                     if ((userProfile.isPublic !== false && isActiveMember) || isSelf || isAdmin) {
                         setUser(userProfile);
                     } else {
@@ -56,13 +48,17 @@ export default function PublicProfilePage() {
         if (slug) fetchUser();
     }, [slug, session]);
 
-    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress /></Box>;
-    if (error) return <Container maxWidth="md" sx={{ mt: 4 }}><Alert severity="error">{error}</Alert></Container>;
+    if (loading) return <LoadingTerminal />;
+    if (error) return (
+        <div style={{ padding: '40px 24px', maxWidth: 600, margin: '0 auto' }}>
+            <div style={{ border: '1px solid var(--red)', color: 'var(--red)', padding: '12px 16px', fontSize: 13, fontFamily: 'var(--mono)' }}>✕ {error}</div>
+        </div>
+    );
     if (!user) return null;
 
     return (
-        <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+        <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
             <UserProfileView user={user} isPublicView={true} />
-        </Box>
+        </div>
     );
 }

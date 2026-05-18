@@ -1,234 +1,89 @@
 "use client";
 
-import { Box, Typography, TextField, Button, useTheme, Alert, Snackbar } from "@mui/material";
 import { motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 
 const ContactSection = () => {
-  const shouldReduceMotion = useReducedMotion();
-  const theme = useTheme();
-  const [status, setStatus] = useState('idle'); // idle, submitting, success, error
-  const [formData, setFormData] = useState({ name: '', email: '', message: '' });
+    const shouldReduceMotion = useReducedMotion();
+    const [status, setStatus] = useState('idle');
+    const [formData, setFormData] = useState({ name: '', email: '', message: '' });
+    const [toast, setToast] = useState(null);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setStatus('submitting');
+    const showToast = (message, type) => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 6000);
+    };
 
-    try {
-      const res = await fetch('/api/contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setStatus('submitting');
+        try {
+            const res = await fetch('/api/contact', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+            if (res.ok) {
+                setStatus('idle');
+                setFormData({ name: '', email: '', message: '' });
+                showToast("Message sent successfully! We'll get back to you soon.", 'success');
+            } else {
+                setStatus('idle');
+                showToast("Failed to send message. Please try again or email us directly.", 'error');
+            }
+        } catch {
+            setStatus('idle');
+            showToast("Failed to send message. Please try again or email us directly.", 'error');
+        }
+    };
 
-      if (res.ok) {
-        setStatus('success');
-        setFormData({ name: '', email: '', message: '' });
-      } else {
-        setStatus('error');
-      }
-    } catch (error) {
-      console.error("Contact form error:", error);
-      setStatus('error');
-    }
-  };
+    const labelStyle = { display: 'block', fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 6 };
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 50 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: shouldReduceMotion ? 0 : 0.8, ease: "easeOut" }}
-    >
-      <Box
-        sx={{
-          padding: { xs: "2rem 1rem", sm: "4rem 1rem" },
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          textAlign: "center",
-          backgroundColor: theme.palette.background.default,
-          color: theme.palette.text.primary,
-        }}
-      >
-        {/* Heading */}
-        <Typography
-          variant="h4"
-          component="h2"
-          gutterBottom
-          sx={{
-            fontWeight: "bold",
-            letterSpacing: "0.1em",
-            marginBottom: "1.5rem",
-            color: theme.palette.primary.main,
-            fontSize: { xs: "1.5rem", sm: "2rem" },
-          }}
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.8, ease: "easeOut" }}
         >
-          We’d Love to Hear From You
-        </Typography>
+            {toast && (
+                <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 9999, border: `1px solid ${toast.type === 'error' ? 'var(--red)' : 'var(--green)'}`, color: toast.type === 'error' ? 'var(--red)' : 'var(--green)', background: 'var(--bg-card)', padding: '10px 20px', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                    {toast.message}
+                </div>
+            )}
 
-        {/* Contact Information */}
-        <Typography
-          variant="body1"
-          gutterBottom
-          sx={{
-            maxWidth: "600px",
-            lineHeight: "1.6",
-            marginBottom: "2rem",
-            color: theme.palette.text.primary,
-            fontSize: { xs: "1rem", sm: "1.25rem" },
-          }}
-        >
-          Address: 805 N Greenwood Ave., Fort Smith, AR, 72901
-          <br />
-          Email: info@fablabfortsmith.com
-          <br />
-        </Typography>
+            <div style={{ padding: '48px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: 'var(--bg)' }}>
+                <div style={{ fontFamily: 'var(--display)', fontSize: '1.8rem', letterSpacing: '-0.04em', color: 'var(--green)', marginBottom: 24 }}>
+                    We&apos;d Love to Hear From You
+                </div>
 
-        {/* Contact Form */}
-        <Box
-          component="form"
-          onSubmit={handleSubmit}
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "1.5rem",
-            width: "100%",
-            maxWidth: "500px",
-            textAlign: "left",
-          }}
-        >
-          <TextField
-            label="Name"
-            variant="outlined"
-            fullWidth
-            required
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            sx={{
-              backgroundColor: theme.palette.background.paper,
-              "& .MuiInputBase-root": {
-                color: theme.palette.text.primary,
-              },
-              "& .MuiInputLabel-root": {
-                color: theme.palette.text.primary,
-              },
-              "& .MuiOutlinedInput-root": {
-                "& fieldset": {
-                  borderColor: theme.palette.primary.main,
-                },
-                "&:hover fieldset": {
-                  borderColor: theme.palette.primary.main,
-                },
-                "&.Mui-focused fieldset": {
-                  borderColor: theme.palette.primary.main,
-                },
-              },
-            }}
-          />
-          <TextField
-            label="Email"
-            variant="outlined"
-            type="email"
-            fullWidth
-            required
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            sx={{
-              backgroundColor: theme.palette.background.paper,
-              "& .MuiInputBase-root": {
-                color: theme.palette.text.primary,
-              },
-              "& .MuiInputLabel-root": {
-                color: theme.palette.text.primary,
-              },
-              "& .MuiOutlinedInput-root": {
-                "& fieldset": {
-                  borderColor: theme.palette.primary.main,
-                },
-                "&:hover fieldset": {
-                  borderColor: theme.palette.primary.main,
-                },
-                "&.Mui-focused fieldset": {
-                  borderColor: theme.palette.primary.main,
-                },
-              },
-            }}
-          />
-          <TextField
-            label="Message"
-            variant="outlined"
-            multiline
-            rows={4}
-            fullWidth
-            required
-            value={formData.message}
-            onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-            sx={{
-              backgroundColor: theme.palette.background.paper,
-              "& .MuiInputBase-root": {
-                color: theme.palette.text.primary,
-              },
-              "& .MuiInputLabel-root": {
-                color: theme.palette.text.primary,
-              },
-              "& .MuiOutlinedInput-root": {
-                "& fieldset": {
-                  borderColor: theme.palette.primary.main,
-                },
-                "&:hover fieldset": {
-                  borderColor: theme.palette.primary.main,
-                },
-                "&.Mui-focused fieldset": {
-                  borderColor: theme.palette.primary.main,
-                },
-              },
-            }}
-          />
-          <motion.div
-            whileHover={{
-              scale: shouldReduceMotion ? 1 : 1.1,
-              transition: { duration: 0.3 },
-            }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Button
-              type="submit"
-              variant="contained"
-              size="large"
-              disabled={status === 'submitting'}
-              sx={{
-                width: "100%",
-                padding: { xs: "0.5rem 1rem", sm: "0.75rem 1.5rem" },
-                fontWeight: "bold",
-                textTransform: "uppercase",
-                backgroundColor: theme.palette.primary.main,
-                color: theme.palette.background.default,
-                "&:hover": {
-                  backgroundColor: theme.palette.primary.main,
-                  color: theme.palette.background.default,
-                },
-              }}
-            >
-              {status === 'submitting' ? 'Sending...' : 'Submit'}
-            </Button>
-          </motion.div>
-        </Box>
-      </Box>
-      
-      <Snackbar open={status === 'success'} autoHideDuration={6000} onClose={() => setStatus('idle')}>
-        <Alert onClose={() => setStatus('idle')} severity="success" sx={{ width: '100%' }}>
-          Message sent successfully! We'll get back to you soon.
-        </Alert>
-      </Snackbar>
-      
-      <Snackbar open={status === 'error'} autoHideDuration={6000} onClose={() => setStatus('idle')}>
-        <Alert onClose={() => setStatus('idle')} severity="error" sx={{ width: '100%' }}>
-          Failed to send message. Please try again or email us directly.
-        </Alert>
-      </Snackbar>
-    </motion.div>
-  );
+                <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.7, marginBottom: 32 }}>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text-mid)' }}>805 N Greenwood Ave., Fort Smith, AR, 72901</div>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text-mid)' }}>info@fablabfortsmith.com</div>
+                </div>
+
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%', maxWidth: 500, textAlign: 'left' }}>
+                    <div>
+                        <label style={labelStyle}>NAME</label>
+                        <input className="input" style={{ width: '100%', boxSizing: 'border-box', fontSize: 13 }} required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                    </div>
+                    <div>
+                        <label style={labelStyle}>EMAIL</label>
+                        <input className="input" type="email" style={{ width: '100%', boxSizing: 'border-box', fontSize: 13 }} required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+                    </div>
+                    <div>
+                        <label style={labelStyle}>MESSAGE</label>
+                        <textarea className="input" rows={4} style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', fontSize: 13 }} required value={formData.message} onChange={e => setFormData({ ...formData, message: e.target.value })} />
+                    </div>
+                    <motion.div whileHover={{ scale: shouldReduceMotion ? 1 : 1.02 }} whileTap={{ scale: 0.98 }}>
+                        <button type="submit" className="btn btn--filled" style={{ width: '100%', fontSize: 12, padding: '12px' }} disabled={status === 'submitting'}>
+                            {status === 'submitting' ? 'Sending...' : '$ Submit'}
+                        </button>
+                    </motion.div>
+                </form>
+            </div>
+        </motion.div>
+    );
 };
 
 export default ContactSection;

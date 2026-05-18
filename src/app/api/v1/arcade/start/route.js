@@ -10,8 +10,8 @@ export async function POST(req) {
             return NextResponse.json({ error: "UserID is required" }, { status: 400 });
         }
 
-        // Check if it's a mission (Hack the Lab v2)
-        if (game && game.startsWith('mission-')) {
+        // Check if it's a mission (Hack the Lab v1 or v2)
+        if (game && (game.startsWith('mission-') || game.startsWith('s2-mission-'))) {
             // TODO: Add payment/permission check here
             const result = await OrchestratorService.startMission(userID, game);
             return NextResponse.json(result);
