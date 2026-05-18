@@ -152,10 +152,20 @@ export async function DELETE(request) {
       return NextResponse.json({ error: "planId is required." }, { status: 400 });
     }
 
-    await catalogApi.deleteCatalogObject(planId);
+    const { result } = await catalogApi.deleteCatalogObject(planId);
+
+    if (result.errors?.length) {
+      const msg = result.errors[0]?.detail || result.errors[0]?.code || "Square rejected the request.";
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
+
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
-    console.error("❌ Error deleting plan:", error);
-    return NextResponse.json({ error: "Failed to delete plan." }, { status: 500 });
+    const squareMsg = error?.errors?.[0]?.detail || error?.errors?.[0]?.code;
+    console.error("❌ Error deleting plan:", squareMsg || error);
+    return NextResponse.json(
+      { error: squareMsg || "Failed to delete plan." },
+      { status: 500 }
+    );
   }
 }
