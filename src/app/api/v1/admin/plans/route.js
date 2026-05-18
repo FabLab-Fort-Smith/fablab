@@ -36,6 +36,19 @@ async function unsetHiddenVariationId(variationId) {
   const col = await db.dbPlans();
   await col.updateOne({ _id: "hidden_variations" }, { $pull: { ids: variationId } });
 }
+async function getPlanMeta() {
+  const col = await db.dbPlans();
+  const doc = await col.findOne({ _id: "plan_meta" });
+  return doc?.plans || {};
+}
+async function setPlanMeta(planId, meta) {
+  const col = await db.dbPlans();
+  await col.updateOne(
+    { _id: "plan_meta" },
+    { $set: { [`plans.${planId}`]: meta } },
+    { upsert: true }
+  );
+}
 
 // Fetch the base price from a list of order template IDs (parallel, non-fatal)
 async function fetchOrderTemplatePrices(templateIds) {
@@ -153,10 +166,11 @@ export async function GET(request) {
     }
 
     // ── Full plan list ──
-    const [{ result }, hidden, hiddenVars] = await Promise.all([
+    const [{ result }, hidden, hiddenVars, planMeta] = await Promise.all([
       catalogApi.listCatalog(undefined, "SUBSCRIPTION_PLAN"),
       getHiddenPlanIds(),
       getHiddenVariationIds(),
+      getPlanMeta(),
     ]);
 
     const rawPlans = result.objects || [];
@@ -193,10 +207,13 @@ export async function GET(request) {
       }
     }
 
-    // Shape plans, strip hidden variations, inject real prices
+    // Shape plans, strip hidden variations, inject real prices, merge metadata
     const plans = rawPlans.map(p => {
       const shaped = shapePlan(p, hidden, countByPlan[p.id] || 0);
       shaped.variations = shaped.variations.filter(v => !hiddenVars.has(v.id));
+      const meta = planMeta[p.id] || {};
+      shaped.description = meta.description || '';
+      shaped.benefits = meta.benefits || [];
       return shaped;
     });
     for (const plan of plans)
@@ -274,7 +291,7 @@ export async function PUT(request) {
     if (!session || session.user.role !== "admin")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { planId, name, variations, newVariations, restore, removeVariationId } = await request.json();
+    const { planId, name, variations, newVariations, restore, removeVariationId, meta } = await request.json();
     if (!planId)
       return NextResponse.json({ error: "planId is required." }, { status: 400 });
 
@@ -338,6 +355,9 @@ export async function PUT(request) {
         return { ...v, subscriptionPlanVariationData: { ...v.subscriptionPlanVariationData, phases } };
       });
     }
+
+    // Save description/benefits metadata (non-fatal if Square upsert later fails)
+    if (meta) await setPlanMeta(planId, { description: meta.description || '', benefits: meta.benefits || [] });
 
     // Append any new variations (STATIC pricing, set from scratch)
     if (newVariations?.length) {

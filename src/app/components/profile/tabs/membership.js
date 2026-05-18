@@ -268,13 +268,25 @@ const MembershipTab = ({ user, onUpdateMembership, membershipApplied = false }) 
                     const isCurrentPlan = currentMembership?.squareSubscriptionId && currentMembership?.planName === plan.name;
                     const hasPrice = variation?.priceCents != null;
                     return (
-                        <div key={plan.id} style={{ border: '2px solid var(--green)', background: isCurrentPlan ? 'rgba(57,255,20,0.05)' : 'var(--bg-card)', padding: '20px 20px' }}>
-                            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-bright)', marginBottom: 8 }}>{plan.name}</div>
-                            <div style={{ fontSize: 12, color: 'var(--text-mid)', marginBottom: 12 }}>
+                        <div key={plan.id} style={{ border: '2px solid var(--green)', background: isCurrentPlan ? 'rgba(57,255,20,0.05)' : 'var(--bg-card)', padding: '20px 20px', display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-bright)', marginBottom: 4 }}>{plan.name}</div>
+                            <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700, color: 'var(--green)', marginBottom: 8 }}>
                                 {variation && hasPrice
                                     ? `$${(variation.priceCents / 100).toFixed(2)} / ${billingType === 'MONTHLY' ? 'mo' : 'yr'}`
-                                    : 'Contact us for pricing'}
+                                    : 'Contact us'}
                             </div>
+                            {plan.description && (
+                                <div style={{ fontSize: 11, color: 'var(--text-mid)', marginBottom: 10, lineHeight: 1.5 }}>{plan.description}</div>
+                            )}
+                            {plan.benefits?.length > 0 && (
+                                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 14px', display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+                                    {plan.benefits.map((b, i) => (
+                                        <li key={i} style={{ fontSize: 11, color: 'var(--text)', display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                                            <span style={{ color: 'var(--green)', flexShrink: 0 }}>✓</span> {b}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
                             <button
                                 className="btn btn--filled btn--sm"
                                 style={{ width: '100%', fontSize: 10 }}

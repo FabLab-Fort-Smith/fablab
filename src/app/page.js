@@ -373,7 +373,7 @@ function MembershipSection() {
                 <div style={{ fontFamily: 'var(--mono)', color: 'var(--green)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
                   {plan.name}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16, flex: 1 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: plan.description || plan.benefits?.length ? 10 : 16 }}>
                   {(plan.variations || []).map(v => (
                     <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                       <span style={{ color: 'var(--text-mid)', fontSize: 11 }}>{v.name || cadenceLabel(v.cadence)}</span>
@@ -384,6 +384,18 @@ function MembershipSection() {
                     </div>
                   ))}
                 </div>
+                {plan.description && (
+                  <p style={{ fontSize: 11, color: 'var(--text-mid)', lineHeight: 1.5, margin: '0 0 10px' }}>{plan.description}</p>
+                )}
+                {plan.benefits?.length > 0 && (
+                  <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 14px', display: 'flex', flexDirection: 'column', gap: 3, flex: 1 }}>
+                    {plan.benefits.map((b, i) => (
+                      <li key={i} style={{ fontSize: 10, color: 'var(--text)', display: 'flex', gap: 6 }}>
+                        <span style={{ color: 'var(--green)', flexShrink: 0 }}>✓</span> {b}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <Link
                   href={`/auth/register?plan=${encodeURIComponent(plan.id || plan.name)}`}
                   className={i === 0 ? 'btn btn--filled btn--sm' : 'btn btn--ghost btn--sm'}

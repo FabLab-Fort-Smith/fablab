@@ -66,7 +66,7 @@ export default function PlansPage() {
     name: '',
     variations: [{ name: '', cadence: 'MONTHLY', priceCents: '' }],
   });
-  const [editForm, setEditForm] = useState({ name: '', variations: [] });
+  const [editForm, setEditForm] = useState({ name: '', variations: [], description: '', benefits: [] });
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/auth/signin');
@@ -173,6 +173,7 @@ export default function PlansPage() {
         body: JSON.stringify({
           planId: editPlan.id,
           name: editForm.name,
+          meta: { description: editForm.description, benefits: editForm.benefits },
           variations: existingVars.map(v => ({
             id: v.id,
             priceCents: Math.round(parseFloat(v.priceCents) * 100),
@@ -233,6 +234,8 @@ export default function PlansPage() {
     setEditPlan(plan);
     setEditForm({
       name: plan.name,
+      description: plan.description || '',
+      benefits: plan.benefits || [],
       variations: (plan.variations || []).map(v => ({
         id: v.id,
         name: v.name,
@@ -426,6 +429,38 @@ export default function PlansPage() {
             <Field label="PLAN NAME *">
               <input type="text" value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} style={inputStyle} />
             </Field>
+            <Field label="DESCRIPTION">
+              <textarea
+                value={editForm.description}
+                onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))}
+                placeholder="Short description shown to members..."
+                rows={2}
+                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--mono)', fontSize: 12 }}
+              />
+            </Field>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.1em', marginBottom: 6 }}>BENEFITS</div>
+              {(editForm.benefits || []).map((b, idx) => (
+                <div key={idx} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                  <input
+                    type="text"
+                    value={b}
+                    onChange={e => setEditForm(p => { const benefits = [...p.benefits]; benefits[idx] = e.target.value; return { ...p, benefits }; })}
+                    style={{ ...inputStyle, flex: 1 }}
+                    placeholder="e.g. 24/7 key fob access"
+                  />
+                  <button
+                    onClick={() => setEditForm(p => ({ ...p, benefits: p.benefits.filter((_, i) => i !== idx) }))}
+                    style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 14, padding: '0 4px' }}
+                  >✕</button>
+                </div>
+              ))}
+              <button
+                className="btn btn--sm"
+                style={{ fontSize: 9, color: 'var(--cyan)', borderColor: 'var(--cyan)' }}
+                onClick={() => setEditForm(p => ({ ...p, benefits: [...(p.benefits || []), ''] }))}
+              >+ add benefit</button>
+            </div>
             {editForm.variations.length > 0 && (
               <div>
                 <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.1em', marginBottom: 8 }}>VARIATION PRICES</div>
