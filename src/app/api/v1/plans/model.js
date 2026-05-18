@@ -7,10 +7,13 @@ const ordersApi = squareClient.ordersApi;
 
 export default class PlansModel {
   static async getPlans() {
-    // Filter out admin-hidden plans (plans with active subscribers Square won't delete)
     const dbPlans = await db.dbPlans();
-    const hiddenDoc = await dbPlans.findOne({ _id: "hidden_plans" });
+    const [hiddenDoc, hiddenVarDoc] = await Promise.all([
+      dbPlans.findOne({ _id: "hidden_plans" }),
+      dbPlans.findOne({ _id: "hidden_variations" }),
+    ]);
     const hiddenIds = new Set(hiddenDoc?.ids || []);
+    const hiddenVarIds = new Set(hiddenVarDoc?.ids || []);
 
     const { result } = await catalogApi.listCatalog(undefined, "SUBSCRIPTION_PLAN");
     const rawPlans = (result.objects || []).filter(p => !hiddenIds.has(p.id));
@@ -18,7 +21,7 @@ export default class PlansModel {
     const plans = rawPlans.map(p => ({
       id: p.id,
       name: p.subscriptionPlanData?.name || "Unnamed Plan",
-      variations: (p.subscriptionPlanData?.subscriptionPlanVariations || []).map(v => {
+      variations: (p.subscriptionPlanData?.subscriptionPlanVariations || []).filter(v => !hiddenVarIds.has(v.id)).map(v => {
         const phases = v.subscriptionPlanVariationData?.phases || [];
         const billingPhase = phases[phases.length - 1];
         const pricingType = billingPhase?.pricing?.type;

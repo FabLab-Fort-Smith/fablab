@@ -245,7 +245,7 @@ export default function PlansPage() {
       });
       const d = await res.json();
       if (!res.ok) { showToast(d.error || 'Failed to remove variation.', 'error'); return; }
-      showToast('Variation removed.');
+      showToast(d.hidden ? 'Variation hidden from member selection (Square blocked deletion).' : 'Variation removed.');
       setEditPlan(null);
       fetchPlans();
     } catch { showToast('Failed to remove variation.', 'error'); }

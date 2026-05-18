@@ -23,6 +23,19 @@ async function unsetHiddenPlanId(planId) {
   const col = await db.dbPlans();
   await col.updateOne({ _id: "hidden_plans" }, { $pull: { ids: planId } });
 }
+async function getHiddenVariationIds() {
+  const col = await db.dbPlans();
+  const doc = await col.findOne({ _id: "hidden_variations" });
+  return new Set(doc?.ids || []);
+}
+async function setHiddenVariationId(variationId) {
+  const col = await db.dbPlans();
+  await col.updateOne({ _id: "hidden_variations" }, { $addToSet: { ids: variationId } }, { upsert: true });
+}
+async function unsetHiddenVariationId(variationId) {
+  const col = await db.dbPlans();
+  await col.updateOne({ _id: "hidden_variations" }, { $pull: { ids: variationId } });
+}
 
 // Fetch the base price from a list of order template IDs (parallel, non-fatal)
 async function fetchOrderTemplatePrices(templateIds) {
@@ -140,9 +153,10 @@ export async function GET(request) {
     }
 
     // ── Full plan list ──
-    const [{ result }, hidden] = await Promise.all([
+    const [{ result }, hidden, hiddenVars] = await Promise.all([
       catalogApi.listCatalog(undefined, "SUBSCRIPTION_PLAN"),
       getHiddenPlanIds(),
+      getHiddenVariationIds(),
     ]);
 
     const rawPlans = result.objects || [];
@@ -179,8 +193,12 @@ export async function GET(request) {
       }
     }
 
-    // Shape plans then inject real prices from subscriber order templates
-    const plans = rawPlans.map(p => shapePlan(p, hidden, countByPlan[p.id] || 0));
+    // Shape plans, strip hidden variations, inject real prices
+    const plans = rawPlans.map(p => {
+      const shaped = shapePlan(p, hidden, countByPlan[p.id] || 0);
+      shaped.variations = shaped.variations.filter(v => !hiddenVars.has(v.id));
+      return shaped;
+    });
     for (const plan of plans)
       for (const v of plan.variations)
         if (v.priceCents == null && varToPriceCents[v.id] != null)
@@ -282,14 +300,17 @@ export async function PUT(request) {
           },
         });
         if (upsertResult.errors?.length) {
-          const msg = upsertResult.errors[0]?.detail || "Square rejected the variation removal.";
-          return NextResponse.json({ error: msg }, { status: 400 });
+          // Square blocked removal — hide it locally instead
+          await setHiddenVariationId(removeVariationId);
+          return NextResponse.json({ success: true, hidden: true, note: "Square blocked deletion (subscription history). Variation hidden from member selection." }, { status: 200 });
         }
         return NextResponse.json({ success: true, variationRemoved: true }, { status: 200 });
       } catch (squareErr) {
-        const msg = squareErr?.errors?.[0]?.detail || squareErr?.message || "Square rejected the variation removal.";
-        console.error("❌ Remove variation error:", msg);
-        return NextResponse.json({ error: msg }, { status: 400 });
+        const msg = squareErr?.errors?.[0]?.detail || squareErr?.message || "";
+        console.warn("⚠️ Square blocked variation removal, hiding locally:", msg);
+        // Fall back to hiding locally (same pattern as archived plans)
+        await setHiddenVariationId(removeVariationId);
+        return NextResponse.json({ success: true, hidden: true, note: "Square blocked deletion (subscription history). Variation hidden from member selection." }, { status: 200 });
       }
     }
 
