@@ -125,7 +125,6 @@ const MembershipTab = ({ user, onUpdateMembership }) => {
         }
     };
 
-    // Plans without variations (flat format) show regardless of billing toggle
     const filteredPlans = plans.filter(p =>
         !p.variations?.length || p.variations.some(v => v.cadence === billingType)
     );
