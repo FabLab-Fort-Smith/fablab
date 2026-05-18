@@ -16,6 +16,7 @@ export default function PlansPage() {
     const [submitting, setSubmitting] = useState(false);
     const [form, setForm] = useState({ name: '', monthlyPrice: '', annualPrice: '' });
     const [editName, setEditName] = useState('');
+    const [cancelSubs, setCancelSubs] = useState(false);
 
     useEffect(() => {
         if (status === 'unauthenticated') router.push('/auth/signin');
@@ -95,14 +96,16 @@ export default function PlansPage() {
             const res = await fetch('/api/v1/admin/plans', {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ planId: archivePlan.id }),
+                body: JSON.stringify({ planId: archivePlan.id, cancelSubscriptions: cancelSubs }),
             });
             const d = await res.json();
             if (res.ok) {
+                const cancelNote = d.cancelledCount > 0 ? ` ${d.cancelledCount} subscription(s) cancelled.` : '';
                 showToast(d.hidden
-                    ? 'Plan has active subscribers — hidden from member selection instead.'
-                    : 'Plan deleted from Square.');
+                    ? `Hidden from member selection.${cancelNote}`
+                    : `Plan deleted.${cancelNote}`);
                 setArchivePlan(null);
+                setCancelSubs(false);
                 fetchPlans();
             } else {
                 showToast(d.error || 'Failed to archive.', 'error');
@@ -260,15 +263,33 @@ export default function PlansPage() {
             {/* Archive Confirm Modal */}
             {archivePlan && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-                    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--red)', padding: 24, width: 360, maxWidth: '90vw' }}>
+                    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--red)', padding: 24, width: 400, maxWidth: '90vw', fontFamily: 'var(--mono)' }}>
                         <div style={{ fontSize: 11, color: 'var(--red)', letterSpacing: '0.1em', marginBottom: 12 }}>ARCHIVE PLAN?</div>
                         <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 16 }}>
-                            Archive <span style={{ color: 'var(--text-bright)', fontFamily: 'var(--mono)' }}>{archivePlan.name}</span>? It will no longer appear for new members. Existing subscriptions are unaffected.
+                            Archive <span style={{ color: 'var(--text-bright)' }}>{archivePlan.name}</span>?
+                            This will remove it from Square's catalog and hide it from new members.
                         </div>
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px 12px', border: `1px solid ${cancelSubs ? 'var(--red)' : 'var(--bd)'}`, background: cancelSubs ? 'rgba(255,56,56,0.05)' : 'var(--bg-1)', marginBottom: 16 }}>
+                            <input
+                                type="checkbox"
+                                checked={cancelSubs}
+                                onChange={e => setCancelSubs(e.target.checked)}
+                                style={{ marginTop: 2, accentColor: 'var(--red)', flexShrink: 0 }}
+                            />
+                            <div>
+                                <div style={{ fontSize: 11, color: cancelSubs ? 'var(--red)' : 'var(--text)', fontWeight: 600 }}>
+                                    cancel all active subscriptions
+                                </div>
+                                <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 3, lineHeight: 1.5 }}>
+                                    Immediately cancel every subscriber on this plan in Square.
+                                    Members will lose access at the end of their billing period.
+                                </div>
+                            </div>
+                        </label>
                         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                            <button className="btn btn--sm" style={{ fontSize: 10 }} onClick={() => setArchivePlan(null)}>cancel</button>
+                            <button className="btn btn--sm" style={{ fontSize: 10 }} onClick={() => { setArchivePlan(null); setCancelSubs(false); }}>cancel</button>
                             <button className="btn btn--sm" style={{ fontSize: 10, borderColor: 'var(--red)', color: 'var(--red)' }} onClick={handleArchive} disabled={submitting}>
-                                {submitting ? 'archiving...' : '$ archive'}
+                                {submitting ? 'archiving...' : cancelSubs ? '$ cancel subs & archive' : '$ archive'}
                             </button>
                         </div>
                     </div>

@@ -173,7 +173,7 @@ export async function PUT(request) {
   }
 }
 
-// DELETE: Try to delete from Square; if blocked by active subscriptions, hide locally instead
+// DELETE: Cancel subscribers (optional) then delete from Square
 export async function DELETE(request) {
   try {
     const session = await auth();
@@ -181,28 +181,61 @@ export async function DELETE(request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { planId } = await request.json();
+    const { planId, cancelSubscriptions } = await request.json();
     if (!planId) {
       return NextResponse.json({ error: "planId is required." }, { status: 400 });
     }
 
+    // If requested, cancel all active subscriptions for this plan's variations
+    let cancelledCount = 0;
+    if (cancelSubscriptions) {
+      // Retrieve the plan to get its variation IDs
+      const { result: planResult } = await catalogApi.retrieveCatalogObject(planId, true);
+      const variationIds = (planResult.object?.subscriptionPlanData?.subscriptionPlanVariations || [])
+        .map(v => v.id)
+        .filter(Boolean);
+
+      if (variationIds.length) {
+        // Search for active/paused subscriptions tied to these variations
+        const { result: subResult } = await squareClient.subscriptionsApi.searchSubscriptions({
+          query: {
+            filter: {
+              planVariationIds: variationIds,
+              statuses: ["ACTIVE", "PAUSED"],
+            },
+          },
+        });
+
+        const subscriptions = subResult.subscriptions || [];
+        await Promise.allSettled(
+          subscriptions.map(s =>
+            squareClient.subscriptionsApi.cancelSubscription(s.id)
+              .then(() => { cancelledCount++; })
+              .catch(err => console.warn(`⚠️ Could not cancel subscription ${s.id}:`, err?.message))
+          )
+        );
+        console.log(`✅ Cancelled ${cancelledCount}/${subscriptions.length} subscriptions for plan ${planId}`);
+      }
+    }
+
+    // Now delete the catalog object
     try {
       const { result } = await catalogApi.deleteCatalogObject(planId);
       if (result.errors?.length) {
         throw Object.assign(new Error(result.errors[0]?.detail), { errors: result.errors });
       }
-      // Square accepted the delete — make sure it's not in the hidden list
       await unsetHiddenPlanId(planId);
-      return NextResponse.json({ success: true, deleted: true }, { status: 200 });
+      return NextResponse.json({ success: true, deleted: true, cancelledCount }, { status: 200 });
     } catch (squareErr) {
-      // Square blocked the deletion (active subscriptions) — hide locally instead
+      // Still blocked — hide locally as fallback
       const reason = squareErr?.errors?.[0]?.detail || squareErr?.message || "Square rejected the delete.";
-      console.warn("⚠️ Square blocked delete, hiding locally:", reason);
+      console.warn("⚠️ Square blocked delete after cancellations, hiding locally:", reason);
       await setHiddenPlanId(planId);
       return NextResponse.json({
         success: true,
         hidden: true,
-        note: "Plan has active subscribers and cannot be removed from Square. It has been hidden from member-facing plan selection.",
+        cancelledCount,
+        note: "Subscriptions cancelled but Square still blocked the plan delete. Plan hidden from member selection.",
       }, { status: 200 });
     }
   } catch (error) {
