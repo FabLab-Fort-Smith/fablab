@@ -256,13 +256,31 @@ export async function PUT(request) {
     if (!session || session.user.role !== "admin")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { planId, name, variations, restore } = await request.json();
+    const { planId, name, variations, restore, removeVariationId } = await request.json();
     if (!planId)
       return NextResponse.json({ error: "planId is required." }, { status: 400 });
 
     if (restore) {
       await unsetHiddenPlanId(planId);
       return NextResponse.json({ success: true, restored: true }, { status: 200 });
+    }
+
+    if (removeVariationId) {
+      const { result: current } = await catalogApi.retrieveCatalogObject(planId, true);
+      const existing = current.object;
+      if (!existing) return NextResponse.json({ error: "Plan not found." }, { status: 404 });
+      const remaining = (existing.subscriptionPlanData?.subscriptionPlanVariations || [])
+        .filter(v => v.id !== removeVariationId);
+      if (!remaining.length)
+        return NextResponse.json({ error: "Cannot remove the only variation." }, { status: 400 });
+      await catalogApi.upsertCatalogObject({
+        idempotencyKey: uuidv4(),
+        object: {
+          ...existing,
+          subscriptionPlanData: { ...existing.subscriptionPlanData, subscriptionPlanVariations: remaining },
+        },
+      });
+      return NextResponse.json({ success: true, variationRemoved: true }, { status: 200 });
     }
 
     const { result: current } = await catalogApi.retrieveCatalogObject(planId, true);

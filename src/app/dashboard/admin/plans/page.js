@@ -230,10 +230,26 @@ export default function PlansPage() {
         id: v.id,
         name: v.name,
         cadence: v.cadence,
-        priceCents: (v.priceCents / 100).toFixed(2),
+        priceCents: v.priceCents != null ? (v.priceCents / 100).toFixed(2) : '',
         trialDays: v.trialDays || 0,
       })),
     });
+  };
+
+  const handleRemoveVariation = async (variationId) => {
+    if (!editPlan) return;
+    try {
+      const res = await fetch('/api/v1/admin/plans', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId: editPlan.id, removeVariationId: variationId }),
+      });
+      const d = await res.json();
+      if (!res.ok) { showToast(d.error || 'Failed to remove variation.', 'error'); return; }
+      showToast('Variation removed.');
+      setEditPlan(null);
+      fetchPlans();
+    } catch { showToast('Failed to remove variation.', 'error'); }
   };
 
   const updateAddVar = (idx, key, value) =>
@@ -412,7 +428,7 @@ export default function PlansPage() {
               <div>
                 <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.1em', marginBottom: 8 }}>VARIATION PRICES</div>
                 {editForm.variations.map((v, idx) => (
-                  <div key={v.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10, padding: '10px 12px', border: '1px solid var(--bd)' }}>
+                  <div key={v.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10, padding: '10px 12px', border: '1px solid var(--bd)', position: 'relative' }}>
                     <div>
                       <div style={{ fontSize: 10, color: 'var(--text-bright)', fontFamily: 'var(--mono)', marginBottom: 2 }}>{v.name || v.cadence}</div>
                       <div style={{ fontSize: 9, color: 'var(--text-dim)' }}>
@@ -420,8 +436,15 @@ export default function PlansPage() {
                       </div>
                     </div>
                     <Field label="PRICE (USD)">
-                      <input type="number" min="0" step="0.01" value={v.priceCents} onChange={e => updateEditVar(idx, 'priceCents', e.target.value)} style={inputStyle} />
+                      <input type="number" min="0" step="0.01" value={v.priceCents} placeholder="custom" onChange={e => updateEditVar(idx, 'priceCents', e.target.value)} style={inputStyle} />
                     </Field>
+                    {editForm.variations.length > 1 && (
+                      <button
+                        onClick={() => handleRemoveVariation(v.id)}
+                        title="Remove this variation"
+                        style={{ position: 'absolute', top: 6, right: 8, background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 13, fontFamily: 'var(--mono)', lineHeight: 1, padding: 0 }}
+                      >✕</button>
+                    )}
                   </div>
                 ))}
               </div>

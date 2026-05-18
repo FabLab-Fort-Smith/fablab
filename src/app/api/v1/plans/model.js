@@ -1,3 +1,4 @@
+import { db } from "@/lib/database";
 import squareClient from "@/lib/square";
 
 const catalogApi = squareClient.catalogApi;
@@ -6,8 +7,13 @@ const ordersApi = squareClient.ordersApi;
 
 export default class PlansModel {
   static async getPlans() {
+    // Filter out admin-hidden plans (plans with active subscribers Square won't delete)
+    const dbPlans = await db.dbPlans();
+    const hiddenDoc = await dbPlans.findOne({ _id: "hidden_plans" });
+    const hiddenIds = new Set(hiddenDoc?.ids || []);
+
     const { result } = await catalogApi.listCatalog(undefined, "SUBSCRIPTION_PLAN");
-    const rawPlans = result.objects || [];
+    const rawPlans = (result.objects || []).filter(p => !hiddenIds.has(p.id));
 
     const plans = rawPlans.map(p => ({
       id: p.id,
@@ -15,19 +21,26 @@ export default class PlansModel {
       variations: (p.subscriptionPlanData?.subscriptionPlanVariations || []).map(v => {
         const phases = v.subscriptionPlanVariationData?.phases || [];
         const billingPhase = phases[phases.length - 1];
+        const pricingType = billingPhase?.pricing?.type;
+        const isRelative = pricingType === "RELATIVE" ||
+          (!billingPhase?.pricing?.priceMoney?.amount && !billingPhase?.recurringPriceMoney?.amount);
         return {
           id: v.id,
           name: v.subscriptionPlanVariationData?.name || "",
           cadence: billingPhase?.cadence || "UNKNOWN",
-          priceCents: null,
+          priceCents: isRelative
+            ? null
+            : Number(billingPhase?.pricing?.priceMoney?.amount ?? billingPhase?.recurringPriceMoney?.amount ?? 0),
         };
       }),
     }));
 
-    // Inject prices from subscriber order templates (Square RELATIVE pricing)
+    // For RELATIVE-priced variations, inject price from a subscriber's order template
     try {
-      const allVariationIds = new Set(plans.flatMap(p => p.variations.map(v => v.id)));
-      if (allVariationIds.size) {
+      const relativeVarIds = new Set(
+        plans.flatMap(p => p.variations.filter(v => v.priceCents == null).map(v => v.id))
+      );
+      if (relativeVarIds.size) {
         const { result: subsResult } = await subscriptionsApi.searchSubscriptions({
           limit: 200,
           query: { filter: { statuses: ["ACTIVE", "PAUSED"] } },
@@ -35,7 +48,7 @@ export default class PlansModel {
 
         const varToTemplate = {};
         for (const s of (subsResult.subscriptions || [])) {
-          if (s.planVariationId && allVariationIds.has(s.planVariationId) &&
+          if (s.planVariationId && relativeVarIds.has(s.planVariationId) &&
               s.phases?.[0]?.orderTemplateId && !varToTemplate[s.planVariationId])
             varToTemplate[s.planVariationId] = s.phases[0].orderTemplateId;
         }
@@ -54,7 +67,7 @@ export default class PlansModel {
 
         for (const plan of plans)
           for (const v of plan.variations)
-            if (varToTemplate[v.id] && priceMap[varToTemplate[v.id]] != null)
+            if (v.priceCents == null && varToTemplate[v.id] && priceMap[varToTemplate[v.id]] != null)
               v.priceCents = priceMap[varToTemplate[v.id]];
       }
     } catch (e) {
