@@ -31,18 +31,19 @@ export async function POST(request, context) {
         idempotencyKey: uuidv4(),
         givenName: user.firstName || "Unknown",
         familyName: user.lastName || "User",
-        emailAddress: user.email,
         referenceId: userID,
       });
       squareCustomerId = result.customer.id;
       await usersCollection.updateOne({ userID }, { $set: { "membership.squareCustomerId": squareCustomerId } });
     }
 
-    // Fetch plan variation name
+    // Fetch variation name + parent plan ID
     let variationName = "Membership";
+    let parentPlanId = null;
     try {
       const { result: varResult } = await squareClient.catalogApi.retrieveCatalogObject(planID);
       variationName = varResult.object?.subscriptionPlanVariationData?.name || variationName;
+      parentPlanId = varResult.object?.subscriptionPlanVariationData?.subscriptionPlanId || null;
     } catch { /* non-fatal */ }
 
     let priceCents = Math.round(price * 100);
@@ -75,8 +76,18 @@ export async function POST(request, context) {
     const itemName = `${variationName}${discountLabel}`;
     const redirectUrl = `${appUrl}/api/v1/memberships/confirm?userID=${userID}&planVariationId=${planID}`;
 
-    // Use quickPay — shows the plan name on checkout, no line items needed.
-    // The confirm endpoint creates the subscription after payment completes.
+    const checkoutOptions = {
+      redirectUrl,
+      askForShippingAddress: false,
+    };
+
+    // For the standard (no coupon) path, attach subscriptionPlanId so Square
+    // creates the subscription automatically at checkout.
+    // quickPay satisfies Square's "one of quick_pay/order" requirement.
+    if (!couponCode && parentPlanId) {
+      checkoutOptions.subscriptionPlanId = parentPlanId;
+    }
+
     const { result: checkoutResult } = await checkoutApi.createPaymentLink({
       idempotencyKey: uuidv4(),
       quickPay: {
@@ -84,13 +95,7 @@ export async function POST(request, context) {
         priceMoney: { amount: BigInt(priceCents), currency },
         locationId: process.env.SQUARE_LOCATION_ID,
       },
-      prePopulatedData: {
-        buyerEmail: user.email || undefined,
-      },
-      checkoutOptions: {
-        redirectUrl,
-        askForShippingAddress: false,
-      },
+      checkoutOptions,
     });
 
     if (!checkoutResult.paymentLink?.url) {
