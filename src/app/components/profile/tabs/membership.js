@@ -94,13 +94,16 @@ const MembershipTab = ({ user, onUpdateMembership, membershipApplied = false }) 
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ userID: user.userID, price, currency: "USD" }),
             });
-            if (!res.ok) throw new Error("Failed to create checkout");
             const data = await res.json();
+            if (!res.ok) {
+                showToast(data.error || "Failed to start checkout.", 'error');
+                return;
+            }
             if (data.url || data.checkoutUrl) {
                 window.location.href = data.url || data.checkoutUrl;
             }
         } catch (err) {
-            showToast("Failed to start checkout. Please try again.", 'error');
+            showToast(err.message || "Failed to start checkout. Please try again.", 'error');
         }
     };
 

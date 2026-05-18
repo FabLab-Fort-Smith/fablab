@@ -37,9 +37,22 @@ export async function POST(request, context) {
       await usersCollection.updateOne({ userID }, { $set: { "membership.squareCustomerId": squareCustomerId } });
     }
 
-    // Use a catalog line item so Square treats this as a subscription enrollment.
-    // basePriceMoney is required for RELATIVE-priced plans (price not stored in catalog).
+    // Square's order line items only accept CATALOG_ITEM_VARIATION objects (not
+    // SUBSCRIPTION_PLAN_VARIATION), so we use CUSTOM_AMOUNT to collect the first
+    // payment. The confirm endpoint creates the actual subscription in Square after
+    // the payment completes and a card is on file.
     const priceCents = Math.round(price * 100);
+    if (priceCents <= 0) {
+      return NextResponse.json({ error: "Invalid price — cannot create a $0 checkout." }, { status: 400 });
+    }
+
+    // Fetch plan variation name for the line item label
+    let variationName = "Membership";
+    try {
+      const { result: catResult } = await squareClient.catalogApi.retrieveCatalogObject(planID);
+      variationName = catResult.object?.subscriptionPlanVariationData?.name || variationName;
+    } catch { /* non-fatal */ }
+
     const { result: checkoutResult } = await checkoutApi.createPaymentLink({
       idempotencyKey: uuidv4(),
       order: {
@@ -47,15 +60,14 @@ export async function POST(request, context) {
         customerId: squareCustomerId,
         lineItems: [{
           quantity: "1",
-          catalogObjectId: planID,
-          itemType: "ITEM",
-          ...(priceCents > 0 ? {
-            basePriceMoney: { amount: BigInt(priceCents), currency },
-          } : {}),
+          name: variationName,
+          itemType: "CUSTOM_AMOUNT",
+          basePriceMoney: { amount: BigInt(priceCents), currency },
         }],
       },
       checkoutOptions: {
-        redirectUrl: `${appUrl}/api/v1/memberships/confirm?userID=${userID}`,
+        // Pass planVariationId so the confirm endpoint can create the subscription
+        redirectUrl: `${appUrl}/api/v1/memberships/confirm?userID=${userID}&planVariationId=${planID}`,
         askForShippingAddress: false,
       },
     });
