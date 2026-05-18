@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "../../../../../../auth";
-import Database from "@/lib/database";
 import { sendDeclineEmail } from "@/app/utils/email.util";
-import AuthService from "../../auth/[...nextauth]/service.js";
+import UserService from "../service";
 
 export async function POST(request) {
     try {
@@ -16,14 +15,12 @@ export async function POST(request) {
             return NextResponse.json({ error: "userID is required" }, { status: 400 });
         }
 
-        const db = await Database.getInstance();
-        const user = await db.users.findOne({ userID });
+        const user = await UserService.getUserByQuery({ userID });
         if (!user) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
-        const email = AuthService.decryptEmail(user.email);
-        await sendDeclineEmail(email, user.firstName);
+        await sendDeclineEmail(user.email, user.firstName);
 
         return NextResponse.json({ success: true }, { status: 200 });
     } catch (error) {
