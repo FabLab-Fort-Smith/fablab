@@ -112,9 +112,8 @@ export async function POST(request, context) {
 
     const { result: checkoutResult } = await checkoutApi.createPaymentLink({
       idempotencyKey: uuidv4(),
-      order: {
-        locationId: process.env.SQUARE_LOCATION_ID,
-        customerId: squareCustomerId,
+      prePopulatedData: {
+        buyerEmail: user.email || undefined,
       },
       checkoutOptions: {
         subscriptionPlanId: parentPlanId,
