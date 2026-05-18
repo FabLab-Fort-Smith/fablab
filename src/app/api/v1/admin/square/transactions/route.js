@@ -91,7 +91,7 @@ export async function POST(request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { userID, squareCustomerId } = await request.json();
+    const { userID, squareCustomerId, grantAccess } = await request.json();
     if (!userID || !squareCustomerId) {
       return NextResponse.json({ error: "userID and squareCustomerId are required." }, { status: 400 });
     }
@@ -109,15 +109,36 @@ export async function POST(request) {
     );
 
     // Attempt to sync subscription — non-fatal (customer may have no active subscription yet)
-    let synced = false;
+    let subscriptionFound = false;
+    let subscriptionStatus = null;
     try {
-      await SubscriptionService.syncSubscription(squareCustomerId, userID);
-      synced = true;
+      const syncResult = await SubscriptionService.syncSubscription(squareCustomerId, userID);
+      subscriptionFound = !!syncResult;
+      if (subscriptionFound) {
+        // Re-fetch to get the current membership status
+        const updated = await usersCollection.findOne({ userID });
+        subscriptionStatus = updated?.membership?.subscriptionStatus || null;
+      }
     } catch (syncErr) {
       console.warn("⚠️ Subscription sync skipped:", syncErr?.message || syncErr);
     }
 
-    return NextResponse.json({ success: true, synced }, { status: 200 });
+    // If admin explicitly grants access (no subscription in Square, paid via invoice etc.)
+    if (grantAccess) {
+      await usersCollection.updateOne(
+        { userID },
+        { $set: {
+          "membership.subscriptionStatus": "ACTIVE",
+          "membership.type": "co-op",
+          "membership.manuallyGranted": true,
+          "membership.manualGrantDate": new Date().toISOString(),
+        }}
+      );
+      subscriptionFound = true;
+      subscriptionStatus = "ACTIVE";
+    }
+
+    return NextResponse.json({ success: true, subscriptionFound, subscriptionStatus }, { status: 200 });
   } catch (error) {
     console.error("❌ Error linking Square customer:", error);
     return NextResponse.json({ error: "Failed to link customer." }, { status: 500 });

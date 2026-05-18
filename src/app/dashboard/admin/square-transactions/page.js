@@ -15,6 +15,7 @@ export default function SquareTransactionsPage() {
     const [userQuery, setUserQuery] = useState('');
     const [selectedUser, setSelectedUser] = useState(null);
     const [linking, setLinking] = useState(false);
+    const [postLinkResult, setPostLinkResult] = useState(null);
     const [toast, setToast] = useState(null);
 
     useEffect(() => {
@@ -52,22 +53,30 @@ export default function SquareTransactionsPage() {
         setLinkDialog({ open: true, customerId });
         setSelectedUser(null);
         setUserQuery('');
+        setPostLinkResult(null);
     };
 
-    const handleLink = async () => {
+    const handleLink = async (grantAccess = false) => {
         if (!selectedUser || !linkDialog.customerId) return;
         setLinking(true);
         try {
             const res = await fetch('/api/v1/admin/square/transactions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userID: selectedUser.userID, squareCustomerId: linkDialog.customerId }),
+                body: JSON.stringify({ userID: selectedUser.userID, squareCustomerId: linkDialog.customerId, grantAccess }),
             });
             const data = await res.json();
             if (res.ok) {
-                showToast(`Linked and synced ${selectedUser.firstName} ${selectedUser.lastName}.`);
-                setLinkDialog({ open: false, customerId: null });
-                fetchTransactions();
+                if (!data.subscriptionFound && !grantAccess) {
+                    // Linked but no subscription in Square — ask admin what to do
+                    setPostLinkResult({ user: selectedUser, customerId: linkDialog.customerId });
+                } else {
+                    const note = grantAccess ? ' Access manually granted.' : data.subscriptionStatus ? ` Status: ${data.subscriptionStatus}.` : '';
+                    showToast(`Linked ${selectedUser.firstName} ${selectedUser.lastName}.${note}`);
+                    setLinkDialog({ open: false, customerId: null });
+                    setPostLinkResult(null);
+                    fetchTransactions();
+                }
             } else {
                 showToast(data.error || 'Link failed.', 'error');
             }
@@ -165,7 +174,7 @@ export default function SquareTransactionsPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--mono)', fontSize: 11 }}>
                     <thead>
                         <tr style={{ borderBottom: '1px solid var(--bd)', background: 'var(--bg-1)' }}>
-                            {['date', 'amount', 'status', 'note', 'linked member', 'sq customer'].map(h => (
+                            {['date', 'amount', 'status', 'type', 'note', 'linked member', 'sq customer'].map(h => (
                                 <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-dim)', letterSpacing: '0.08em', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>
                                     {h}
                                 </th>
@@ -175,7 +184,7 @@ export default function SquareTransactionsPage() {
                     <tbody>
                         {filteredTxns.length === 0 && (
                             <tr>
-                                <td colSpan={6} style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--text-dim)' }}>
+                                <td colSpan={7} style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--text-dim)' }}>
                                     no transactions found
                                 </td>
                             </tr>
@@ -194,6 +203,15 @@ export default function SquareTransactionsPage() {
                                         padding: '2px 6px', fontSize: 9, letterSpacing: '0.06em',
                                     }}>
                                         {t.status || '—'}
+                                    </span>
+                                </td>
+                                <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                                    <span style={{
+                                        fontSize: 9, padding: '2px 6px', letterSpacing: '0.06em',
+                                        border: `1px solid ${t.subscriptionId ? 'var(--cyan)' : 'var(--text-dim)'}`,
+                                        color: t.subscriptionId ? 'var(--cyan)' : 'var(--text-dim)',
+                                    }}>
+                                        {t.subscriptionId ? 'SUBSCRIPTION' : 'ONE-TIME'}
                                     </span>
                                 </td>
                                 <td style={{ padding: '10px 12px', color: 'var(--text-dim)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -243,54 +261,65 @@ export default function SquareTransactionsPage() {
                         <div style={{ color: 'var(--text-dim)', fontSize: 11, marginBottom: 16 }}>
                             sq customer: <span style={{ color: 'var(--cyan, #00e5ff)' }}>{linkDialog.customerId}</span>
                         </div>
-                        <div style={{ color: 'var(--text-dim)', fontSize: 11, marginBottom: 8 }}>search members:</div>
-                        <input
-                            type="text"
-                            placeholder="name or email..."
-                            value={userQuery}
-                            onChange={e => { setUserQuery(e.target.value); setSelectedUser(null); }}
-                            style={{
-                                width: '100%', background: 'var(--bg-1)', border: '1px solid var(--bd)',
-                                color: 'var(--text)', padding: '8px 10px', fontSize: 12, fontFamily: 'var(--mono)',
-                                outline: 'none', marginBottom: 4,
-                            }}
-                        />
-                        {userQuery && filteredUsers.length > 0 && (
-                            <div style={{ border: '1px solid var(--bd)', maxHeight: 160, overflowY: 'auto', marginBottom: 12 }}>
-                                {filteredUsers.map(u => (
-                                    <div
-                                        key={u.userID}
-                                        onClick={() => { setSelectedUser(u); setUserQuery(`${u.firstName} ${u.lastName} (${u.email})`); }}
-                                        style={{
-                                            padding: '8px 10px', fontSize: 11, cursor: 'pointer',
-                                            background: selectedUser?.userID === u.userID ? 'rgba(57,255,20,0.08)' : 'var(--bg-1)',
-                                            color: 'var(--text)',
-                                        }}
-                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-                                        onMouseLeave={e => e.currentTarget.style.background = selectedUser?.userID === u.userID ? 'rgba(57,255,20,0.08)' : 'var(--bg-1)'}
-                                    >
-                                        {u.firstName} {u.lastName} <span style={{ color: 'var(--text-dim)' }}>({u.email})</span>
+
+                        {postLinkResult ? (
+                            // No subscription found after linking — ask admin what to do
+                            <>
+                                <div style={{ border: '1px solid var(--amber)', padding: '12px 14px', marginBottom: 16, fontSize: 11, color: 'var(--amber)' }}>
+                                    ⚠ Linked {postLinkResult.user.firstName} {postLinkResult.user.lastName} but no active Square subscription was found for this customer.
+                                    This payment may have been processed as a one-time invoice.
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 12 }}>
+                                    You can manually grant active membership access, or close and investigate in Square.
+                                </div>
+                                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                                    <button className="btn btn--sm" onClick={() => { setLinkDialog({ open: false, customerId: null }); setPostLinkResult(null); fetchTransactions(); }} style={{ fontSize: 10 }}>close</button>
+                                    <button className="btn btn--sm" onClick={() => handleLink(true)} disabled={linking} style={{ fontSize: 10, borderColor: 'var(--amber)', color: 'var(--amber)' }}>
+                                        {linking ? 'granting...' : '$ grant access manually'}
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div style={{ color: 'var(--text-dim)', fontSize: 11, marginBottom: 8 }}>search members:</div>
+                                <input
+                                    type="text"
+                                    placeholder="name or email..."
+                                    value={userQuery}
+                                    onChange={e => { setUserQuery(e.target.value); setSelectedUser(null); }}
+                                    style={{
+                                        width: '100%', background: 'var(--bg-1)', border: '1px solid var(--bd)',
+                                        color: 'var(--text)', padding: '8px 10px', fontSize: 12, fontFamily: 'var(--mono)',
+                                        outline: 'none', marginBottom: 4,
+                                    }}
+                                />
+                                {userQuery && filteredUsers.length > 0 && (
+                                    <div style={{ border: '1px solid var(--bd)', maxHeight: 160, overflowY: 'auto', marginBottom: 12 }}>
+                                        {filteredUsers.map(u => (
+                                            <div
+                                                key={u.userID}
+                                                onClick={() => { setSelectedUser(u); setUserQuery(`${u.firstName} ${u.lastName} (${u.email})`); }}
+                                                style={{
+                                                    padding: '8px 10px', fontSize: 11, cursor: 'pointer',
+                                                    background: selectedUser?.userID === u.userID ? 'rgba(57,255,20,0.08)' : 'var(--bg-1)',
+                                                    color: 'var(--text)',
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+                                                onMouseLeave={e => e.currentTarget.style.background = selectedUser?.userID === u.userID ? 'rgba(57,255,20,0.08)' : 'var(--bg-1)'}
+                                            >
+                                                {u.firstName} {u.lastName} <span style={{ color: 'var(--text-dim)' }}>({u.email})</span>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
+                                )}
+                                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+                                    <button className="btn btn--sm" onClick={() => setLinkDialog({ open: false, customerId: null })} style={{ fontSize: 10 }}>cancel</button>
+                                    <button className="btn btn--sm" onClick={() => handleLink(false)} disabled={!selectedUser || linking} style={{ fontSize: 10, borderColor: 'var(--green)', color: 'var(--green)' }}>
+                                        {linking ? '$ linking...' : '$ link & sync'}
+                                    </button>
+                                </div>
+                            </>
                         )}
-                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-                            <button
-                                className="btn btn--sm"
-                                onClick={() => setLinkDialog({ open: false, customerId: null })}
-                                style={{ fontSize: 10 }}
-                            >
-                                cancel
-                            </button>
-                            <button
-                                className="btn btn--sm"
-                                onClick={handleLink}
-                                disabled={!selectedUser || linking}
-                                style={{ fontSize: 10, borderColor: 'var(--green)', color: 'var(--green)' }}
-                            >
-                                {linking ? '$ linking...' : '$ link & sync'}
-                            </button>
-                        </div>
                     </div>
                 </div>
             )}
