@@ -37,11 +37,20 @@ export async function POST(request, context) {
       await usersCollection.updateOne({ userID }, { $set: { "membership.squareCustomerId": squareCustomerId } });
     }
 
-    // Fetch variation name
-    let variationName = "Membership";
+    // Fetch variation + parent plan name to build a display label
+    let itemLabel = "Membership";
     try {
       const { result: varResult } = await squareClient.catalogApi.retrieveCatalogObject(planID);
-      variationName = varResult.object?.subscriptionPlanVariationData?.name || variationName;
+      const variation = varResult.object;
+      const variationName = variation?.subscriptionPlanVariationData?.name || "";
+      const parentPlanId = variation?.subscriptionPlanVariationData?.subscriptionPlanId;
+      if (parentPlanId) {
+        const { result: planResult } = await squareClient.catalogApi.retrieveCatalogObject(parentPlanId);
+        const planName = planResult.object?.subscriptionPlanData?.name || "";
+        itemLabel = variationName ? `${planName} — ${variationName}` : planName || itemLabel;
+      } else {
+        itemLabel = variationName || itemLabel;
+      }
     } catch { /* non-fatal */ }
 
     let priceCents = Math.round(price * 100);
@@ -71,7 +80,7 @@ export async function POST(request, context) {
       }
     }
 
-    const itemName = `${variationName}${discountLabel}`;
+    const itemName = `${itemLabel}${discountLabel}`;
     const redirectUrl = `${appUrl}/api/v1/memberships/confirm?userID=${userID}&planVariationId=${planID}`;
 
     const checkoutOptions = {
