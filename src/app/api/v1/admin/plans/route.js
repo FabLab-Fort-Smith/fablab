@@ -274,7 +274,7 @@ export async function PUT(request) {
     if (!session || session.user.role !== "admin")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { planId, name, variations, restore, removeVariationId } = await request.json();
+    const { planId, name, variations, newVariations, restore, removeVariationId } = await request.json();
     if (!planId)
       return NextResponse.json({ error: "planId is required." }, { status: 400 });
 
@@ -337,6 +337,27 @@ export async function PUT(request) {
         });
         return { ...v, subscriptionPlanVariationData: { ...v.subscriptionPlanVariationData, phases } };
       });
+    }
+
+    // Append any new variations (STATIC pricing, set from scratch)
+    if (newVariations?.length) {
+      for (const nv of newVariations) {
+        const cents = Math.round(Number(nv.priceCents));
+        if (!Number.isFinite(cents) || cents <= 0) continue;
+        updatedVariations.push({
+          type: "SUBSCRIPTION_PLAN_VARIATION",
+          id: `#new-var-${uuidv4()}`,
+          presentAtAllLocations: true,
+          subscriptionPlanVariationData: {
+            name: nv.name || nv.cadence,
+            phases: [{
+              cadence: nv.cadence,
+              pricing: { type: "STATIC", priceMoney: { amount: BigInt(cents), currency: "USD" } },
+              ordinal: BigInt(0),
+            }],
+          },
+        });
+      }
     }
 
     try {

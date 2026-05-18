@@ -165,14 +165,21 @@ export default function PlansPage() {
     if (!editForm.name || !editPlan) return;
     setSubmitting(true);
     try {
+      const existingVars = editForm.variations.filter(v => !v.isNew && v.priceCents !== '');
+      const newVars = editForm.variations.filter(v => v.isNew && v.priceCents !== '');
       const res = await fetch('/api/v1/admin/plans', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           planId: editPlan.id,
           name: editForm.name,
-          variations: editForm.variations.map(v => ({
+          variations: existingVars.map(v => ({
             id: v.id,
+            priceCents: Math.round(parseFloat(v.priceCents) * 100),
+          })),
+          newVariations: newVars.map(v => ({
+            name: v.name || v.cadence,
+            cadence: v.cadence,
             priceCents: Math.round(parseFloat(v.priceCents) * 100),
           })),
         }),
@@ -423,23 +430,55 @@ export default function PlansPage() {
               <div>
                 <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.1em', marginBottom: 8 }}>VARIATION PRICES</div>
                 {editForm.variations.map((v, idx) => (
-                  <div key={v.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10, padding: '10px 12px', border: '1px solid var(--bd)', position: 'relative' }}>
-                    <div>
-                      <div style={{ fontSize: 10, color: 'var(--text-bright)', fontFamily: 'var(--mono)', marginBottom: 2 }}>{v.name || v.cadence}</div>
-                      <div style={{ fontSize: 9, color: 'var(--text-dim)' }}>{v.cadence}</div>
-                    </div>
-                    <Field label="PRICE (USD)">
-                      <input type="number" min="0" step="0.01" value={v.priceCents} placeholder="custom" onChange={e => updateEditVar(idx, 'priceCents', e.target.value)} style={inputStyle} />
-                    </Field>
-                    {editForm.variations.length > 1 && (
+                  <div key={v.id || idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10, padding: '10px 12px', border: `1px solid ${v.isNew ? 'var(--cyan)' : 'var(--bd)'}`, position: 'relative' }}>
+                    {v.isNew ? (
+                      <>
+                        <Field label="VARIATION NAME">
+                          <input type="text" value={v.name} placeholder={v.cadence} onChange={e => updateEditVar(idx, 'name', e.target.value)} style={inputStyle} />
+                        </Field>
+                        <Field label="CADENCE">
+                          <select value={v.cadence} onChange={e => updateEditVar(idx, 'cadence', e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+                            {CADENCES.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </Field>
+                        <Field label="PRICE (USD) *">
+                          <input type="number" min="0" step="0.01" value={v.priceCents} placeholder="0.00" onChange={e => updateEditVar(idx, 'priceCents', e.target.value)} style={inputStyle} />
+                        </Field>
+                        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                          <span style={{ fontSize: 9, color: 'var(--cyan)', letterSpacing: '0.08em' }}>NEW</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--text-bright)', fontFamily: 'var(--mono)', marginBottom: 2 }}>{v.name || v.cadence}</div>
+                          <div style={{ fontSize: 9, color: v.priceCents === '' ? 'var(--amber)' : 'var(--text-dim)' }}>
+                            {v.cadence}{v.priceCents === '' ? ' · price locked by Square' : ''}
+                          </div>
+                        </div>
+                        <Field label="PRICE (USD)">
+                          <input type="number" min="0" step="0.01" value={v.priceCents} placeholder="locked" disabled={v.priceCents === ''} onChange={e => updateEditVar(idx, 'priceCents', e.target.value)} style={{ ...inputStyle, opacity: v.priceCents === '' ? 0.4 : 1 }} />
+                        </Field>
+                      </>
+                    )}
+                    {(v.isNew || editForm.variations.length > 1) && (
                       <button
-                        onClick={() => handleRemoveVariation(v.id)}
-                        title="Remove this variation"
+                        onClick={() => v.isNew
+                          ? setEditForm(p => ({ ...p, variations: p.variations.filter((_, i) => i !== idx) }))
+                          : handleRemoveVariation(v.id)}
+                        title={v.isNew ? 'Remove' : 'Hide variation'}
                         style={{ position: 'absolute', top: 6, right: 8, background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 13, fontFamily: 'var(--mono)', lineHeight: 1, padding: 0 }}
                       >✕</button>
                     )}
                   </div>
                 ))}
+                <button
+                  className="btn btn--sm"
+                  style={{ fontSize: 9, color: 'var(--cyan)', borderColor: 'var(--cyan)', marginTop: 4 }}
+                  onClick={() => setEditForm(p => ({ ...p, variations: [...p.variations, { isNew: true, name: '', cadence: 'MONTHLY', priceCents: '' }] }))}
+                >
+                  + add variation
+                </button>
               </div>
             )}
           </div>
