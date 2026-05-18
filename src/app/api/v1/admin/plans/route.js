@@ -325,35 +325,42 @@ export async function PUT(request) {
       updatedVariations = updatedVariations.map(v => {
         const update = variations.find(u => u.id === v.id);
         if (!update) return v;
+        const cents = Math.round(Number(update.priceCents));
+        if (!Number.isFinite(cents) || cents < 0) return v; // skip invalid
         const phases = (v.subscriptionPlanVariationData?.phases || []).map((phase, i) => {
-          // Update the last (billing) phase price; leave trial phases untouched
           const isTrialPhase = i === 0 && (v.subscriptionPlanVariationData?.phases || []).length > 1;
           if (isTrialPhase) return phase;
           return {
             ...phase,
-            pricing: { type: "STATIC", priceMoney: { amount: BigInt(update.priceCents), currency: "USD" } },
+            pricing: { type: "STATIC", priceMoney: { amount: BigInt(cents), currency: "USD" } },
           };
         });
         return { ...v, subscriptionPlanVariationData: { ...v.subscriptionPlanVariationData, phases } };
       });
     }
 
-    const { result } = await catalogApi.upsertCatalogObject({
-      idempotencyKey: uuidv4(),
-      object: {
-        ...existing,
-        subscriptionPlanData: {
-          ...existing.subscriptionPlanData,
-          ...(name ? { name } : {}),
-          subscriptionPlanVariations: updatedVariations,
+    try {
+      const { result } = await catalogApi.upsertCatalogObject({
+        idempotencyKey: uuidv4(),
+        object: {
+          ...existing,
+          subscriptionPlanData: {
+            ...existing.subscriptionPlanData,
+            ...(name ? { name } : {}),
+            subscriptionPlanVariations: updatedVariations,
+          },
         },
-      },
-    });
-
-    return NextResponse.json({ success: true, planId: result.catalogObject?.id }, { status: 200 });
+      });
+      return NextResponse.json({ success: true, planId: result.catalogObject?.id }, { status: 200 });
+    } catch (squareErr) {
+      const msg = squareErr?.errors?.[0]?.detail || squareErr?.message || "Square rejected the update.";
+      console.error("❌ Square upsert error:", msg);
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
   } catch (error) {
-    console.error("❌ Error updating plan:", error);
-    return NextResponse.json({ error: "Failed to update plan." }, { status: 500 });
+    const msg = error?.errors?.[0]?.detail || error?.message || "Failed to update plan.";
+    console.error("❌ Error updating plan:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
