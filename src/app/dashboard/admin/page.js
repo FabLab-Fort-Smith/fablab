@@ -17,6 +17,8 @@ const ADMIN_LINKS = [
     { sym: '▤', label: 'analytics', desc: 'usage stats', path: '/dashboard/admin/analytics', color: 'var(--cyan)' },
     { sym: '⚒', label: 'repair queue', desc: 'device requests', path: '/dashboard/admin/repair', color: 'var(--amber)' },
     { sym: '✉', label: 'email templates', desc: 'notification types', path: '/dashboard/admin/emails', color: 'var(--magenta)' },
+    { sym: '◉', label: 'membership plans', desc: 'manage square plans', path: '/dashboard/admin/plans', color: 'var(--cyan)' },
+    { sym: '⟁', label: 'square txns', desc: 'payment history', path: '/dashboard/admin/square-transactions', color: 'var(--green)' },
 ];
 
 export default function AdminHomePage() {

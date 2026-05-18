@@ -38,13 +38,12 @@ const MembershipTab = ({ user, onUpdateMembership }) => {
         return 3;
     })();
 
-    const currentMonthHours = user?.volunteerLog
-        ? user.volunteerLog.filter(entry => {
-              const d = new Date(entry.date);
-              const now = new Date();
-              return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-          }).reduce((sum, e) => sum + (e.hours || 0), 0)
-        : 0;
+    const volunteerLog = user?.membership?.volunteerLog || user?.volunteerLog || [];
+    const currentMonthHours = volunteerLog.filter(entry => {
+        const d = new Date(entry.date);
+        const now = new Date();
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    }).reduce((sum, e) => sum + (e.hours || 0), 0);
 
     const showToast = (message, type = 'info') => {
         setToast({ message, type });
@@ -71,20 +70,31 @@ const MembershipTab = ({ user, onUpdateMembership }) => {
     }, [isReadyForPayment]);
 
     const handleCheckout = async (plan) => {
-        const variation = plan.variations?.find(v => v.cadence === billingType);
-        if (!variation) {
-            showToast("Selected billing option not available.", 'error');
-            return;
+        let planID, price;
+
+        if (plan.variations?.length) {
+            const variation = plan.variations.find(v => v.cadence === billingType);
+            if (!variation) {
+                showToast("Selected billing option not available.", 'error');
+                return;
+            }
+            planID = variation.id;
+            price = variation.priceCents / 100;
+        } else {
+            planID = plan.id;
+            price = plan.price;
         }
+
         try {
-            const res = await fetch(`/api/v1/memberships/${variation.id}/checkout`, {
+            const res = await fetch(`/api/v1/memberships/${planID}/checkout`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userID: user.userID, price, currency: "USD" }),
             });
             if (!res.ok) throw new Error("Failed to create checkout");
             const data = await res.json();
-            if (data.checkoutUrl) {
-                window.location.href = data.checkoutUrl;
+            if (data.url || data.checkoutUrl) {
+                window.location.href = data.url || data.checkoutUrl;
             }
         } catch (err) {
             showToast("Failed to start checkout. Please try again.", 'error');
@@ -116,7 +126,7 @@ const MembershipTab = ({ user, onUpdateMembership }) => {
     };
 
     const filteredPlans = plans.filter(p =>
-        p.variations?.some(v => v.cadence === billingType)
+        !p.variations?.length || p.variations.some(v => v.cadence === billingType)
     );
 
     const loadingSteps = ["Fetching membership plans...", "Checking user status...", "Loading payment options..."];

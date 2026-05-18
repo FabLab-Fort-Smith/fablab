@@ -29,6 +29,8 @@ const MENU = (uid, role) => [
     ...(role === 'admin' ? [
         { sym: '⊟', title: 'bounty_ideas', desc: 'manage ideas',   path: '/dashboard/admin/bounty-ideas', admin: true },
         { sym: '≡', title: 'manage_news',  desc: 'post updates',   path: '/dashboard/admin/announcements', admin: true },
+        { sym: 'Ⓟ', title: 'plans',         desc: 'manage plans',   path: '/dashboard/admin/plans', admin: true },
+        { sym: '◎', title: 'sq_txns',        desc: 'sq txns',        path: '/dashboard/admin/square-transactions', admin: true },
     ] : []),
 ];
 
