@@ -43,12 +43,17 @@ function shapePlan(plan, hidden, subscriberCount = 0) {
     subscriberCount,
     variations: (plan.subscriptionPlanData?.subscriptionPlanVariations || []).map((v) => {
       const phases = v.subscriptionPlanVariationData?.phases || [];
-      // Square always puts billing last; trial (if present) is first with $0
+      // Square places billing last; trial (if any) is first with $0 price
       const billingPhase = phases[phases.length - 1];
       const trialPhase = phases.length > 1 ? phases[0] : null;
-      const priceAmount = billingPhase?.pricing?.priceMoney?.amount
-        ?? billingPhase?.recurringPriceMoney?.amount
-        ?? 0;
+      // Price can be in pricing.priceMoney OR recurringPriceMoney depending on plan age
+      const priceAmount =
+        billingPhase?.pricing?.priceMoney?.amount ??
+        billingPhase?.recurringPriceMoney?.amount ??
+        0;
+      if (Number(priceAmount) === 0 && phases.length > 0) {
+        console.warn("⚠️ $0 price detected for variation", v.id, "phases:", JSON.stringify(phases, (_, val) => typeof val === "bigint" ? val.toString() : val));
+      }
       return {
         id: v.id,
         name: v.subscriptionPlanVariationData?.name || "",
@@ -80,7 +85,10 @@ export async function GET(request) {
       if (!variationIds.length)
         return NextResponse.json([], { status: 200 });
 
-      const subs = await fetchAllSubscriptions({ planVariationIds: variationIds });
+      const allSubs = await fetchAllSubscriptions({ planVariationIds: variationIds });
+      // Guard: Square's filter may return broader results; enforce locally
+      const varSet = new Set(variationIds);
+      const subs = allSubs.filter(s => varSet.has(s.planVariationId));
 
       const customerIds = [...new Set(subs.map(s => s.customerId).filter(Boolean))];
       const usersCol = await db.dbUsers();
@@ -94,7 +102,8 @@ export async function GET(request) {
       const customerMap = {};
       for (const u of users) {
         const id = u.membership?.squareCustomerId || u.squareCustomerId || u.squareID;
-        if (id) customerMap[id] = { userID: u.userID, firstName: u.firstName, lastName: u.lastName, email: u.email };
+        // emails are encrypted in DB — only expose name identifiers
+        if (id) customerMap[id] = { userID: u.userID, firstName: u.firstName, lastName: u.lastName };
       }
 
       return NextResponse.json(subs.map(s => ({

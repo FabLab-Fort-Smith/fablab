@@ -476,7 +476,7 @@ export default function PlansPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: 'var(--mono)' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--bd)' }}>
-                    {['MEMBER', 'EMAIL', 'VARIATION', 'STATUS', 'THROUGH', 'ACTIONS'].map(h => (
+                    {['MEMBER', 'VARIATION', 'STATUS', 'THROUGH', 'ACTIONS'].map(h => (
                       <th key={h} style={{ textAlign: 'left', padding: '6px 8px', fontSize: 9, letterSpacing: '0.1em', color: 'var(--text-dim)', fontWeight: 400 }}>{h}</th>
                     ))}
                   </tr>
@@ -490,9 +490,6 @@ export default function PlansPage() {
                       <tr key={s.id} style={{ borderBottom: '1px solid var(--bd)', opacity: isPending ? 0.4 : 1 }}>
                         <td style={{ padding: '8px 8px', color: 'var(--text-bright)' }}>
                           {s.customer ? `${s.customer.firstName} ${s.customer.lastName}` : <span style={{ color: 'var(--text-dim)' }}>unknown</span>}
-                        </td>
-                        <td style={{ padding: '8px 8px', color: 'var(--text-mid)' }}>
-                          {s.customer?.email?.includes('@') ? s.customer.email : '—'}
                         </td>
                         <td style={{ padding: '8px 8px', color: 'var(--cyan)' }}>
                           {variation ? `${formatPrice(variation.priceCents)}/${cadenceLabel(variation.cadence)}` : '—'}
