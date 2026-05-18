@@ -95,6 +95,19 @@ export async function GET(request) {
     if (subscription?.id) {
       updateData["membership.squareSubscriptionId"] = subscription.id;
     }
+    // Resolve plan + variation name from the subscription
+    const varId = subscription?.planVariationId || planVariationId;
+    if (varId) {
+      try {
+        const { result: varR } = await squareClient.catalogApi.retrieveCatalogObject(varId);
+        const parentId = varR.object?.subscriptionPlanVariationData?.subscriptionPlanId;
+        updateData["membership.variationName"] = varR.object?.subscriptionPlanVariationData?.name || "";
+        if (parentId) {
+          const { result: planR } = await squareClient.catalogApi.retrieveCatalogObject(parentId);
+          updateData["membership.planName"] = planR.object?.subscriptionPlanData?.name || "";
+        }
+      } catch { /* non-fatal */ }
+    }
     await UserService.updateUser(userID, updateData);
 
     // 5. Award SUBSCRIBE stake for new subscriptions
