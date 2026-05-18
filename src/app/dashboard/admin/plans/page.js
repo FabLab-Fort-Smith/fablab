@@ -250,6 +250,30 @@ export default function PlansPage() {
     } finally { setSubmitting(false); }
   };
 
+  const handleMarkLegacy = async (plan) => {
+    try {
+      const res = await fetch('/api/v1/admin/plans', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId: plan.id, markLegacy: true }),
+      });
+      if (res.ok) { showToast('Plan marked as legacy — hidden from new members.'); fetchPlans(); }
+      else { const d = await res.json(); showToast(d.error || 'Failed.', 'error'); }
+    } catch { showToast('Failed.', 'error'); }
+  };
+
+  const handleUnmarkLegacy = async (plan) => {
+    try {
+      const res = await fetch('/api/v1/admin/plans', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId: plan.id, unmarkLegacy: true }),
+      });
+      if (res.ok) { showToast('Plan restored to active.'); fetchPlans(); }
+      else { const d = await res.json(); showToast(d.error || 'Failed.', 'error'); }
+    } catch { showToast('Failed.', 'error'); }
+  };
+
   const handleRestore = async (plan) => {
     try {
       const res = await fetch('/api/v1/admin/plans', {
@@ -334,7 +358,8 @@ export default function PlansPage() {
       {!loading && (
         <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid var(--bd)' }}>
           {[
-            { key: 'active', label: 'active', count: plans.filter(p => !p.hidden).length },
+            { key: 'active', label: 'active', count: plans.filter(p => !p.hidden && !p.legacy).length },
+            { key: 'legacy', label: 'legacy', count: plans.filter(p => p.legacy).length },
             { key: 'archived', label: 'archived', count: plans.filter(p => p.hidden).length },
           ].map(tab => (
             <button
@@ -366,10 +391,15 @@ export default function PlansPage() {
       {loading ? (
         <div style={{ color: 'var(--text-dim)', fontSize: 12, fontFamily: 'var(--mono)' }}>loading plans...</div>
       ) : (() => {
-        const visible = plans.filter(p => planTab === 'archived' ? p.hidden : !p.hidden);
+        const visible = plans.filter(p =>
+          planTab === 'archived' ? p.hidden :
+          planTab === 'legacy' ? p.legacy :
+          !p.hidden && !p.legacy
+        );
+        const emptyMsg = planTab === 'archived' ? 'no archived plans.' : planTab === 'legacy' ? 'no legacy plans.' : 'no active plans. create one to get started.';
         if (visible.length === 0) return (
           <div style={{ border: '1px solid var(--bd)', padding: '32px', textAlign: 'center', color: 'var(--text-dim)', fontSize: 12 }}>
-            {planTab === 'archived' ? 'no archived plans.' : 'no active plans. create one to get started.'}
+            {emptyMsg}
           </div>
         );
         return (
@@ -405,15 +435,27 @@ export default function PlansPage() {
                     <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--mono)' }}>—</span>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {plan.hidden ? (
                     <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px', borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={() => handleRestore(plan)}>
                       restore
                     </button>
+                  ) : plan.legacy ? (
+                    <>
+                      <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px', borderColor: 'var(--green)', color: 'var(--green)' }} onClick={() => handleUnmarkLegacy(plan)}>
+                        make active
+                      </button>
+                      <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px', borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => setArchivePlan(plan)}>
+                        archive
+                      </button>
+                    </>
                   ) : (
                     <>
                       <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px' }} onClick={() => openEditModal(plan)}>
                         edit
+                      </button>
+                      <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px', borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={() => handleMarkLegacy(plan)}>
+                        legacy
                       </button>
                       <button className="btn btn--sm" style={{ fontSize: 9, padding: '3px 8px', borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => setArchivePlan(plan)}>
                         archive

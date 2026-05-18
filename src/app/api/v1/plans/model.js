@@ -8,17 +8,19 @@ const ordersApi = squareClient.ordersApi;
 export default class PlansModel {
   static async getPlans() {
     const dbPlans = await db.dbPlans();
-    const [hiddenDoc, hiddenVarDoc, metaDoc] = await Promise.all([
+    const [hiddenDoc, hiddenVarDoc, metaDoc, legacyDoc] = await Promise.all([
       dbPlans.findOne({ _id: "hidden_plans" }),
       dbPlans.findOne({ _id: "hidden_variations" }),
       dbPlans.findOne({ _id: "plan_meta" }),
+      dbPlans.findOne({ _id: "legacy_plans" }),
     ]);
     const hiddenIds = new Set(hiddenDoc?.ids || []);
     const hiddenVarIds = new Set(hiddenVarDoc?.ids || []);
+    const legacyIds = new Set(legacyDoc?.ids || []);
     const planMeta = metaDoc?.plans || {};
 
     const { result } = await catalogApi.listCatalog(undefined, "SUBSCRIPTION_PLAN");
-    const rawPlans = (result.objects || []).filter(p => !hiddenIds.has(p.id));
+    const rawPlans = (result.objects || []).filter(p => !hiddenIds.has(p.id) && !legacyIds.has(p.id));
 
     const plans = rawPlans.map(p => ({
       id: p.id,

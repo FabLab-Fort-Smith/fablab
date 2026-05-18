@@ -208,10 +208,10 @@ export default function SquareTransactionsPage() {
                                 <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                                     <span style={{
                                         fontSize: 9, padding: '2px 6px', letterSpacing: '0.06em',
-                                        border: `1px solid ${t.subscriptionId ? 'var(--cyan)' : 'var(--text-dim)'}`,
-                                        color: t.subscriptionId ? 'var(--cyan)' : 'var(--text-dim)',
+                                        border: `1px solid ${t.isSubscription ? 'var(--cyan)' : 'var(--text-dim)'}`,
+                                        color: t.isSubscription ? 'var(--cyan)' : 'var(--text-dim)',
                                     }}>
-                                        {t.subscriptionId ? 'SUBSCRIPTION' : 'ONE-TIME'}
+                                        {t.isSubscription ? 'SUBSCRIPTION' : 'ONE-TIME'}
                                     </span>
                                 </td>
                                 <td style={{ padding: '10px 12px', color: 'var(--text-dim)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

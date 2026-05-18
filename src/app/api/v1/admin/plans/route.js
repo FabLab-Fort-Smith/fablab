@@ -36,6 +36,20 @@ async function unsetHiddenVariationId(variationId) {
   const col = await db.dbPlans();
   await col.updateOne({ _id: "hidden_variations" }, { $pull: { ids: variationId } });
 }
+async function getLegacyPlanIds() {
+  const col = await db.dbPlans();
+  const doc = await col.findOne({ _id: "legacy_plans" });
+  return new Set(doc?.ids || []);
+}
+async function setLegacyPlanId(planId) {
+  const col = await db.dbPlans();
+  await col.updateOne({ _id: "legacy_plans" }, { $addToSet: { ids: planId } }, { upsert: true });
+}
+async function unsetLegacyPlanId(planId) {
+  const col = await db.dbPlans();
+  await col.updateOne({ _id: "legacy_plans" }, { $pull: { ids: planId } });
+}
+
 async function getPlanMeta() {
   const col = await db.dbPlans();
   const doc = await col.findOne({ _id: "plan_meta" });
@@ -76,12 +90,13 @@ async function fetchAllSubscriptions(filter) {
   return subs;
 }
 
-function shapePlan(plan, hidden, subscriberCount = 0) {
+function shapePlan(plan, hidden, subscriberCount = 0, legacy = new Set()) {
   return {
     id: plan.id,
     version: Number(plan.version),
     name: plan.subscriptionPlanData?.name || "Unnamed Plan",
     hidden: hidden.has(plan.id),
+    legacy: legacy.has(plan.id),
     subscriberCount,
     variations: (plan.subscriptionPlanData?.subscriptionPlanVariations || []).map((v) => {
       const phases = v.subscriptionPlanVariationData?.phases || [];
@@ -172,11 +187,12 @@ export async function GET(request) {
     }
 
     // ── Full plan list ──
-    const [{ result }, hidden, hiddenVars, planMeta] = await Promise.all([
+    const [{ result }, hidden, hiddenVars, planMeta, legacy] = await Promise.all([
       catalogApi.listCatalog(undefined, "SUBSCRIPTION_PLAN"),
       getHiddenPlanIds(),
       getHiddenVariationIds(),
       getPlanMeta(),
+      getLegacyPlanIds(),
     ]);
 
     const rawPlans = result.objects || [];
@@ -215,7 +231,7 @@ export async function GET(request) {
 
     // Shape plans, strip hidden variations, inject real prices, merge metadata
     const plans = rawPlans.map(p => {
-      const shaped = shapePlan(p, hidden, countByPlan[p.id] || 0);
+      const shaped = shapePlan(p, hidden, countByPlan[p.id] || 0, legacy);
       shaped.variations = shaped.variations.filter(v => !hiddenVars.has(v.id));
       const meta = planMeta[p.id] || {};
       shaped.description = meta.description || '';
@@ -297,13 +313,23 @@ export async function PUT(request) {
     if (!session || session.user.role !== "admin")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { planId, name, variations, newVariations, restore, removeVariationId, meta } = await request.json();
+    const { planId, name, variations, newVariations, restore, removeVariationId, meta, markLegacy, unmarkLegacy } = await request.json();
     if (!planId)
       return NextResponse.json({ error: "planId is required." }, { status: 400 });
 
     if (restore) {
       await unsetHiddenPlanId(planId);
       return NextResponse.json({ success: true, restored: true }, { status: 200 });
+    }
+
+    if (markLegacy) {
+      await setLegacyPlanId(planId);
+      return NextResponse.json({ success: true, legacy: true }, { status: 200 });
+    }
+
+    if (unmarkLegacy) {
+      await unsetLegacyPlanId(planId);
+      return NextResponse.json({ success: true, legacy: false }, { status: 200 });
     }
 
     if (removeVariationId) {

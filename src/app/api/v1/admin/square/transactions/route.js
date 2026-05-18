@@ -30,14 +30,25 @@ export async function GET(request) {
 
     const payments = result.payments || [];
 
-    // Build a lookup of squareCustomerId → user
-    // The customer ID is stored under three different field names depending on the code path:
-    //   membership.squareCustomerId (confirm callback + manual link)
-    //   squareCustomerId            (checkout route)
-    //   squareID                    (webhook / syncSubscription)
     const usersCollection = await db.dbUsers();
     const customerIds = [...new Set(payments.map((p) => p.customerId).filter(Boolean))];
 
+    // Cross-reference: which customerIds have a subscription in Square?
+    // Square's payment object has no direct subscriptionId — we detect it by checking
+    // whether the customer has any subscription record at all.
+    const subscriberCustomerIds = new Set();
+    if (customerIds.length) {
+      try {
+        const { result: subResult } = await squareClient.subscriptionsApi.searchSubscriptions({
+          query: { filter: { customerIds } },
+          limit: 200,
+        });
+        for (const s of (subResult.subscriptions || []))
+          if (s.customerId) subscriberCustomerIds.add(s.customerId);
+      } catch { /* non-fatal */ }
+    }
+
+    // Build a lookup of squareCustomerId → user
     const linkedUsers = await usersCollection
       .find({
         $or: [
@@ -50,18 +61,8 @@ export async function GET(request) {
 
     const customerMap = {};
     for (const u of linkedUsers) {
-      const id =
-        u.membership?.squareCustomerId ||
-        u.squareCustomerId ||
-        u.squareID;
-      if (id) {
-        customerMap[id] = {
-          userID: u.userID,
-          firstName: u.firstName,
-          lastName: u.lastName,
-          email: u.email,
-        };
-      }
+      const id = u.membership?.squareCustomerId || u.squareCustomerId || u.squareID;
+      if (id) customerMap[id] = { userID: u.userID, firstName: u.firstName, lastName: u.lastName, email: u.email };
     }
 
     const enriched = payments.map((p) => ({
@@ -71,7 +72,7 @@ export async function GET(request) {
       status: p.status,
       createdAt: p.createdAt,
       customerId: p.customerId,
-      subscriptionId: p.subscriptionId,
+      isSubscription: p.customerId ? subscriberCustomerIds.has(p.customerId) : false,
       note: p.note || null,
       linkedUser: p.customerId ? customerMap[p.customerId] || null : null,
     }));
