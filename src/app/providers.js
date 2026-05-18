@@ -22,6 +22,9 @@ import EmailIcon from '@mui/icons-material/Email';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
+import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 
 const getUserNavigation = (userID) => [
     {
@@ -174,6 +177,21 @@ const ADMIN_NAVIGATION = [
                 segment: 'announcements',
                 title: 'Manage News',
                 icon: <CampaignIcon />
+            },
+            {
+                segment: 'donations',
+                title: 'Donations',
+                icon: <CardGiftcardIcon />
+            },
+            {
+                segment: 'plans',
+                title: 'Membership Plans',
+                icon: <CreditCardIcon />
+            },
+            {
+                segment: 'square-transactions',
+                title: 'Square Transactions',
+                icon: <ReceiptLongIcon />
             }
         ]
     }
