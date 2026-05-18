@@ -39,48 +39,52 @@ export async function POST(request, context) {
 
     // Square's order line items only accept CATALOG_ITEM_VARIATION objects (not
     // SUBSCRIPTION_PLAN_VARIATION), so we use CUSTOM_AMOUNT to collect the first
-    // payment. The confirm endpoint creates the actual subscription in Square after
-    // the payment completes and a card is on file.
-    const priceCents = Math.round(price * 100);
+    // payment. The confirm endpoint creates the actual subscription after payment.
+    let priceCents = Math.round(price * 100);
     if (priceCents <= 0) {
       return NextResponse.json({ error: "Invalid price — cannot create a $0 checkout." }, { status: 400 });
     }
 
-    // Fetch plan variation name for the line item label
+    // Fetch plan variation name for display
     let variationName = "Membership";
     try {
       const { result: catResult } = await squareClient.catalogApi.retrieveCatalogObject(planID);
       variationName = catResult.object?.subscriptionPlanVariationData?.name || variationName;
     } catch { /* non-fatal */ }
 
-    // Resolve coupon against Square catalog discounts
-    let orderDiscounts = undefined;
+    // Validate coupon and calculate discounted price on our side.
+    // Square's order-level discount API is unreliable with CUSTOM_AMOUNT items,
+    // so we apply the discount ourselves and pass the final price to Square.
+    let discountLabel = null;
     if (couponCode) {
-      try {
-        const { result: searchResult } = await squareClient.catalogApi.searchCatalogObjects({
-          objectTypes: ["DISCOUNT"],
-          query: { exactQuery: { attributeName: "name", attributeValue: couponCode.toUpperCase() } },
-        });
-        const discount = (searchResult.objects || [])[0];
-        if (!discount) {
-          return NextResponse.json({ error: `Coupon code "${couponCode}" not found.` }, { status: 400 });
-        }
-        const dd = discount.discountData;
-        orderDiscounts = [{
-          uid: "coupon",
-          name: dd.name,
-          discountType: dd.discountType,
-          ...(dd.percentage != null ? { percentage: dd.percentage } : {}),
-          ...(dd.amountMoney != null ? { amountMoney: dd.amountMoney } : {}),
-          scope: "ORDER",
-        }];
-      } catch (err) {
-        return NextResponse.json({ error: "Failed to validate coupon." }, { status: 500 });
+      const { result: searchResult } = await squareClient.catalogApi.searchCatalogObjects({
+        objectTypes: ["DISCOUNT"],
+        query: { exactQuery: { attributeName: "name", attributeValue: couponCode.toUpperCase() } },
+      });
+      const discount = (searchResult.objects || [])[0];
+      if (!discount) {
+        return NextResponse.json({ error: `Coupon "${couponCode}" not found.` }, { status: 400 });
+      }
+      const dd = discount.discountData;
+      if (dd.discountType === "FIXED_PERCENTAGE") {
+        const pct = parseFloat(dd.percentage || "0") / 100;
+        const savings = Math.round(priceCents * pct);
+        priceCents = Math.max(1, priceCents - savings); // min $0.01
+        discountLabel = `${dd.percentage}% off`;
+      } else if (dd.discountType === "FIXED_AMOUNT" && dd.amountMoney) {
+        const savings = Number(dd.amountMoney.amount);
+        priceCents = Math.max(1, priceCents - savings);
+        discountLabel = `$${(savings / 100).toFixed(2)} off`;
       }
     }
 
+    const lineItemNote = discountLabel
+      ? `${variationName} (${discountLabel})`
+      : variationName;
+
     const { result: checkoutResult } = await checkoutApi.createPaymentLink({
       idempotencyKey: uuidv4(),
+      description: lineItemNote,
       order: {
         locationId: process.env.SQUARE_LOCATION_ID,
         customerId: squareCustomerId,
@@ -88,12 +92,10 @@ export async function POST(request, context) {
           quantity: "1",
           itemType: "CUSTOM_AMOUNT",
           basePriceMoney: { amount: BigInt(priceCents), currency },
-          note: variationName,
+          note: lineItemNote,
         }],
-        ...(orderDiscounts ? { discounts: orderDiscounts } : {}),
       },
       checkoutOptions: {
-        // Pass planVariationId so the confirm endpoint can create the subscription
         redirectUrl: `${appUrl}/api/v1/memberships/confirm?userID=${userID}&planVariationId=${planID}`,
         askForShippingAddress: false,
       },
