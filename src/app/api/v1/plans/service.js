@@ -7,7 +7,7 @@ export default class PlansService {
       return plans;
     } catch (error) {
       console.error("Error fetching plans:", error);
-      throw new Error("Failed to fetch plans from the database.");
+      throw new Error("Failed to fetch plans from Square.");
     }
   }
 }

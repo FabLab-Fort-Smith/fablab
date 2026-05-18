@@ -1,4 +1,3 @@
-import { db } from "@/lib/database";
 import squareClient from "@/lib/square";
 
 const catalogApi = squareClient.catalogApi;
@@ -7,16 +6,9 @@ const ordersApi = squareClient.ordersApi;
 
 export default class PlansModel {
   static async getPlans() {
-    // Load hidden plan IDs from DB
-    const dbPlans = await db.dbPlans();
-    const hiddenDoc = await dbPlans.findOne({ _id: "hidden_plans" });
-    const hiddenIds = new Set(hiddenDoc?.ids || []);
-
-    // Fetch live plan catalog from Square, filter out hidden
     const { result } = await catalogApi.listCatalog(undefined, "SUBSCRIPTION_PLAN");
-    const rawPlans = (result.objects || []).filter(p => !hiddenIds.has(p.id));
+    const rawPlans = result.objects || [];
 
-    // Shape into a stable format for the frontend
     const plans = rawPlans.map(p => ({
       id: p.id,
       name: p.subscriptionPlanData?.name || "Unnamed Plan",
@@ -27,23 +19,24 @@ export default class PlansModel {
           id: v.id,
           name: v.subscriptionPlanVariationData?.name || "",
           cadence: billingPhase?.cadence || "UNKNOWN",
-          priceCents: null, // RELATIVE pricing — injected below from order templates
+          priceCents: null,
         };
       }),
     }));
 
-    // Inject prices from one active subscriber's order template per variation
+    // Inject prices from subscriber order templates (Square RELATIVE pricing)
     try {
-      const allVariationIds = plans.flatMap(p => p.variations.map(v => v.id));
-      if (allVariationIds.length) {
+      const allVariationIds = new Set(plans.flatMap(p => p.variations.map(v => v.id)));
+      if (allVariationIds.size) {
         const { result: subsResult } = await subscriptionsApi.searchSubscriptions({
           limit: 200,
-          query: { filter: { planVariationIds: allVariationIds, statuses: ["ACTIVE", "PAUSED"] } },
+          query: { filter: { statuses: ["ACTIVE", "PAUSED"] } },
         });
 
         const varToTemplate = {};
         for (const s of (subsResult.subscriptions || [])) {
-          if (s.planVariationId && s.phases?.[0]?.orderTemplateId && !varToTemplate[s.planVariationId])
+          if (s.planVariationId && allVariationIds.has(s.planVariationId) &&
+              s.phases?.[0]?.orderTemplateId && !varToTemplate[s.planVariationId])
             varToTemplate[s.planVariationId] = s.phases[0].orderTemplateId;
         }
 

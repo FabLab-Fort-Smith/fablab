@@ -361,36 +361,39 @@ function MembershipSection() {
         <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>[no plans available — contact us to join]</div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
-          {plans.map((plan, i) => (
-            <div key={plan.id || plan._id || i} className="card" style={{
-              padding: '24px 22px',
-              border: i === 0 ? '1px solid var(--green)' : '1px solid var(--bd)',
-              boxShadow: i === 0 ? '0 0 24px rgba(57,255,20,0.12)' : 'none',
-              display: 'flex', flexDirection: 'column',
-            }}>
-              <div style={{ fontFamily: 'var(--mono)', color: 'var(--green)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
-                {plan.name}
-              </div>
-              {plan.price != null && (
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 10 }}>
-                  <span style={{ fontFamily: 'var(--display)', fontSize: 36, color: 'var(--text-bright)', letterSpacing: '-0.04em', lineHeight: 1 }}>
-                    {typeof plan.price === 'number' ? `$${plan.price}` : plan.price}
-                  </span>
-                  <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>/month</span>
+          {plans.map((plan, i) => {
+            const cadenceLabel = c => ({ MONTHLY: 'mo', ANNUAL: 'yr', WEEKLY: 'wk', DAILY: 'day', EVERY_TWO_YEARS: '2yr' }[c] || c?.toLowerCase());
+            return (
+              <div key={plan.id || i} className="card" style={{
+                padding: '24px 22px',
+                border: i === 0 ? '1px solid var(--green)' : '1px solid var(--bd)',
+                boxShadow: i === 0 ? '0 0 24px rgba(57,255,20,0.12)' : 'none',
+                display: 'flex', flexDirection: 'column',
+              }}>
+                <div style={{ fontFamily: 'var(--mono)', color: 'var(--green)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
+                  {plan.name}
                 </div>
-              )}
-              {plan.description && (
-                <p style={{ color: 'var(--text-mid)', fontSize: 12, lineHeight: 1.6, marginBottom: 16, flex: 1 }}>{plan.description}</p>
-              )}
-              <Link
-                href={`/auth/register?plan=${encodeURIComponent(plan.id || plan.name)}`}
-                className={i === 0 ? 'btn btn--filled btn--sm' : 'btn btn--ghost btn--sm'}
-                style={{ width: '100%', textAlign: 'center', fontSize: 10, marginTop: 'auto' }}
-              >
-                $ ./join --plan={plan.name?.toLowerCase().replace(/\s+/g, '-') || 'now'}
-              </Link>
-            </div>
-          ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16, flex: 1 }}>
+                  {(plan.variations || []).map(v => (
+                    <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <span style={{ color: 'var(--text-mid)', fontSize: 11 }}>{v.name || cadenceLabel(v.cadence)}</span>
+                      <span style={{ fontFamily: 'var(--display)', fontSize: 18, color: 'var(--text-bright)', letterSpacing: '-0.04em' }}>
+                        {v.priceCents != null ? `$${(v.priceCents / 100).toFixed(0)}` : '—'}
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-dim)', marginLeft: 2 }}>/{cadenceLabel(v.cadence)}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <Link
+                  href={`/auth/register?plan=${encodeURIComponent(plan.id || plan.name)}`}
+                  className={i === 0 ? 'btn btn--filled btn--sm' : 'btn btn--ghost btn--sm'}
+                  style={{ width: '100%', textAlign: 'center', fontSize: 10, marginTop: 'auto' }}
+                >
+                  $ ./join --plan={plan.name?.toLowerCase().replace(/\s+/g, '-') || 'now'}
+                </Link>
+              </div>
+            );
+          })}
         </div>
       )}
     </section>

@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 
+const cadenceLabel = c => ({ MONTHLY: 'mo', ANNUAL: 'yr', WEEKLY: 'wk', DAILY: 'day', EVERY_TWO_YEARS: '2yr' }[c] || c?.toLowerCase() || '?');
+
 export default function PlansPage() {
     const [plans, setPlans] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -9,7 +11,7 @@ export default function PlansPage() {
     useEffect(() => {
         fetch('/api/v1/plans')
             .then(r => r.ok ? r.json() : Promise.reject())
-            .then(data => setPlans(data))
+            .then(data => setPlans(Array.isArray(data) ? data : []))
             .catch(() => setError('Failed to load membership plans.'))
             .finally(() => setLoading(false));
     }, []);
@@ -37,24 +39,48 @@ export default function PlansPage() {
                 <div style={{ border: '1px solid var(--red)', color: 'var(--red)', padding: '10px 14px', fontSize: 11 }}>[ERROR] {error}</div>
             )}
 
-            {!loading && !error && (
+            {!loading && !error && plans.length === 0 && (
+                <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>[no plans available — contact us to join]</div>
+            )}
+
+            {!loading && !error && plans.length > 0 && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-                    {plans.map(plan => (
-                        <div key={plan.id} className="card" style={{ padding: '24px 20px', display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ fontFamily: 'var(--mono)', color: 'var(--green)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>
+                    {plans.map((plan, i) => (
+                        <div key={plan.id || i} className="card" style={{
+                            padding: '24px 20px', display: 'flex', flexDirection: 'column',
+                            border: i === 0 ? '1px solid var(--green)' : '1px solid var(--bd)',
+                            boxShadow: i === 0 ? '0 0 24px rgba(57,255,20,0.10)' : 'none',
+                        }}>
+                            <div style={{ fontFamily: 'var(--mono)', color: 'var(--green)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>
                                 {plan.name}
                             </div>
-                            <div style={{ fontFamily: 'var(--display)', fontSize: 32, color: 'var(--text-bright)', letterSpacing: '-0.04em', marginBottom: 4, lineHeight: 1 }}>
-                                ${plan.price}<span style={{ fontSize: 13, color: 'var(--text-dim)', fontFamily: 'var(--mono)' }}>/mo</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, marginBottom: 18 }}>
+                                {(plan.variations || []).map(v => (
+                                    <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '1px solid var(--bd)', paddingBottom: 6 }}>
+                                        <span style={{ color: 'var(--text-mid)', fontSize: 11 }}>
+                                            {v.name || cadenceLabel(v.cadence)}
+                                        </span>
+                                        <span>
+                                            <span style={{ fontFamily: 'var(--display)', fontSize: 22, color: 'var(--text-bright)', letterSpacing: '-0.04em' }}>
+                                                {v.priceCents != null ? `$${(v.priceCents / 100).toFixed(0)}` : '—'}
+                                            </span>
+                                            <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-dim)', marginLeft: 2 }}>
+                                                /{cadenceLabel(v.cadence)}
+                                            </span>
+                                        </span>
+                                    </div>
+                                ))}
                             </div>
-                            <p style={{ color: 'var(--text-mid)', fontSize: 12, lineHeight: 1.6, marginBottom: 14, flex: 1 }}>
-                                {plan.description}
-                            </p>
                             <div style={{ border: '1px solid var(--amber)', background: 'rgba(255,176,0,0.05)', padding: '6px 10px', fontSize: 10, color: 'var(--amber)', letterSpacing: '0.08em', marginBottom: 16 }}>
                                 +25 STAKE on first subscription
                             </div>
-                            {/* Square embed — preserved as-is */}
-                            <div dangerouslySetInnerHTML={{ __html: plan.embed }} />
+                            <a
+                                href={`/auth/register?plan=${encodeURIComponent(plan.id || plan.name)}`}
+                                className={i === 0 ? 'btn btn--filled btn--sm' : 'btn btn--ghost btn--sm'}
+                                style={{ textAlign: 'center', fontSize: 10 }}
+                            >
+                                $ ./join --plan={plan.name?.toLowerCase().replace(/\s+/g, '-') || 'now'}
+                            </a>
                         </div>
                     ))}
                 </div>
