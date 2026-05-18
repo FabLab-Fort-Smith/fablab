@@ -46,19 +46,17 @@ function shapePlan(plan, hidden, subscriberCount = 0) {
       // Square places billing last; trial (if any) is first with $0 price
       const billingPhase = phases[phases.length - 1];
       const trialPhase = phases.length > 1 ? phases[0] : null;
-      // Price can be in pricing.priceMoney OR recurringPriceMoney depending on plan age
-      const priceAmount =
-        billingPhase?.pricing?.priceMoney?.amount ??
-        billingPhase?.recurringPriceMoney?.amount ??
-        0;
-      if (Number(priceAmount) === 0 && phases.length > 0) {
-        console.warn("⚠️ $0 price detected for variation", v.id, "phases:", JSON.stringify(phases, (_, val) => typeof val === "bigint" ? val.toString() : val));
-      }
+      // RELATIVE pricing = price is set per-subscription at creation, not stored in the catalog
+      const pricingType = billingPhase?.pricing?.type;
+      const isRelative = pricingType === "RELATIVE" || (!billingPhase?.pricing?.priceMoney?.amount && !billingPhase?.recurringPriceMoney?.amount);
+      const priceAmount = isRelative
+        ? null
+        : Number(billingPhase?.pricing?.priceMoney?.amount ?? billingPhase?.recurringPriceMoney?.amount ?? 0);
       return {
         id: v.id,
         name: v.subscriptionPlanVariationData?.name || "",
         cadence: billingPhase?.cadence || "UNKNOWN",
-        priceCents: Number(priceAmount),
+        priceCents: priceAmount,
         trialDays: trialPhase ? Number(trialPhase.periods ?? 0) : 0,
       };
     }),

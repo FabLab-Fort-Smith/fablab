@@ -297,7 +297,8 @@ export default function PlansPage() {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {(plan.variations || []).map(v => (
                   <span key={v.id} style={{ fontSize: 9, border: '1px solid var(--bd-1)', color: 'var(--cyan)', padding: '3px 7px', letterSpacing: '0.06em', fontFamily: 'var(--mono)' }}>
-                    {formatPrice(v.priceCents)}/{cadenceLabel(v.cadence)}
+                    {v.priceCents != null ? `${formatPrice(v.priceCents)}/` : ''}{cadenceLabel(v.cadence)}
+                    {v.priceCents == null && <span style={{ color: 'var(--text-dim)', marginLeft: 4 }}>variable</span>}
                     {v.trialDays > 0 && <span style={{ color: 'var(--amber)', marginLeft: 4 }}>+{v.trialDays}d trial</span>}
                   </span>
                 ))}
@@ -492,7 +493,11 @@ export default function PlansPage() {
                           {s.customer ? `${s.customer.firstName} ${s.customer.lastName}` : <span style={{ color: 'var(--text-dim)' }}>unknown</span>}
                         </td>
                         <td style={{ padding: '8px 8px', color: 'var(--cyan)' }}>
-                          {variation ? `${formatPrice(variation.priceCents)}/${cadenceLabel(variation.cadence)}` : '—'}
+                          {variation
+                            ? variation.priceCents != null
+                              ? `${formatPrice(variation.priceCents)}/${cadenceLabel(variation.cadence)}`
+                              : cadenceLabel(variation.cadence)
+                            : '—'}
                         </td>
                         <td style={{ padding: '8px 8px' }}>
                           <span style={{ fontSize: 9, border: `1px solid ${statusColor}`, color: statusColor, padding: '1px 5px', letterSpacing: '0.08em' }}>
