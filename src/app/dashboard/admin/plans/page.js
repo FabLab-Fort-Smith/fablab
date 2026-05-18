@@ -64,7 +64,7 @@ export default function PlansPage() {
 
   const [addForm, setAddForm] = useState({
     name: '',
-    variations: [{ name: '', cadence: 'MONTHLY', priceCents: '', trialDays: '' }],
+    variations: [{ name: '', cadence: 'MONTHLY', priceCents: '' }],
   });
   const [editForm, setEditForm] = useState({ name: '', variations: [] });
 
@@ -142,7 +142,7 @@ export default function PlansPage() {
         name: v.name || v.cadence,
         cadence: v.cadence,
         priceCents: Math.round(parseFloat(v.priceCents) * 100),
-        trialDays: v.trialDays ? parseInt(v.trialDays, 10) : 0,
+        trialDays: 0,
       }));
       const res = await fetch('/api/v1/admin/plans', {
         method: 'POST',
@@ -153,7 +153,7 @@ export default function PlansPage() {
       if (res.ok) {
         showToast('Plan created.');
         setAddOpen(false);
-        setAddForm({ name: '', variations: [{ name: '', cadence: 'MONTHLY', priceCents: '', trialDays: '' }] });
+        setAddForm({ name: '', variations: [{ name: '', cadence: 'MONTHLY', priceCents: '' }] });
         fetchPlans();
       } else {
         showToast(d.error || 'Failed to create plan.', 'error');
@@ -231,7 +231,6 @@ export default function PlansPage() {
         name: v.name,
         cadence: v.cadence,
         priceCents: v.priceCents != null ? (v.priceCents / 100).toFixed(2) : '',
-        trialDays: v.trialDays || 0,
       })),
     });
   };
@@ -315,7 +314,6 @@ export default function PlansPage() {
                   <span key={v.id} style={{ fontSize: 9, border: '1px solid var(--bd-1)', color: 'var(--cyan)', padding: '3px 7px', letterSpacing: '0.06em', fontFamily: 'var(--mono)' }}>
                     {v.priceCents != null ? `${formatPrice(v.priceCents)}/` : ''}{cadenceLabel(v.cadence)}
                     {v.priceCents == null && <span style={{ color: 'var(--text-dim)', marginLeft: 4 }}>·custom</span>}
-                    {v.trialDays > 0 && <span style={{ color: 'var(--amber)', marginLeft: 4 }}>+{v.trialDays}d trial</span>}
                   </span>
                 ))}
               </div>
@@ -382,9 +380,6 @@ export default function PlansPage() {
                     <Field label="PRICE (USD) *">
                       <input type="number" min="0" step="0.01" value={v.priceCents} placeholder="0.00" onChange={e => updateAddVar(idx, 'priceCents', e.target.value)} style={inputStyle} />
                     </Field>
-                    <Field label="TRIAL DAYS (0 = none)">
-                      <input type="number" min="0" step="1" value={v.trialDays} placeholder="0" onChange={e => updateAddVar(idx, 'trialDays', e.target.value)} style={inputStyle} />
-                    </Field>
                   </div>
                   {addForm.variations.length > 1 && (
                     <button
@@ -397,7 +392,7 @@ export default function PlansPage() {
               <button
                 className="btn btn--sm"
                 style={{ fontSize: 9, color: 'var(--cyan)', borderColor: 'var(--cyan)' }}
-                onClick={() => setAddForm(p => ({ ...p, variations: [...p.variations, { name: '', cadence: 'MONTHLY', priceCents: '', trialDays: '' }] }))}
+                onClick={() => setAddForm(p => ({ ...p, variations: [...p.variations, { name: '', cadence: 'MONTHLY', priceCents: '' }] }))}
               >
                 + add variation
               </button>
@@ -431,9 +426,7 @@ export default function PlansPage() {
                   <div key={v.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10, padding: '10px 12px', border: '1px solid var(--bd)', position: 'relative' }}>
                     <div>
                       <div style={{ fontSize: 10, color: 'var(--text-bright)', fontFamily: 'var(--mono)', marginBottom: 2 }}>{v.name || v.cadence}</div>
-                      <div style={{ fontSize: 9, color: 'var(--text-dim)' }}>
-                        {v.cadence}{v.trialDays > 0 ? ` · ${v.trialDays}d trial` : ''}
-                      </div>
+                      <div style={{ fontSize: 9, color: 'var(--text-dim)' }}>{v.cadence}</div>
                     </div>
                     <Field label="PRICE (USD)">
                       <input type="number" min="0" step="0.01" value={v.priceCents} placeholder="custom" onChange={e => updateEditVar(idx, 'priceCents', e.target.value)} style={inputStyle} />
