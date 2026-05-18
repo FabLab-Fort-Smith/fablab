@@ -16,12 +16,13 @@ export async function GET() {
     const { result } = await catalogApi.listCatalog(undefined, "SUBSCRIPTION_PLAN");
     const plans = (result.objects || []).map((plan) => ({
       id: plan.id,
-      version: plan.version,
+      version: Number(plan.version),
       name: plan.subscriptionPlanData?.name || "Unnamed Plan",
       variations: (plan.subscriptionPlanData?.subscriptionPlanVariations || []).map((v) => ({
         id: v.id,
         name: v.subscriptionPlanVariationData?.name || "",
         cadence: v.subscriptionPlanVariationData?.phases?.[0]?.cadence || "UNKNOWN",
+        priceCents: Number(v.subscriptionPlanVariationData?.phases?.[0]?.pricing?.priceMoney?.amount ?? 0),
       })),
     }));
 
@@ -92,7 +93,7 @@ export async function POST(request) {
       },
     });
 
-    return NextResponse.json({ success: true, plan: result.catalogObject }, { status: 201 });
+    return NextResponse.json({ success: true, planId: result.catalogObject?.id }, { status: 201 });
   } catch (error) {
     console.error("❌ Error creating plan:", error);
     return NextResponse.json({ error: "Failed to create plan." }, { status: 500 });
@@ -131,7 +132,7 @@ export async function PUT(request) {
       },
     });
 
-    return NextResponse.json({ success: true, plan: result.catalogObject }, { status: 200 });
+    return NextResponse.json({ success: true, planId: result.catalogObject?.id }, { status: 200 });
   } catch (error) {
     console.error("❌ Error updating plan:", error);
     return NextResponse.json({ error: "Failed to update plan." }, { status: 500 });
