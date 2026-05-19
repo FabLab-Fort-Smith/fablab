@@ -265,7 +265,14 @@ export default function MembersPage() {
                                     {group.users.map(u => (
                                         <button key={u.userID} className="btn btn--ghost btn--sm"
                                             style={{ fontSize: 9 }}
-                                            onClick={() => { setSelectedUser(u); setDialogOpen(true); }}>
+                                            onClick={async () => {
+                                                try {
+                                                    const res = await fetch(`/api/v1/users?userID=${u.userID}`);
+                                                    const data = await res.json();
+                                                    setSelectedUser(data.user || data || u);
+                                                } catch { setSelectedUser(u); }
+                                                setDialogOpen(true);
+                                            }}>
                                             manage {u.firstName}
                                         </button>
                                     ))}
