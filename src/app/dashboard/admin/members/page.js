@@ -40,6 +40,10 @@ export default function MembersPage() {
     const [merging, setMerging] = useState(false);
     const [allUsersForMerge, setAllUsersForMerge] = useState([]);
     const [toast, setToast] = useState(null);
+    const [activeTab, setActiveTab] = useState('members');
+    const [dupes, setDupes] = useState([]);
+    const [dupesLoading, setDupesLoading] = useState(false);
+    const [dupesLoaded, setDupesLoaded] = useState(false);
     const PAGE_SIZE = 25;
 
     useEffect(() => {
@@ -124,6 +128,23 @@ export default function MembersPage() {
 
     const handleUserUpdate = (updatedUser) => setUsers(prev => prev.map(u => u.userID === updatedUser.userID ? updatedUser : u));
 
+    const fetchDupes = async () => {
+        setDupesLoading(true);
+        try {
+            const res = await fetch('/api/v1/admin/duplicates');
+            if (res.ok) { setDupes(await res.json()); setDupesLoaded(true); }
+        } catch {}
+        finally { setDupesLoading(false); }
+    };
+
+    const handleTabChange = (tab) => {
+        setActiveTab(tab);
+        if (tab === 'dupes' && !dupesLoaded) fetchDupes();
+    };
+
+    const REASON_LABEL = { email: 'same email', google_id: 'same Google ID', discord_id: 'same Discord ID', username: 'same username', name: 'same name' };
+    const REASON_COLOR = { email: 'var(--red, #ff4444)', google_id: 'var(--magenta)', discord_id: 'var(--cyan)', username: 'var(--amber)', name: 'var(--text-dim)' };
+
     const filtered = users; // search is server-side
 
     const totalPages = Math.ceil(rowCount / PAGE_SIZE);
@@ -144,18 +165,107 @@ export default function MembersPage() {
                 </div>
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-                <input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder="search by name or email..." style={{ width: '100%', maxWidth: 360, boxSizing: 'border-box', fontSize: 12 }} />
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--bd)' }}>
+                {[['members', 'members'], ['dupes', `dupes${dupesLoaded && dupes.length ? ` (${dupes.length})` : ''}`]].map(([id, label]) => (
+                    <button key={id} onClick={() => handleTabChange(id)} style={{ padding: '8px 20px', background: 'none', border: 'none', borderBottom: `2px solid ${activeTab === id ? 'var(--green)' : 'transparent'}`, color: activeTab === id ? 'var(--green)' : 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.08em', marginBottom: -1 }}>
+                        {label}
+                    </button>
+                ))}
             </div>
 
-            {error && (
+            {activeTab === 'members' && <div style={{ marginBottom: 16 }}>
+                <input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder="search by name or email..." style={{ width: '100%', maxWidth: 360, boxSizing: 'border-box', fontSize: 12 }} />
+            </div>}
+
+            {activeTab === 'dupes' && (
+                <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--mono)' }}>
+                            {dupesLoading ? 'scanning...' : dupesLoaded ? `${dupes.length} potential duplicate group${dupes.length !== 1 ? 's' : ''} found` : ''}
+                        </div>
+                        <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={fetchDupes} disabled={dupesLoading}>$ rescan</button>
+                    </div>
+
+                    {dupesLoading && <div style={{ color: 'var(--text-dim)', fontSize: 12, fontFamily: 'var(--mono)' }}>$ scanning for duplicates...</div>}
+
+                    {dupesLoaded && dupes.length === 0 && (
+                        <div style={{ color: 'var(--green)', fontSize: 12, fontFamily: 'var(--mono)', padding: '24px 0' }}>✓ no duplicate accounts found</div>
+                    )}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        {dupes.map(group => (
+                            <div key={group.key} style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)', padding: '16px 20px' }}>
+                                {/* Reason chips */}
+                                <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+                                    {group.reasons.map(r => (
+                                        <span key={r} style={{ fontSize: 9, padding: '2px 8px', border: `1px solid ${REASON_COLOR[r]}`, color: REASON_COLOR[r], fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>
+                                            {REASON_LABEL[r]}
+                                        </span>
+                                    ))}
+                                </div>
+
+                                {/* Side-by-side user cards */}
+                                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${group.users.length}, 1fr)`, gap: 12, marginBottom: 14 }}>
+                                    {group.users.map(u => (
+                                        <div key={u.userID} style={{ border: '1px solid var(--bd-1)', padding: '12px 14px', fontFamily: 'var(--mono)', fontSize: 11 }}>
+                                            <div style={{ fontWeight: 700, color: 'var(--text-bright)', marginBottom: 6 }}>{u.firstName} {u.lastName}</div>
+                                            {[
+                                                ['userID',    u.userID],
+                                                ['email',     u.email],
+                                                ['provider',  u.provider],
+                                                ['role',      u.role],
+                                                ['status',    u['membership.status'] || '—'],
+                                                ['sub',       u['membership.subscriptionStatus'] || '—'],
+                                                ['username',  u.username || '—'],
+                                                ['googleId',  u.googleId ? u.googleId.slice(0,14)+'…' : '—'],
+                                                ['discordId', u.discordId ? u.discordId.slice(0,14)+'…' : '—'],
+                                                ['created',   u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'],
+                                            ].map(([k, v]) => (
+                                                <div key={k} style={{ display: 'flex', gap: 6, marginBottom: 3 }}>
+                                                    <span style={{ color: 'var(--text-dim)', minWidth: 70 }}>{k}:</span>
+                                                    <span style={{ color: 'var(--text-mid)', wordBreak: 'break-all' }}>{v}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Actions */}
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    {group.users.map(u => (
+                                        <button key={u.userID} className="btn btn--ghost btn--sm"
+                                            style={{ fontSize: 9 }}
+                                            onClick={() => { setSelectedUser(u); setDialogOpen(true); }}>
+                                            manage {u.firstName}
+                                        </button>
+                                    ))}
+                                    {group.users.length === 2 && (
+                                        <button className="btn btn--ghost btn--sm"
+                                            style={{ fontSize: 9, borderColor: 'var(--amber)', color: 'var(--amber)' }}
+                                            onClick={() => {
+                                                setSourceUser(group.users[0]);
+                                                setTargetUser(group.users[1]);
+                                                setMergeOpen(true);
+                                            }}>
+                                            $ merge →
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'members' && error && (
                 <div style={{ border: '1px solid var(--red)', color: 'var(--red)', padding: '12px 16px', marginBottom: 16, fontFamily: 'var(--mono)', fontSize: 12 }}>
                     ✗ {error}
                     <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, marginLeft: 16, borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => fetchUsers(page, search)}>retry</button>
                 </div>
             )}
 
-            {loading ? (
+            {activeTab === 'members' && (loading ? (
                 <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>loading<span className="caret-block" style={{ marginLeft: 4 }} /></div>
             ) : (
                 <>
@@ -204,7 +314,7 @@ export default function MembersPage() {
                         </div>
                     )}
                 </>
-            )}
+            ))}
 
             <MemberDialog open={dialogOpen} onClose={() => setDialogOpen(false)} user={selectedUser} onUpdate={handleUserUpdate} onDelete={(deletedId) => { setUsers(u => u.filter(x => x.userID !== deletedId)); setDialogOpen(false); }} />
 
