@@ -65,6 +65,22 @@ export async function GET(request) {
       if (id) customerMap[id] = { userID: u.userID, firstName: u.firstName, lastName: u.lastName, email: u.email };
     }
 
+    // Fetch Square customer profiles for IDs not yet linked to a lab user
+    const unlinkdIds = customerIds.filter(id => !customerMap[id]);
+    const squareCustomerMap = {};
+    await Promise.allSettled(
+      unlinkdIds.map(async (id) => {
+        try {
+          const { result } = await squareClient.customersApi.retrieveCustomer(id);
+          const c = result.customer;
+          if (c) squareCustomerMap[id] = {
+            name: [c.givenName, c.familyName].filter(Boolean).join(" ") || null,
+            email: c.emailAddress || null,
+          };
+        } catch { /* non-fatal */ }
+      })
+    );
+
     const enriched = payments.map((p) => ({
       id: p.id,
       amount: p.amountMoney ? Number(p.amountMoney.amount) / 100 : null,
@@ -75,6 +91,7 @@ export async function GET(request) {
       isSubscription: p.customerId ? subscriberCustomerIds.has(p.customerId) : false,
       note: p.note || null,
       linkedUser: p.customerId ? customerMap[p.customerId] || null : null,
+      squareCustomer: p.customerId ? squareCustomerMap[p.customerId] || null : null,
     }));
 
     return NextResponse.json(enriched, { status: 200 });

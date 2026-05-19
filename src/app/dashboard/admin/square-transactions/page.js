@@ -49,8 +49,8 @@ export default function SquareTransactionsPage() {
         } catch {}
     };
 
-    const openLinkDialog = (customerId) => {
-        setLinkDialog({ open: true, customerId });
+    const openLinkDialog = (customerId, squareCustomer) => {
+        setLinkDialog({ open: true, customerId, squareCustomer });
         setSelectedUser(null);
         setUserQuery('');
         setPostLinkResult(null);
@@ -106,7 +106,9 @@ export default function SquareTransactionsPage() {
             t.note?.toLowerCase().includes(q) ||
             t.customerId?.toLowerCase().includes(q) ||
             t.linkedUser?.email?.toLowerCase().includes(q) ||
-            t.linkedUser?.firstName?.toLowerCase().includes(q)
+            t.linkedUser?.firstName?.toLowerCase().includes(q) ||
+            t.squareCustomer?.email?.toLowerCase().includes(q) ||
+            t.squareCustomer?.name?.toLowerCase().includes(q)
         );
     });
 
@@ -229,7 +231,7 @@ export default function SquareTransactionsPage() {
                                             {t.customerId && (
                                                 <button
                                                     className="btn btn--sm"
-                                                    onClick={() => openLinkDialog(t.customerId)}
+                                                    onClick={() => openLinkDialog(t.customerId, t.squareCustomer)}
                                                     style={{ fontSize: 9, padding: '2px 6px' }}
                                                 >
                                                     $ link
@@ -238,8 +240,21 @@ export default function SquareTransactionsPage() {
                                         </span>
                                     )}
                                 </td>
-                                <td style={{ padding: '10px 12px', color: 'var(--text-dim)', fontFamily: 'var(--mono)', fontSize: 10, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {t.customerId || '—'}
+                                <td style={{ padding: '10px 12px', maxWidth: 200 }}>
+                                    {t.squareCustomer?.name || t.squareCustomer?.email ? (
+                                        <div>
+                                            {t.squareCustomer.name && (
+                                                <div style={{ color: 'var(--text)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.squareCustomer.name}</div>
+                                            )}
+                                            {t.squareCustomer.email && (
+                                                <div style={{ color: 'var(--text-dim)', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.squareCustomer.email}</div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <span style={{ color: 'var(--text-dim)', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                                            {t.customerId || '—'}
+                                        </span>
+                                    )}
                                 </td>
                             </tr>
                         ))}
@@ -258,8 +273,14 @@ export default function SquareTransactionsPage() {
                         width: '100%', maxWidth: 480, fontFamily: 'var(--mono)',
                     }}>
                         <div style={{ color: 'var(--text-bright)', fontSize: 14, marginBottom: 4 }}>link_customer_to_member</div>
-                        <div style={{ color: 'var(--text-dim)', fontSize: 11, marginBottom: 16 }}>
-                            sq customer: <span style={{ color: 'var(--cyan, #00e5ff)' }}>{linkDialog.customerId}</span>
+                        <div style={{ borderBottom: '1px solid var(--bd)', paddingBottom: 14, marginBottom: 16 }}>
+                            {linkDialog.squareCustomer?.name && (
+                                <div style={{ fontSize: 13, color: 'var(--text)', marginBottom: 2 }}>{linkDialog.squareCustomer.name}</div>
+                            )}
+                            {linkDialog.squareCustomer?.email && (
+                                <div style={{ fontSize: 11, color: 'var(--cyan, #00e5ff)', marginBottom: 4 }}>{linkDialog.squareCustomer.email}</div>
+                            )}
+                            <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>sq id: {linkDialog.customerId}</div>
                         </div>
 
                         {postLinkResult ? (
