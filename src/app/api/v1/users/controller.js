@@ -173,16 +173,16 @@ export default class UserController {
     static deleteUser = async (req) => {
         try {
             const { searchParams } = new URL(req.url);
-            const query = searchParams.get("query");
+            const userID = searchParams.get("userID") || searchParams.get("query");
 
-            if (!query) {
+            if (!userID) {
                 return new Response(
-                    JSON.stringify({ error: "Query parameter is required." }),
+                    JSON.stringify({ error: "userID parameter is required." }),
                     { status: 400 }
                 );
             }
 
-            const deletionResult = await UserService.deleteUser(query);
+            const deletionResult = await UserService.deleteUser({ userID });
             if (!deletionResult) {
                 return new Response(
                     JSON.stringify({ error: "Failed to delete user." }),
