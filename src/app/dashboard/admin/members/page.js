@@ -46,9 +46,15 @@ export default function MembersPage() {
         if (status === 'unauthenticated') router.push('/auth/signin');
         else if (status === 'authenticated') {
             if (session.user.role !== 'admin') router.push('/dashboard');
-            else fetchUsers(page);
+            else fetchUsers(page, search);
         }
     }, [status, session, router, page]);
+
+    // Server-side search: debounce and reset to page 1
+    useEffect(() => {
+        const t = setTimeout(() => { setPage(1); fetchUsers(1, search); }, 350);
+        return () => clearTimeout(t);
+    }, [search]);
 
     useEffect(() => {
         if (mergeOpen) fetchAllUsersForMerge();
@@ -56,13 +62,15 @@ export default function MembersPage() {
 
     const showToast = (msg, color = 'var(--green)') => { setToast({ msg, color }); setTimeout(() => setToast(null), 3500); };
 
-    const fetchUsers = async (p = 1) => {
+    const fetchUsers = async (p = 1, q = '') => {
         setLoading(true);
         setError('');
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
         try {
-            const res = await fetch(`/api/v1/users?page=${p}&limit=${PAGE_SIZE}`, { signal: controller.signal });
+            const params = new URLSearchParams({ page: p, limit: PAGE_SIZE });
+            if (q) params.set('search', q);
+            const res = await fetch(`/api/v1/users?${params}`, { signal: controller.signal });
             clearTimeout(timeout);
             if (res.ok) {
                 const data = await res.json();
@@ -94,7 +102,7 @@ export default function MembersPage() {
         try {
             const res = await fetch('/api/admin/migrate-memberships', { method: 'POST' });
             const data = await res.json();
-            if (res.ok) { showToast(`Migration complete! Updated ${data.updatedCount} users.`); fetchUsers(page); }
+            if (res.ok) { showToast(`Migration complete! Updated ${data.updatedCount} users.`); fetchUsers(page, search); }
             else showToast(`Error: ${data.error}`, 'var(--red)');
         } catch { showToast('Failed to sync.', 'var(--red)'); }
         finally { setSyncing(false); }
@@ -108,7 +116,7 @@ export default function MembersPage() {
         try {
             const res = await fetch('/api/v1/users/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sourceUserID: sourceUser.userID, targetUserID: targetUser.userID }) });
             const data = await res.json();
-            if (data.success) { showToast('Users merged successfully.'); setMergeOpen(false); setSourceUser(null); setTargetUser(null); fetchUsers(page); }
+            if (data.success) { showToast('Users merged successfully.'); setMergeOpen(false); setSourceUser(null); setTargetUser(null); fetchUsers(page, search); }
             else showToast(`Error: ${data.error}`, 'var(--red)');
         } catch { showToast('Error merging.', 'var(--red)'); }
         finally { setMerging(false); }
@@ -116,9 +124,7 @@ export default function MembersPage() {
 
     const handleUserUpdate = (updatedUser) => setUsers(prev => prev.map(u => u.userID === updatedUser.userID ? updatedUser : u));
 
-    const filtered = users.filter(u =>
-        !search || u.firstName?.toLowerCase().includes(search.toLowerCase()) || u.lastName?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase())
-    );
+    const filtered = users; // search is server-side
 
     const totalPages = Math.ceil(rowCount / PAGE_SIZE);
 
@@ -145,7 +151,7 @@ export default function MembersPage() {
             {error && (
                 <div style={{ border: '1px solid var(--red)', color: 'var(--red)', padding: '12px 16px', marginBottom: 16, fontFamily: 'var(--mono)', fontSize: 12 }}>
                     ✗ {error}
-                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, marginLeft: 16, borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => fetchUsers(page)}>retry</button>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, marginLeft: 16, borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => fetchUsers(page, search)}>retry</button>
                 </div>
             )}
 

@@ -131,7 +131,15 @@ export default class UserModel {
             if (filters.role) {
                 query.role = filters.role;
             }
-            
+
+            if (filters.search) {
+                const re = { $regex: filters.search, $options: "i" };
+                const searchOr = [
+                    { firstName: re }, { lastName: re }, { email: re }, { username: re },
+                ];
+                query.$and = [...(query.$and || []), { $or: searchOr }];
+            }
+
             let cursor = dbUsers.find(query);
             if (skip > 0) cursor = cursor.skip(skip);
             if (limit > 0) cursor = cursor.limit(limit);
@@ -178,6 +186,14 @@ export default class UserModel {
 
             if (filters.role) {
                 query.role = filters.role;
+            }
+
+            if (filters.search) {
+                const re = { $regex: filters.search, $options: "i" };
+                const searchOr = [
+                    { firstName: re }, { lastName: re }, { email: re }, { username: re },
+                ];
+                query.$and = [...(query.$and || []), { $or: searchOr }];
             }
 
             return await dbUsers.countDocuments(query);
