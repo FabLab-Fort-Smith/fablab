@@ -139,7 +139,7 @@ export default class SubscriptionService {
 
       // ACTIVE = paying. PENDING = future-dated (e.g. annual plan paid upfront, sub starts later).
       // Both get door access. PAUSED is intentional — keep access.
-      const hasAccess = ['ACTIVE', 'PENDING', 'PAUSED'].includes(activeSubscription.status);
+      const hasAccess = ['ACTIVE', 'PENDING'].includes(activeSubscription.status);
       const membershipType = hasAccess ? 'co-op' : 'community';
 
       const updateData = {

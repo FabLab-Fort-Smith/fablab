@@ -19,7 +19,7 @@ export async function POST(request) {
         // Check Good Standing
         const isAdmin = user.role === 'admin';
         const isWaived = user.membership?.isWaived === true;
-        const isSubscriptionActive = user.membership?.subscriptionStatus === 'ACTIVE' || isWaived;
+        const isSubscriptionActive = ['ACTIVE', 'PENDING'].includes(user.membership?.subscriptionStatus) || isWaived;
         const isMembershipActive = ['active', 'probation', 'founder'].includes(user.membership?.status); 
         
         // Waived members are effectively Co-op members

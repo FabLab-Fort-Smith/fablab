@@ -142,11 +142,11 @@ export default class UserModel {
 
             if (filters.memberType === 'coop') {
                 query.$and = [...(query.$and || []), { $or: [
-                    { "membership.subscriptionStatus": "ACTIVE" },
+                    { "membership.subscriptionStatus": { $in: ["ACTIVE", "PENDING"] } },
                     { "membership.isWaived": true },
                 ]}];
             } else if (filters.memberType === 'community') {
-                query["membership.subscriptionStatus"] = { $ne: "ACTIVE" };
+                query["membership.subscriptionStatus"] = { $nin: ["ACTIVE", "PENDING"] };
                 query["membership.isWaived"] = { $ne: true };
             } else if (filters.memberType === 'delinquent') {
                 // Co-op members (active subscription holders) whose Square sub is lapsed
@@ -214,11 +214,11 @@ export default class UserModel {
 
             if (filters.memberType === 'coop') {
                 query.$and = [...(query.$and || []), { $or: [
-                    { "membership.subscriptionStatus": "ACTIVE" },
+                    { "membership.subscriptionStatus": { $in: ["ACTIVE", "PENDING"] } },
                     { "membership.isWaived": true },
                 ]}];
             } else if (filters.memberType === 'community') {
-                query["membership.subscriptionStatus"] = { $ne: "ACTIVE" };
+                query["membership.subscriptionStatus"] = { $nin: ["ACTIVE", "PENDING"] };
                 query["membership.isWaived"] = { $ne: true };
             } else if (filters.memberType === 'delinquent') {
                 query["membership.type"] = "co-op";
