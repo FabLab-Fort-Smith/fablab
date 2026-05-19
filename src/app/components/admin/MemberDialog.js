@@ -207,6 +207,39 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
         finally { setLoading(false); }
     };
 
+    const handleStartGracePeriod = async () => {
+        if (!confirm(`Start 7-day grace period for ${user.firstName} ${user.lastName}? They will keep door access for 7 days while payment is resolved.`)) return;
+        setLoading(true);
+        try {
+            const now = new Date().toISOString();
+            const res = await fetch(`/api/v1/users?userID=${user.userID}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ "membership.gracePeriodStartedAt": now }),
+            });
+            if (!res.ok) throw new Error('Failed');
+            setFormData(p => ({ ...p, membership: { ...p.membership, gracePeriodStartedAt: now } }));
+            alert('Grace period started. Member will see a warning banner on their dashboard.');
+        } catch { alert('Failed to start grace period'); }
+        finally { setLoading(false); }
+    };
+
+    const handleClearGracePeriod = async () => {
+        if (!confirm(`Clear grace period for ${user.firstName} ${user.lastName}?`)) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/v1/users?userID=${user.userID}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ "membership.gracePeriodStartedAt": null }),
+            });
+            if (!res.ok) throw new Error('Failed');
+            setFormData(p => ({ ...p, membership: { ...p.membership, gracePeriodStartedAt: null } }));
+            alert('Grace period cleared.');
+        } catch { alert('Failed to clear grace period'); }
+        finally { setLoading(false); }
+    };
+
     const STEPS = [
         'account created',
         'application submitted',
@@ -516,6 +549,21 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                         <input className="input" value={formData.squareID || ''} onChange={e => setFormData(p => ({ ...p, squareID: e.target.value }))} placeholder="square customer id" style={inputStyle} />
                                     </div>
                                     <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={handleSyncSubscription} disabled={loading || !formData.squareID}>$ sync</button>
+                                </div>
+
+                                {/* Grace period controls */}
+                                <div>
+                                    <label style={labelStyle}>GRACE_PERIOD</label>
+                                    {formData.membership?.gracePeriodStartedAt ? (
+                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                            <span style={{ fontSize: 11, color: 'var(--amber, #ffaa00)', fontFamily: 'var(--mono)' }}>
+                                                active since {new Date(formData.membership.gracePeriodStartedAt).toLocaleDateString()} — expires {new Date(new Date(formData.membership.gracePeriodStartedAt).setDate(new Date(formData.membership.gracePeriodStartedAt).getDate() + 7)).toLocaleDateString()}
+                                            </span>
+                                            <button className="btn btn--ghost btn--sm" style={{ fontSize: 9 }} onClick={handleClearGracePeriod} disabled={loading}>clear</button>
+                                        </div>
+                                    ) : (
+                                        <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={handleStartGracePeriod} disabled={loading}>$ start grace period</button>
+                                    )}
                                 </div>
 
                                 {formData.role === 'admin' && (
