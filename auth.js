@@ -18,8 +18,13 @@ const providers = [
             try {
                 console.log("Google Profile:", profile);
 
-                // ✅ Check if user exists in the database
-                const existingUser = await UsersService.getUserByQuery({ email: profile.email });
+                // Look up by email first, then fall back to googleId so a changed
+                // or mismatched email never creates a duplicate account.
+                let existingUser = await UsersService.getUserByQuery({ email: profile.email });
+                if (!existingUser && profile.sub) {
+                    existingUser = await UsersService.getUserByQuery({ googleId: profile.sub });
+                    if (existingUser) console.log("Matched existing user by googleId:", existingUser.userID);
+                }
                 console.log("Existing User:", existingUser);
 
                 if (!existingUser) {
@@ -90,10 +95,14 @@ const providers = [
         async profile(profile) {
             console.log("Discord Profile:", profile);
 
-            // ✅ Check if user exists in the database
-            const existingUser = await UsersService.getUserByQuery({ email: profile.email });
+            // Look up by email first, then fall back to discordId so a changed
+            // or mismatched email never creates a duplicate account.
+            let existingUser = await UsersService.getUserByQuery({ email: profile.email });
+            if (!existingUser && profile.id) {
+                existingUser = await UsersService.getUserByQuery({ discordId: profile.id });
+                if (existingUser) console.log("Matched existing user by discordId:", existingUser.userID);
+            }
             console.log("Existing User:", existingUser);
-
 
             if (!existingUser) {
                 // ✅ Create the user if not found
