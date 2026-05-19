@@ -44,6 +44,9 @@ export default function MembersPage() {
     const [dupes, setDupes] = useState([]);
     const [dupesLoading, setDupesLoading] = useState(false);
     const [dupesLoaded, setDupesLoaded] = useState(false);
+    const [delinquents, setDelinquents] = useState([]);
+    const [delinquentsLoading, setDelinquentsLoading] = useState(false);
+    const [delinquentsLoaded, setDelinquentsLoaded] = useState(false);
     const PAGE_SIZE = 25;
 
     useEffect(() => {
@@ -76,6 +79,8 @@ export default function MembersPage() {
             if (q) params.set('search', q);
             if (tab === 'coop') params.set('memberType', 'coop');
             if (tab === 'community') params.set('memberType', 'community');
+            // delinquent tab uses its own dedicated fetch — don't call users API for it
+            if (tab === 'delinquent') { setLoading(false); return; }
             const res = await fetch(`/api/v1/users?${params}`, { signal: controller.signal });
             clearTimeout(timeout);
             if (res.ok) {
@@ -139,10 +144,20 @@ export default function MembersPage() {
         finally { setDupesLoading(false); }
     };
 
+    const fetchDelinquents = async () => {
+        setDelinquentsLoading(true);
+        try {
+            const res = await fetch('/api/v1/admin/delinquent');
+            if (res.ok) { setDelinquents(await res.json()); setDelinquentsLoaded(true); }
+        } catch {}
+        finally { setDelinquentsLoading(false); }
+    };
+
     const handleTabChange = (tab) => {
         setActiveTab(tab);
         if (tab === 'dupes' && !dupesLoaded) fetchDupes();
-        if (tab !== 'dupes') { setPage(1); fetchUsers(1, search, tab); }
+        if (tab === 'delinquent') fetchDelinquents();
+        if (tab !== 'dupes' && tab !== 'delinquent') { setPage(1); fetchUsers(1, search, tab); }
     };
 
     const REASON_LABEL = { email: 'same email', google_id: 'same Google ID', discord_id: 'same Discord ID', username: 'same username', name: 'same name' };
@@ -187,7 +202,7 @@ export default function MembersPage() {
                 })}
             </div>
 
-            {activeTab !== 'dupes' && <div style={{ marginBottom: 16 }}>
+            {activeTab !== 'dupes' && activeTab !== 'delinquent' && <div style={{ marginBottom: 16 }}>
                 <input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder="search by name or email..." style={{ width: '100%', maxWidth: 360, boxSizing: 'border-box', fontSize: 12 }} />
             </div>}
 
@@ -271,14 +286,55 @@ export default function MembersPage() {
                 </div>
             )}
 
-            {activeTab !== 'dupes' && error && (
+            {activeTab === 'delinquent' && (
+                <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--mono)' }}>
+                            {delinquentsLoading ? '$ querying Square...' : delinquentsLoaded ? `${delinquents.length} delinquent account${delinquents.length !== 1 ? 's' : ''} found` : 'click to load'}
+                        </div>
+                        <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, borderColor: 'var(--red, #ff4444)', color: 'var(--red, #ff4444)' }} onClick={fetchDelinquents} disabled={delinquentsLoading}>$ rescan</button>
+                    </div>
+                    {delinquentsLoading && <div style={{ color: 'var(--text-dim)', fontSize: 12, fontFamily: 'var(--mono)' }}>$ querying Square for each co-op member...</div>}
+                    {delinquentsLoaded && delinquents.length === 0 && (
+                        <div style={{ color: 'var(--green)', fontSize: 12, fontFamily: 'var(--mono)', padding: '24px 0' }}>✓ all co-op members are in good standing</div>
+                    )}
+                    <div style={{ overflowX: 'auto' }}>
+                        {delinquents.length > 0 && (
+                            <table className="term-table" style={{ width: '100%' }}>
+                                <thead>
+                                    <tr><th>NAME</th><th>EMAIL</th><th>PHONE</th><th>DISCORD</th><th>SQ STATUS</th><th>LAST CHARGED</th><th></th></tr>
+                                </thead>
+                                <tbody>
+                                    {delinquents.map(u => {
+                                        const STATUS_C = { PAST_DUE: 'var(--amber)', CANCELED: 'var(--red, #ff4444)', DEACTIVATED: 'var(--red, #ff4444)' };
+                                        const sc = STATUS_C[u.squareSubscription?.status] || 'var(--text-dim)';
+                                        return (
+                                            <tr key={u.userID} style={{ background: 'rgba(255,68,68,0.04)' }}>
+                                                <td style={{ color: 'var(--text)', fontWeight: 600 }}>{u.firstName} {u.lastName}</td>
+                                                <td><a href={`mailto:${u.email}`} style={{ color: 'var(--cyan)', textDecoration: 'none', fontSize: 11 }}>{u.email}</a></td>
+                                                <td><a href={`tel:${u.phoneNumber}`} style={{ color: 'var(--green)', textDecoration: 'none', fontSize: 11 }}>{u.phoneNumber || '—'}</a></td>
+                                                <td style={{ fontSize: 11, color: 'var(--magenta)' }}>{u.discordHandle || '—'}</td>
+                                                <td><span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: sc, border: `1px solid ${sc}`, padding: '2px 6px' }}>{u.squareSubscription?.status}</span></td>
+                                                <td style={{ fontSize: 11, color: 'var(--text-dim)' }}>{u.squareSubscription?.chargedThroughDate || '—'}</td>
+                                                <td><button className="btn btn--ghost btn--sm" style={{ fontSize: 9 }} onClick={() => { setSelectedUser(u); setDialogOpen(true); }}>manage</button></td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {activeTab !== 'dupes' && activeTab !== 'delinquent' && error && (
                 <div style={{ border: '1px solid var(--red)', color: 'var(--red)', padding: '12px 16px', marginBottom: 16, fontFamily: 'var(--mono)', fontSize: 12 }}>
                     ✗ {error}
                     <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, marginLeft: 16, borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => fetchUsers(page, search)}>retry</button>
                 </div>
             )}
 
-            {activeTab !== 'dupes' && (loading ? (
+            {activeTab !== 'dupes' && activeTab !== 'delinquent' && (loading ? (
                 <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>loading<span className="caret-block" style={{ marginLeft: 4 }} /></div>
             ) : (
                 <>
