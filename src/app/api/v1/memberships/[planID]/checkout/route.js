@@ -101,6 +101,7 @@ export async function POST(request, context) {
         priceMoney: { amount: BigInt(priceCents), currency },
         locationId: process.env.SQUARE_LOCATION_ID,
       },
+      prePopulatedData: user.email ? { buyerEmail: user.email } : undefined,
       checkoutOptions,
     });
 
