@@ -254,6 +254,23 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                         ))}
                     </div>
 
+                    {/* Identity / audit info */}
+                    <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--bd)', display: 'flex', gap: 16, flexWrap: 'wrap', flexShrink: 0, fontFamily: 'var(--mono)', fontSize: 10 }}>
+                        {[
+                            { k: 'userID',    v: user.userID },
+                            { k: 'provider',  v: user.provider || '—' },
+                            { k: 'googleId',  v: user.googleId  ? user.googleId.slice(0, 12) + '…'  : '—' },
+                            { k: 'discordId', v: user.discordId ? user.discordId.slice(0, 12) + '…' : '—' },
+                            { k: 'created',   v: user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—' },
+                            { k: 'sq customer', v: user.membership?.squareCustomerId || user.squareCustomerId || '—' },
+                        ].map(({ k, v }) => (
+                            <div key={k} title={v} style={{ cursor: 'pointer' }} onClick={() => navigator.clipboard?.writeText(v)}>
+                                <span style={{ color: 'var(--text-dim)' }}>{k}: </span>
+                                <span style={{ color: 'var(--text-mid)' }}>{v}</span>
+                            </div>
+                        ))}
+                    </div>
+
                     {/* Tabs */}
                     <div style={{ flexShrink: 0 }}>
                         <Tabs tabs={['progress', 'volunteer logs', 'admin actions', 'badges']} active={tab} onChange={setTab} />
