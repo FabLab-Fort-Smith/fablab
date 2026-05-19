@@ -11,8 +11,12 @@ export async function POST() {
     }
 
     const usersCollection = await db.dbUsers();
+    // Exclude waived members — their access is granted regardless of Square status
     const members = await usersCollection
-      .find({ "membership.squareCustomerId": { $exists: true, $ne: null } })
+      .find({
+        "membership.squareCustomerId": { $exists: true, $ne: null },
+        "membership.isWaived": { $ne: true },
+      })
       .toArray();
 
     let synced = 0;

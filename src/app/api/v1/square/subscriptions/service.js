@@ -120,13 +120,21 @@ export default class SubscriptionService {
         subscriptions.find((s) => s.status === "ACTIVE") || subscriptions[0];
 
       let targetUserID = userID;
+      let targetUser = null;
       if (!targetUserID) {
-          // Find the user by squareID if userID not provided
-          const user = await UserService.getUserByQuery({ squareID });
-          if (!user) {
+          targetUser = await UserService.getUserByQuery({ squareID });
+          if (!targetUser) {
             throw new Error("User not found for squareID: " + squareID);
           }
-          targetUserID = user.userID;
+          targetUserID = targetUser.userID;
+      } else {
+          targetUser = await UserService.getUserByQuery({ userID: targetUserID });
+      }
+
+      // Waived members are exempt — never let a Square sync revoke their access
+      if (targetUser?.membership?.isWaived) {
+          console.log(`⏭ Skipping sync for waived member ${targetUserID}`);
+          return targetUser;
       }
 
       // Determine membership type based on subscription status

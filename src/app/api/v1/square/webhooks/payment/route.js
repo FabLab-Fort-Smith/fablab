@@ -176,7 +176,9 @@ export async function POST(request) {
                 ]
             });
 
-            if (user) {
+            if (user && user.membership?.isWaived) {
+                console.log(`⏭ Skipping revocation for waived member ${user.userID}`);
+            } else if (user) {
                 console.log(`⚠️ Revoking access for user ${user.userID} due to subscription status: ${status}`);
                 
                 await UserService.updateUser(user.userID, {
