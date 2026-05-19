@@ -11,6 +11,8 @@ export async function GET(request) {
   const userID = searchParams.get("userID");
   const planVariationId = searchParams.get("planVariationId");
   const transactionId = searchParams.get("transactionId");
+  // Square appends checkoutId on subscription plan checkout redirects
+  const checkoutId = searchParams.get("checkoutId");
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_URL || "";
 
@@ -41,6 +43,21 @@ export async function GET(request) {
         console.error("❌ No customerId on payment:", transactionId);
         return NextResponse.redirect(`${appUrl}/dashboard?tab=membership&error=no_customer`);
       }
+    }
+
+    // ── Path B: subscription plan checkout — resolve customerId from checkoutId ──
+    // Square subscription checkout may not produce a transactionId immediately
+    // (first charge can be deferred). Use checkoutId → payment link → order → customer.
+    if (!transactionId && checkoutId) {
+      try {
+        const { result: linkResult } = await squareClient.checkoutApi.retrievePaymentLink(checkoutId);
+        const orderId = linkResult.paymentLink?.orderId;
+        if (orderId) {
+          const { result: orderResult } = await squareClient.ordersApi.retrieveOrder(orderId);
+          const order = orderResult.order;
+          if (order?.customerId) customerId = order.customerId;
+        }
+      } catch { /* non-fatal — fall through to stored customerId */ }
     }
 
     // ── Find subscription in Square ────────────────────────────────────────────

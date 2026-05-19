@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "../../../../../../auth";
 import squareClient from "@/lib/square";
 import { db } from "@/lib/database";
 import { v4 as uuidv4 } from "uuid";
@@ -18,6 +19,10 @@ export async function POST(request, context) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_URL || "";
 
+    // Get plaintext email from session — DB email may be hashed
+    const session = await auth();
+    const sessionEmail = session?.user?.email || null;
+
     const usersCollection = await db.dbUsers();
     const user = await usersCollection.findOne({ userID });
     if (!user) {
@@ -31,6 +36,7 @@ export async function POST(request, context) {
         idempotencyKey: uuidv4(),
         givenName: user.firstName || "Unknown",
         familyName: user.lastName || "User",
+        emailAddress: sessionEmail || undefined,
         referenceId: userID,
       });
       squareCustomerId = result.customer.id;
@@ -101,7 +107,7 @@ export async function POST(request, context) {
         priceMoney: { amount: BigInt(priceCents), currency },
         locationId: process.env.SQUARE_LOCATION_ID,
       },
-      prePopulatedData: user.email ? { buyerEmail: user.email } : undefined,
+      prePopulatedData: sessionEmail ? { buyerEmail: sessionEmail } : undefined,
       checkoutOptions,
     });
 
