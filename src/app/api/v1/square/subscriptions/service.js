@@ -130,16 +130,23 @@ export default class SubscriptionService {
       }
 
       // Determine membership type based on subscription status
-      const membershipType = activeSubscription.status === 'ACTIVE' ? 'co-op' : 'community';
+      const isActive = activeSubscription.status === 'ACTIVE';
+      const membershipType = isActive ? 'co-op' : 'community';
 
-      // Update the user
+      // Update the user — also enforce access based on subscription status
       const updateData = {
-        squareID: squareID, // Ensure squareID is set
+        squareID: squareID,
         "membership.squareSubscriptionId": activeSubscription.id,
         "membership.subscriptionStatus": activeSubscription.status,
-        "membership.type": membershipType, // ✅ Update membership type
-        "membership.lastPaymentDate": new Date().toISOString(), // Approximate
+        "membership.type": membershipType,
+        "membership.status": isActive ? "active" : "suspended",
+        "membership.accessKey.issued": isActive,
+        "membership.lastPaymentDate": isActive ? new Date().toISOString() : undefined,
       };
+
+      if (!isActive) {
+        updateData["membership.accessKey.revokedReason"] = `Subscription ${activeSubscription.status}`;
+      }
       
       // Use userID for update query
       const updatedUser = await UserService.updateUser(targetUserID, updateData);

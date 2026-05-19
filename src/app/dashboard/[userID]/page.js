@@ -162,6 +162,27 @@ export default function DashboardPage({ params }) {
                 );
             })()}
 
+            {/* Delinquency banner */}
+            {userData && (() => {
+                const m = userData.membership || {};
+                const LAPSED = ['CANCELED', 'DEACTIVATED', 'PAST_DUE', 'SUSPENDED'];
+                const isDelinquent = LAPSED.includes(m.subscriptionStatus) || m.status === 'suspended';
+                const hadSub = m.squareSubscriptionId || m.squareCustomerId;
+                if (!isDelinquent || !hadSub || m.isWaived) return null;
+                return (
+                    <div style={{ border: '1px solid var(--red, #ff4444)', color: 'var(--red, #ff4444)', background: 'rgba(255,68,68,0.06)', padding: '14px 18px', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠ MEMBERSHIP DUES PAST DUE</div>
+                        <div style={{ color: 'var(--text-mid)', marginBottom: 12, fontSize: 11 }}>
+                            Your subscription is <strong>{m.subscriptionStatus || 'inactive'}</strong>. Door access has been suspended until dues are current.
+                            {m.accessKey?.revokedReason && <span style={{ color: 'var(--text-dim)' }}> ({m.accessKey.revokedReason})</span>}
+                        </div>
+                        <button className="btn btn--sm" style={{ fontSize: 10, borderColor: 'var(--red, #ff4444)', color: 'var(--red, #ff4444)' }} onClick={() => router.push(`/dashboard/${uid}/profile?tab=1`)}>
+                            $ update billing →
+                        </button>
+                    </div>
+                );
+            })()}
+
             {/* Header */}
             <div>
                 <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 4 }}>

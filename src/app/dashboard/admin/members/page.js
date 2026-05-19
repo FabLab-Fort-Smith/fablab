@@ -171,15 +171,20 @@ export default function MembersPage() {
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--bd)' }}>
                 {[
-                    ['all',       'all members'],
-                    ['coop',      'co-op'],
-                    ['community', 'community'],
-                    ['dupes',     `dupes${dupesLoaded && dupes.length ? ` (${dupes.length})` : ''}`],
-                ].map(([id, label]) => (
-                    <button key={id} onClick={() => handleTabChange(id)} style={{ padding: '8px 20px', background: 'none', border: 'none', borderBottom: `2px solid ${activeTab === id ? 'var(--green)' : 'transparent'}`, color: activeTab === id ? 'var(--green)' : 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.08em', marginBottom: -1 }}>
-                        {label}
-                    </button>
-                ))}
+                    ['all',        'all members'],
+                    ['coop',       'co-op'],
+                    ['community',  'community'],
+                    ['delinquent', 'delinquent'],
+                    ['dupes',      `dupes${dupesLoaded && dupes.length ? ` (${dupes.length})` : ''}`],
+                ].map(([id, label]) => {
+                    const isActive = activeTab === id;
+                    const accent = id === 'delinquent' ? 'var(--red, #ff4444)' : 'var(--green)';
+                    return (
+                        <button key={id} onClick={() => handleTabChange(id)} style={{ padding: '8px 20px', background: 'none', border: 'none', borderBottom: `2px solid ${isActive ? accent : 'transparent'}`, color: isActive ? accent : id === 'delinquent' ? 'rgba(255,68,68,0.6)' : 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.08em', marginBottom: -1 }}>
+                            {label}
+                        </button>
+                    );
+                })}
             </div>
 
             {activeTab !== 'dupes' && <div style={{ marginBottom: 16 }}>
@@ -298,8 +303,10 @@ export default function MembersPage() {
                                     const totalHrs = logs.reduce((a, l) => a + (l.hours || 0), 0);
                                     const monthHrs = logs.filter(l => new Date(l.date).getMonth() === new Date().getMonth()).reduce((a, l) => a + (l.hours || 0), 0);
                                     const ms = u.membership?.status || 'N/A';
+                                    const LAPSED = ['CANCELED', 'DEACTIVATED', 'PAST_DUE', 'SUSPENDED'];
+                                    const isDelinquent = LAPSED.includes(u.membership?.subscriptionStatus) && !u.membership?.isWaived;
                                     return (
-                                        <tr key={u.userID}>
+                                        <tr key={u.userID} style={isDelinquent ? { background: 'rgba(255,68,68,0.05)', outline: '1px solid rgba(255,68,68,0.2)' } : {}}>
                                             <td style={{ color: 'var(--text)', fontWeight: 600 }}>{u.firstName} {u.lastName}</td>
                                             <td style={{ color: 'var(--text-mid)', fontSize: 11 }}>{u.email}</td>
                                             <td><span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: u.role === 'admin' ? 'var(--magenta)' : 'var(--text-dim)', border: `1px solid ${u.role === 'admin' ? 'var(--magenta)' : 'var(--bd)'}`, padding: '2px 6px' }}>{u.role}</span></td>

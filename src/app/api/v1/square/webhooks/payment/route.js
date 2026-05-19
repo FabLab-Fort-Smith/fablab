@@ -1,11 +1,29 @@
 
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import UserService from "@/app/api/v1/users/service";
 import squareClient from "@/lib/square";
 
+function verifySquareSignature(rawBody, signature, notificationUrl) {
+  const key = process.env.SQUARE_WEBHOOK_SIGNATURE_KEY;
+  if (!key) return true; // skip verification if key not configured
+  const hmac = crypto.createHmac("sha256", key);
+  hmac.update(notificationUrl + rawBody);
+  return hmac.digest("base64") === signature;
+}
+
 export async function POST(request) {
   try {
-    const body = await request.json();
+    const rawBody = await request.text();
+    const signature = request.headers.get("x-square-hmacsha256-signature") || "";
+    const notificationUrl = `${process.env.NEXT_PUBLIC_URL}/api/v1/square/webhooks/payment`;
+
+    if (!verifySquareSignature(rawBody, signature, notificationUrl)) {
+      console.warn("⚠️ Square webhook signature mismatch — rejected");
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    }
+
+    const body = JSON.parse(rawBody);
     
     // Square webhooks send events in an array, but usually one at a time
     
