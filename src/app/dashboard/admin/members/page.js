@@ -248,7 +248,8 @@ export default function MembersPage() {
                                                 ['username',  u.username || '—'],
                                                 ['googleId',  u.googleId ? u.googleId.slice(0,14)+'…' : '—'],
                                                 ['discordId', u.discordId ? u.discordId.slice(0,14)+'…' : '—'],
-                                                ['created',   u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'],
+                                                ['created',    u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'],
+                                                ['lastLogin',  u.lastLogin ? new Date(u.lastLogin).toLocaleDateString() : '—'],
                                             ].map(([k, v]) => (
                                                 <div key={k} style={{ display: 'flex', gap: 6, marginBottom: 3 }}>
                                                     <span style={{ color: 'var(--text-dim)', minWidth: 70 }}>{k}:</span>
