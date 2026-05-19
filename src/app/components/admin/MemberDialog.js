@@ -41,12 +41,26 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
     const [awardAmount, setAwardAmount] = useState(10);
     const [awardReason, setAwardReason] = useState('');
     const [awardLoading, setAwardLoading] = useState(false);
+    const [plans, setPlans] = useState(null);
+    const [plansLoading, setPlansLoading] = useState(false);
 
     useEffect(() => {
         if (open) {
             fetch('/api/v1/badges').then(r => r.json()).then(d => setBadges(d.badges || [])).catch(() => {});
+            setPlans(null);
         }
     }, [open]);
+
+    const fetchPlans = async () => {
+        if (!user?.userID) return;
+        setPlansLoading(true);
+        try {
+            const res = await fetch(`/api/v1/admin/member-plans?userID=${user.userID}`);
+            const d = await res.json();
+            setPlans(d);
+        } catch { setPlans({ error: 'Failed to load' }); }
+        finally { setPlansLoading(false); }
+    };
 
     useEffect(() => {
         if (user) {
@@ -329,7 +343,7 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
 
                     {/* Tabs */}
                     <div style={{ flexShrink: 0 }}>
-                        <Tabs tabs={['progress', 'volunteer logs', 'admin actions', 'badges']} active={tab} onChange={setTab} />
+                        <Tabs tabs={['progress', 'volunteer logs', 'admin actions', 'badges', 'plans']} active={tab} onChange={(i) => { setTab(i); if (i === 4 && !plans) fetchPlans(); }} />
                     </div>
 
                     {/* Tab content (scrollable) */}
@@ -598,6 +612,66 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                     })}
                                     {badges.length === 0 && <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>[no badges in system]</div>}
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Tab 4: Plans */}
+                        {tab === 4 && (
+                            <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                    <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>square subscriptions — live from square</div>
+                                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 9 }} onClick={fetchPlans} disabled={plansLoading}>$ refresh</button>
+                                </div>
+
+                                {plansLoading && <div style={{ color: 'var(--text-dim)', fontSize: 12, fontFamily: 'var(--mono)' }}>$ querying square...</div>}
+
+                                {plans?.error && <div style={{ color: 'var(--red)', fontSize: 12 }}>{plans.error}</div>}
+
+                                {plans && !plans.error && (
+                                    <>
+                                        {!plans.customerId && (
+                                            <div style={{ color: 'var(--text-dim)', fontSize: 12, fontFamily: 'var(--mono)' }}>no square customer id on file</div>
+                                        )}
+                                        {plans.customerId && plans.subscriptions?.length === 0 && (
+                                            <div style={{ color: 'var(--text-dim)', fontSize: 12, fontFamily: 'var(--mono)' }}>no subscriptions found in square</div>
+                                        )}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                            {(plans.subscriptions || []).map(s => {
+                                                const statusColor = {
+                                                    ACTIVE: 'var(--green)',
+                                                    PENDING: 'var(--amber, #ffaa00)',
+                                                    PAUSED: 'var(--text-dim)',
+                                                    PAST_DUE: 'var(--red)',
+                                                    CANCELED: 'var(--red)',
+                                                    DEACTIVATED: 'var(--red)',
+                                                }[s.status] || 'var(--text-dim)';
+
+                                                return (
+                                                    <div key={s.id} style={{ border: `1px solid ${statusColor}`, padding: '12px 14px', fontFamily: 'var(--mono)', fontSize: 11 }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                                            <div style={{ fontWeight: 700, color: 'var(--text-bright)' }}>
+                                                                {s.planName || 'unknown plan'}{s.variationName ? ` — ${s.variationName}` : ''}
+                                                            </div>
+                                                            <span style={{ color: statusColor, fontSize: 10, letterSpacing: '0.1em' }}>{s.status}</span>
+                                                        </div>
+                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px', color: 'var(--text-dim)', fontSize: 10 }}>
+                                                            {s.price != null && <div><span style={{ color: 'var(--text-dim)' }}>price: </span><span style={{ color: 'var(--text-mid)' }}>${s.price}/mo</span></div>}
+                                                            {s.startDate && <div><span style={{ color: 'var(--text-dim)' }}>starts: </span><span style={{ color: 'var(--text-mid)' }}>{s.startDate}</span></div>}
+                                                            {s.chargedThroughDate && <div><span style={{ color: 'var(--text-dim)' }}>paid thru: </span><span style={{ color: 'var(--text-mid)' }}>{s.chargedThroughDate}</span></div>}
+                                                            {s.canceledDate && <div><span style={{ color: 'var(--red)' }}>canceled: </span><span style={{ color: 'var(--text-mid)' }}>{s.canceledDate}</span></div>}
+                                                            {s.pausedUntilDate && <div><span style={{ color: 'var(--text-dim)' }}>paused until: </span><span style={{ color: 'var(--text-mid)' }}>{s.pausedUntilDate}</span></div>}
+                                                            <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--text-dim)' }}>id: </span><span style={{ color: 'var(--text-dim)', fontSize: 9 }}>{s.id}</span></div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                )}
+
+                                {!plans && !plansLoading && (
+                                    <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={fetchPlans}>$ load subscriptions</button>
+                                )}
                             </div>
                         )}
                     </div>
