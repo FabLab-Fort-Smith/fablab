@@ -57,23 +57,20 @@ export async function POST(request) {
         // But user said "only members in good standing... need to have completed volunteer hours".
         // I will enforce it strictly.
 
-        if (!isAdmin && (!isSubscriptionActive || !isMembershipActive || !hasVolunteerHours)) {
+        if (!isAdmin && (!isSubscriptionActive || !isMembershipActive)) {
              console.log(`Access Denied for ${user.username}:`, {
                 isAdmin,
                 isSubscriptionActive,
                 isMembershipActive,
-                hasVolunteerHours,
-                volunteerHours,
-                required: Constants.REQUIRED_VOLUNTEER_HOURS
+                volunteerHoursPreviousMonth: volunteerHours,
              });
-             
-             return NextResponse.json({ 
+
+             return NextResponse.json({
                 error: 'Access Denied: Not in good standing',
                 details: {
                     subscriptionActive: isSubscriptionActive,
                     membershipStatus: user.membership?.status,
                     volunteerHoursPreviousMonth: volunteerHours,
-                    requiredHours: Constants.REQUIRED_VOLUNTEER_HOURS
                 }
             }, { status: 403 });
         }

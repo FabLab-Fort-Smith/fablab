@@ -98,17 +98,18 @@ export default function DashboardPage({ params }) {
     // Membership progress
     let activeStep = 0;
     let showProgress = false;
+    let showVolunteerNag = false;
     if (userData) {
         showProgress = true;
         const m = userData.membership || {};
         const totalHours = (m.volunteerLog || []).reduce((acc, l) => acc + Number(l.hours), 0);
         const isMember = m.isWaived || (m.sponsorshipExpiresAt && new Date(m.sponsorshipExpiresAt) > new Date());
+        showVolunteerNag = totalHours < 4 && (m.accessKey?.issued || m.subscriptionStatus === 'ACTIVE');
         if (!m.applicationDate) activeStep = 1;
         else if (!m.contacted) activeStep = 2;
         else if (!m.onboardingComplete) activeStep = 3;
         else if (m.status === 'onboarding' && !isMember) activeStep = 4;
         else if ((m.status === 'probation' || (m.status === 'onboarding' && isMember)) && (!userData.profileCompleted || !userData.isPublic)) activeStep = 5;
-        else if (totalHours < 4) activeStep = 6;
         else if (!m.accessKey?.issued) activeStep = 7;
         else if (m.status !== 'active' && m.status !== 'probation') activeStep = 8;
         else showProgress = false;
@@ -120,7 +121,7 @@ export default function DashboardPage({ params }) {
         3: { msg: 'please visit the fablab for orientation and paperwork.', action: null },
         4: { msg: 'select a membership plan to continue.', action: () => router.push(`/dashboard/${uid}/profile?tab=1`), label: '$ ./plans' },
         5: { msg: 'membership active. complete your public profile.', action: () => router.push(`/dashboard/${uid}/profile?tab=2`), label: '$ ./profile' },
-        6: { msg: 'volunteer hours remaining for your first month requirement.', action: () => router.push(`/dashboard/${uid}/volunteer`), label: '$ ./log-hours' },
+        7: { msg: 'subscription active. contact an admin to get your access key issued.', action: null },
     };
 
     const menu = MENU(uid, role);
@@ -249,6 +250,13 @@ export default function DashboardPage({ params }) {
                         )}
                     </div>
                 </details>
+            )}
+
+            {showVolunteerNag && (
+                <div style={{ border: '1px solid var(--amber)', color: 'var(--amber)', background: 'rgba(255,170,0,0.05)', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--mono)', fontSize: 11 }}>
+                    <span>&gt; reminder: log your volunteer hours to stay in good standing. 4h/month required.</span>
+                    <button className="btn btn--sm" style={{ fontSize: 10, flexShrink: 0, borderColor: 'var(--amber)', color: 'var(--amber)' }} onClick={() => router.push(`/dashboard/${uid}/volunteer`)}>$ ./log-hours</button>
+                </div>
             )}
 
             {/* Ways to earn stake */}

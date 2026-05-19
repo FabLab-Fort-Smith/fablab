@@ -87,7 +87,7 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
         const m = formData.membership;
         const isSponsorValid = m.sponsorshipExpiresAt && new Date(m.sponsorshipExpiresAt) > new Date();
         const isPaid = m.status === 'active' || m.status === 'probation' || m.subscriptionStatus === 'ACTIVE' || m.isWaived || isSponsorValid;
-        return isPaid && totalHours >= 4 && m.status !== 'suspended';
+        return isPaid && m.status !== 'suspended';
     })();
 
     const handleAddLog = () => {
@@ -349,7 +349,7 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                                     </select>
                                                 )}
                                                 {!canAssignKey && !m.accessKey?.issued && (
-                                                    <div style={{ fontSize: 10, color: 'var(--red)' }}>cannot assign key: user must be active/probation, have 4+ hours, and not be suspended.</div>
+                                                    <div style={{ fontSize: 10, color: 'var(--red)' }}>cannot assign key: user must be active/probation and not suspended.</div>
                                                 )}
                                             </div>
                                         );
