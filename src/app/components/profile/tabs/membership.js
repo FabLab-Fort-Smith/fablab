@@ -33,12 +33,13 @@ const MembershipTab = ({ user, onUpdateMembership, membershipApplied = false }) 
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
     const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
+    const [syncing, setSyncing] = useState(false);
     const [successDismissed, setSuccessDismissed] = useState(false);
     const [couponCode, setCouponCode] = useState('');
 
     const membershipStatus = user?.membership || {};
     const isReadyForPayment = membershipStatus.applicationDate && membershipStatus.contacted && membershipStatus.onboardingComplete;
-    const isActiveSubscriber = membershipStatus.subscriptionStatus === 'ACTIVE' && membershipStatus.squareSubscriptionId;
+    const isActiveSubscriber = membershipStatus.subscriptionStatus === 'ACTIVE';
     const showApplicationSuccess = membershipApplied && !successDismissed;
 
     const activeStep = (() => {
@@ -330,6 +331,37 @@ const MembershipTab = ({ user, onUpdateMembership, membershipApplied = false }) 
             {/* ── Plan selection (shown when not subscribed) ─────────────── */}
             {!isActiveSubscriber && (
                 <>
+                    {/* Sync button — in case checkout redirect failed */}
+                    {membershipStatus.squareCustomerId && (
+                        <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <button
+                                className="btn btn--sm"
+                                disabled={syncing}
+                                onClick={async () => {
+                                    setSyncing(true);
+                                    try {
+                                        const res = await fetch('/api/v1/memberships/subscription', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ userID: user.userID }),
+                                        });
+                                        const data = await res.json();
+                                        if (!res.ok) { showToast(data.error || 'Sync failed.', 'error'); return; }
+                                        showToast('Subscription synced. Refreshing...', 'success');
+                                        setTimeout(() => window.location.reload(), 1200);
+                                    } catch { showToast('Sync failed.', 'error'); }
+                                    finally { setSyncing(false); }
+                                }}
+                                style={{ fontSize: 10 }}
+                            >
+                                {syncing ? '$ syncing...' : '$ sync subscription'}
+                            </button>
+                            <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--mono)' }}>
+                                already paid? click to sync from Square
+                            </span>
+                        </div>
+                    )}
+
                     <div style={{ display: 'flex', justifyContent: 'center', gap: 0, marginBottom: 24 }}>
                         {['MONTHLY', 'ANNUAL'].map(type => (
                             <button key={type} onClick={() => setBillingType(type)} style={{ padding: '8px 24px', background: billingType === type ? 'rgba(57,255,20,0.1)' : 'none', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.08em' }}>

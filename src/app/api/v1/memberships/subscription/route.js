@@ -67,6 +67,51 @@ export async function GET(req) {
     }
 }
 
+// POST /api/v1/memberships/subscription — sync subscription from Square by squareCustomerId
+export async function POST(req) {
+    const { userID } = await req.json();
+    if (!userID) return NextResponse.json({ error: "userID required." }, { status: 400 });
+    if (!await getAuthedUser(userID)) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+
+    const usersCol = await db.dbUsers();
+    const user = await usersCol.findOne({ userID });
+    const customerId = user?.membership?.squareCustomerId;
+    if (!customerId) return NextResponse.json({ error: "No Square customer ID on record." }, { status: 400 });
+
+    try {
+        const { result } = await squareClient.subscriptionsApi.searchSubscriptions({
+            query: { filter: { customerIds: [customerId] } },
+        });
+        const subs = result.subscriptions || [];
+        const sub = subs.find(s => s.status === "ACTIVE") || subs[0] || null;
+        if (!sub) return NextResponse.json({ error: "No Square subscription found for your account." }, { status: 404 });
+
+        const updateData = {
+            "membership.squareSubscriptionId": sub.id,
+            "membership.subscriptionStatus": sub.status,
+            "membership.status": sub.status === "ACTIVE" ? "active" : "suspended",
+            "membership.accessKey.issued": sub.status === "ACTIVE",
+        };
+
+        if (sub.planVariationId) {
+            try {
+                const { result: varR } = await squareClient.catalogApi.retrieveCatalogObject(sub.planVariationId);
+                updateData["membership.variationName"] = varR.object?.subscriptionPlanVariationData?.name || "";
+                const parentId = varR.object?.subscriptionPlanVariationData?.subscriptionPlanId;
+                if (parentId) {
+                    const { result: planR } = await squareClient.catalogApi.retrieveCatalogObject(parentId);
+                    updateData["membership.planName"] = planR.object?.subscriptionPlanData?.name || "";
+                }
+            } catch { /* non-fatal */ }
+        }
+
+        await UserService.updateUser(userID, updateData);
+        return NextResponse.json({ success: true, subscriptionId: sub.id, status: sub.status });
+    } catch (err) {
+        return NextResponse.json({ error: err?.errors?.[0]?.detail || "Sync failed." }, { status: 500 });
+    }
+}
+
 // PATCH /api/v1/memberships/subscription
 // body: { userID, action: "cancel" | "pause" | "resume" }
 export async function PATCH(req) {
