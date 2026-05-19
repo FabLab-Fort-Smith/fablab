@@ -137,22 +137,22 @@ export default class SubscriptionService {
           return targetUser;
       }
 
-      // Determine membership type based on subscription status
-      const isActive = activeSubscription.status === 'ACTIVE';
-      const membershipType = isActive ? 'co-op' : 'community';
+      // ACTIVE = paying. PENDING = future-dated (e.g. annual plan paid upfront, sub starts later).
+      // Both get door access. PAUSED is intentional — keep access.
+      const hasAccess = ['ACTIVE', 'PENDING', 'PAUSED'].includes(activeSubscription.status);
+      const membershipType = hasAccess ? 'co-op' : 'community';
 
-      // Update the user — also enforce door access based on subscription status
       const updateData = {
         squareID: squareID,
         "membership.squareSubscriptionId": activeSubscription.id,
         "membership.subscriptionStatus": activeSubscription.status,
         "membership.type": membershipType,
-        "membership.status": isActive ? "active" : "suspended",
-        "membership.accessKey.issued": isActive,
-        "membership.lastPaymentDate": isActive ? new Date().toISOString() : undefined,
+        "membership.status": hasAccess ? "active" : "suspended",
+        "membership.accessKey.issued": hasAccess,
+        "membership.lastPaymentDate": activeSubscription.status === 'ACTIVE' ? new Date().toISOString() : undefined,
       };
 
-      if (!isActive) {
+      if (!hasAccess) {
         updateData["membership.accessKey.revokedReason"] = `Subscription ${activeSubscription.status}`;
       }
       
