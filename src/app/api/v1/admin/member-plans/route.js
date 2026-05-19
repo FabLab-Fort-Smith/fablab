@@ -135,13 +135,21 @@ export async function PATCH(request) {
         const { result: created } = await squareClient.subscriptionsApi.createSubscription(newSubBody);
         const newSub = created.subscription;
 
-        // 4. Update the user's squareSubscriptionId in the DB
+        // 4. Update the user's squareSubscriptionId in the DB.
+        // Also re-assert type/status because the CANCELED webhook for the old sub
+        // may race and set them back to community/suspended before we finish here.
         const targetUserID = userID || null;
         if (targetUserID) {
             const usersCol = await db.dbUsers();
             await usersCol.updateOne(
                 { userID: targetUserID },
-                { $set: { "membership.squareSubscriptionId": newSub.id } }
+                { $set: {
+                    "membership.squareSubscriptionId": newSub.id,
+                    "membership.subscriptionStatus": newSub.status,
+                    "membership.type": "co-op",
+                    "membership.status": "active",
+                    "membership.accessKey.issued": true,
+                } }
             );
         }
 
