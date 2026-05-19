@@ -111,7 +111,7 @@ export async function POST(request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { userID, squareCustomerId, grantAccess, planVariationId } = await request.json();
+    const { userID, squareCustomerId, grantAccess, planVariationId, startDate } = await request.json();
     if (!userID || !squareCustomerId) {
       return NextResponse.json({ error: "userID and squareCustomerId are required." }, { status: 400 });
     }
@@ -148,13 +148,16 @@ export async function POST(request) {
       try {
         const { result: cardsResult } = await squareClient.cardsApi.listCards(undefined, squareCustomerId);
         const card = (cardsResult.cards || []).find(c => c.enabled !== false);
-        const today = new Date().toISOString().split("T")[0];
+        // Use provided startDate (admin sets this to avoid double-charging).
+        // Default to 30 days out if not provided.
+        const fallback = new Date(); fallback.setDate(fallback.getDate() + 30);
+        const subStartDate = startDate || fallback.toISOString().split("T")[0];
         const subBody = {
           idempotencyKey: uuidv4(),
           locationId: process.env.SQUARE_LOCATION_ID,
           planVariationId,
           customerId: squareCustomerId,
-          startDate: today,
+          startDate: subStartDate,
         };
         if (card) subBody.cardId = card.id;
         const { result: subResult } = await squareClient.subscriptionsApi.createSubscription(subBody);

@@ -19,6 +19,7 @@ export default function SquareTransactionsPage() {
     const [toast, setToast] = useState(null);
     const [plans, setPlans] = useState([]);
     const [selectedVariationId, setSelectedVariationId] = useState('');
+    const [subStartDate, setSubStartDate] = useState('');
 
     useEffect(() => {
         if (status === 'unauthenticated') router.push('/auth/signin');
@@ -57,6 +58,9 @@ export default function SquareTransactionsPage() {
         setUserQuery('');
         setPostLinkResult(null);
         setSelectedVariationId('');
+        // Default start date to 30 days from now so we don't charge them again
+        const d = new Date(); d.setDate(d.getDate() + 30);
+        setSubStartDate(d.toISOString().split('T')[0]);
         if (!plans.length) fetch('/api/v1/plans').then(r => r.json()).then(setPlans).catch(() => {});
     };
 
@@ -71,6 +75,7 @@ export default function SquareTransactionsPage() {
                     userID: postLinkResult.user.userID,
                     squareCustomerId: postLinkResult.customerId,
                     planVariationId: selectedVariationId,
+                    startDate: subStartDate,
                 }),
             });
             const data = await res.json();
@@ -336,8 +341,17 @@ export default function SquareTransactionsPage() {
                                             : <option key={plan.id} value={plan.id}>{plan.name}</option>
                                         )}
                                     </select>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                                        <label style={{ fontSize: 10, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>first charge date:</label>
+                                        <input
+                                            type="date"
+                                            value={subStartDate}
+                                            onChange={e => setSubStartDate(e.target.value)}
+                                            style={{ background: 'var(--bg-1)', border: '1px solid var(--bd)', color: 'var(--text)', padding: '5px 8px', fontSize: 11, fontFamily: 'var(--mono)', outline: 'none' }}
+                                        />
+                                    </div>
                                     <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>
-                                        uses card on file — customer must have a saved card in Square.
+                                        defaults to +30 days so they aren't charged again immediately. uses card on file.
                                     </div>
                                 </div>
 
