@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "../../../../../auth";
+import { auth } from "../../../../../../auth";
 import squareClient from "@/lib/square";
 import { db } from "@/lib/database";
 import UserService from "@/app/api/v1/users/service";
