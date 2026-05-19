@@ -254,6 +254,28 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                         ))}
                     </div>
 
+                    {/* Contact info */}
+                    <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--bd)', display: 'flex', gap: 10, flexWrap: 'wrap', flexShrink: 0, alignItems: 'center' }}>
+                        {user.email && (
+                            <a href={`mailto:${user.email}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', border: '1px solid var(--bd)', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--cyan)', textDecoration: 'none', background: 'rgba(0,255,255,0.04)' }}>
+                                <span>✉</span> {user.email}
+                            </a>
+                        )}
+                        {user.phoneNumber && (
+                            <a href={`tel:${user.phoneNumber}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', border: '1px solid var(--bd)', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--green)', textDecoration: 'none', background: 'rgba(57,255,20,0.04)' }}>
+                                <span>☏</span> {user.phoneNumber}
+                            </a>
+                        )}
+                        {user.discordHandle && (
+                            <button onClick={() => { navigator.clipboard.writeText(user.discordHandle); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', border: '1px solid var(--bd)', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--magenta)', background: 'rgba(255,0,255,0.04)', cursor: 'pointer' }}>
+                                <span>⌘</span> {user.discordHandle}
+                            </button>
+                        )}
+                        {!user.email && !user.phoneNumber && !user.discordHandle && (
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-dim)' }}>no contact info on file</span>
+                        )}
+                    </div>
+
                     {/* Identity / audit info */}
                     <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--bd)', display: 'flex', gap: 16, flexWrap: 'wrap', flexShrink: 0, fontFamily: 'var(--mono)', fontSize: 10 }}>
                         {[
