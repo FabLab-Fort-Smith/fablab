@@ -281,6 +281,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     token.image = user.image;
                     token.discordId = user.discordId;
                 }
+                // Record last login timestamp
+                try {
+                    await UsersService.updateUser({ userID: token.userID }, { lastLogin: new Date() });
+                } catch (e) {
+                    console.error("Failed to update lastLogin:", e);
+                }
             }
             return token;
         },

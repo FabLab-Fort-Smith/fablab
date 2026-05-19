@@ -261,7 +261,8 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                             { k: 'provider',  v: user.provider || '—' },
                             { k: 'googleId',  v: user.googleId  ? user.googleId.slice(0, 12) + '…'  : '—' },
                             { k: 'discordId', v: user.discordId ? user.discordId.slice(0, 12) + '…' : '—' },
-                            { k: 'created',   v: user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—' },
+                            { k: 'created',    v: user.createdAt  ? new Date(user.createdAt).toLocaleDateString()  : '—' },
+                            { k: 'last login', v: user.lastLogin  ? new Date(user.lastLogin).toLocaleString()      : '—' },
                             { k: 'sq customer', v: user.membership?.squareCustomerId || user.squareCustomerId || '—' },
                         ].map(({ k, v }) => (
                             <div key={k} title={v} style={{ cursor: 'pointer' }} onClick={() => navigator.clipboard?.writeText(v)}>
