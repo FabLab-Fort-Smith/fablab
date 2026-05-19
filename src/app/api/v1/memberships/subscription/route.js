@@ -75,12 +75,28 @@ export async function POST(req) {
 
     const usersCol = await db.dbUsers();
     const user = await usersCol.findOne({ userID });
-    const customerId = user?.membership?.squareCustomerId;
-    if (!customerId) return NextResponse.json({ error: "No Square customer ID on record." }, { status: 400 });
+
+    // Collect all customer IDs to search — the subscription checkout may have
+    // created a new Square customer instead of reusing the one we stored.
+    const customerIds = new Set();
+    if (user?.membership?.squareCustomerId) customerIds.add(user.membership.squareCustomerId);
+    if (user?.squareCustomerId) customerIds.add(user.squareCustomerId);
+
+    // Also look up by email in Square in case a new customer was created at checkout
+    if (user?.email) {
+        try {
+            const { result: custResult } = await squareClient.customersApi.searchCustomers({
+                query: { filter: { emailAddress: { exact: user.email } } },
+            });
+            for (const c of (custResult.customers || [])) customerIds.add(c.id);
+        } catch { /* non-fatal */ }
+    }
+
+    if (customerIds.size === 0) return NextResponse.json({ error: "No Square customer ID on record." }, { status: 400 });
 
     try {
         const { result } = await squareClient.subscriptionsApi.searchSubscriptions({
-            query: { filter: { customerIds: [customerId] } },
+            query: { filter: { customerIds: Array.from(customerIds) } },
         });
         const subs = result.subscriptions || [];
         const sub = subs.find(s => s.status === "ACTIVE") || subs[0] || null;
@@ -88,8 +104,10 @@ export async function POST(req) {
 
         const updateData = {
             "membership.squareSubscriptionId": sub.id,
+            "membership.squareCustomerId": sub.customerId,
             "membership.subscriptionStatus": sub.status,
             "membership.status": sub.status === "ACTIVE" ? "active" : "suspended",
+            "membership.type": sub.status === "ACTIVE" ? "co-op" : undefined,
             "membership.accessKey.issued": sub.status === "ACTIVE",
         };
 
