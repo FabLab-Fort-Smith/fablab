@@ -287,6 +287,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 } catch (e) {
                     console.error("Failed to update lastLogin:", e);
                 }
+
+                // Enforce grace period expiry on login
+                try {
+                    const freshUser = await UsersService.getUserByID(token.userID);
+                    const m = freshUser?.membership;
+                    if (m?.gracePeriodStartedAt && !m?.isWaived) {
+                        const GRACE_DAYS = 7;
+                        const expires = new Date(m.gracePeriodStartedAt);
+                        expires.setDate(expires.getDate() + GRACE_DAYS);
+                        if (new Date() > expires) {
+                            console.log(`🔒 Grace period expired for ${token.userID} — revoking access`);
+                            await UsersService.updateUser({ userID: token.userID }, {
+                                "membership.status": "suspended",
+                                "membership.accessKey.issued": false,
+                                "membership.accessKey.revokedReason": "Grace period expired — payment not received",
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.error("Grace period check failed:", e);
+                }
             }
             return token;
         },

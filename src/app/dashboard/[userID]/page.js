@@ -162,7 +162,31 @@ export default function DashboardPage({ params }) {
                 );
             })()}
 
-            {/* Delinquency banner */}
+            {/* Grace period warning banner */}
+            {userData && (() => {
+                const m = userData.membership || {};
+                if (!m.gracePeriodStartedAt || m.isWaived) return null;
+                const GRACE_DAYS = 7;
+                const started = new Date(m.gracePeriodStartedAt);
+                const expires = new Date(started);
+                expires.setDate(expires.getDate() + GRACE_DAYS);
+                const daysLeft = Math.max(0, Math.ceil((expires - new Date()) / (1000 * 60 * 60 * 24)));
+                if (daysLeft === 0) return null; // expired — delinquency banner takes over
+                return (
+                    <div style={{ border: '1px solid var(--amber, #ffaa00)', color: 'var(--amber, #ffaa00)', background: 'rgba(255,170,0,0.06)', padding: '14px 18px', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠ PAYMENT FAILED — {daysLeft} DAY{daysLeft !== 1 ? 'S' : ''} LEFT IN GRACE PERIOD</div>
+                        <div style={{ color: 'var(--text-mid)', marginBottom: 12, fontSize: 11 }}>
+                            Your last subscription payment didn&apos;t go through. Door access is still active for now —
+                            please update your billing before <strong>{expires.toLocaleDateString()}</strong> to avoid losing access.
+                        </div>
+                        <button className="btn btn--sm" style={{ fontSize: 10, borderColor: 'var(--amber, #ffaa00)', color: 'var(--amber, #ffaa00)' }} onClick={() => router.push(`/dashboard/${uid}/profile?tab=1`)}>
+                            $ update billing →
+                        </button>
+                    </div>
+                );
+            })()}
+
+            {/* Delinquency banner — access already revoked */}
             {userData && (() => {
                 const m = userData.membership || {};
                 const LAPSED = ['CANCELED', 'DEACTIVATED', 'PAST_DUE', 'SUSPENDED'];

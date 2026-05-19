@@ -26,11 +26,47 @@ export async function POST(request) {
     const body = JSON.parse(rawBody);
     
     // Square webhooks send events in an array, but usually one at a time
-    
+
+    // 0. Handle Failed Payments — start grace period
+    if (body.type === "payment.updated") {
+        const payment = body.data.object.payment;
+
+        if (payment.status === "FAILED") {
+            const subscriptionId = payment.subscription_id;
+            if (subscriptionId) {
+                const { db } = await import("@/lib/database");
+                const usersCollection = await db.dbUsers();
+
+                const user = await usersCollection.findOne({
+                    $or: [
+                        { "membership.squareSubscriptionId": subscriptionId },
+                        { "membership.sponsoredSubscriptionId": subscriptionId }
+                    ]
+                });
+
+                if (user && !user.membership?.isWaived) {
+                    const sponsoredStatuses = ["SPONSORED", "SPONSORED_RECURRING"];
+                    const isCoveredBySponsorship = sponsoredStatuses.includes(user.membership?.subscriptionStatus);
+
+                    if (!isCoveredBySponsorship) {
+                        if (!user.membership?.gracePeriodStartedAt) {
+                            console.log(`⚠️ Payment failed for ${user.userID} — starting 7-day grace period`);
+                            await UserService.updateUser(user.userID, {
+                                "membership.gracePeriodStartedAt": new Date().toISOString(),
+                            });
+                        } else {
+                            console.log(`⚠️ Payment failed again for ${user.userID} — grace period running since ${user.membership.gracePeriodStartedAt}`);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // 1. Handle Successful Payments (New Subscriptions / Renewals / Sponsorships)
     if (body.type === "payment.updated") {
         const payment = body.data.object.payment;
-        
+
         if (payment.status === "COMPLETED") {
             console.log("✅ Payment Completed:", payment.id);
             
@@ -83,11 +119,12 @@ export async function POST(request) {
                         console.log(`🔄 Personal Subscription Renewal for ${user.userID}`);
                         await UserService.updateUser(user.userID, {
                             "membership.status": "active",
-                            "membership.type": "co-op", // ✅ Ensure they are co-op
+                            "membership.type": "co-op",
                             "membership.subscriptionStatus": "ACTIVE",
                             "membership.lastPaymentDate": new Date().toISOString(),
-                            // Ensure key is valid if they were suspended
-                            "membership.accessKey.issued": true 
+                            "membership.accessKey.issued": true,
+                            "membership.gracePeriodStartedAt": null, // clear grace period on success
+                            "membership.accessKey.revokedReason": null,
                         });
                         return NextResponse.json({ success: true }, { status: 200 });
                     }
@@ -141,9 +178,11 @@ export async function POST(request) {
                     "membership.sponsorshipExpiresAt": expiresAt.toISOString(),
                     "membership.subscriptionStatus": isRecurringSponsorship ? "SPONSORED_RECURRING" : "SPONSORED",
                     "membership.lastPaymentDate": new Date().toISOString(),
-                    "membership.status": "active", // Ensure they are active
-                    "membership.type": "co-op", // ✅ Ensure they are co-op
-                    "membership.accessKey.issued": true // Re-enable key if it was disabled
+                    "membership.status": "active",
+                    "membership.type": "co-op",
+                    "membership.accessKey.issued": true,
+                    "membership.gracePeriodStartedAt": null, // clear any prior grace period
+                    "membership.accessKey.revokedReason": null,
                 };
                 
                 if (!isRecurringSponsorship) {
