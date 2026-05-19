@@ -82,13 +82,28 @@ export async function POST(req) {
     if (user?.membership?.squareCustomerId) customerIds.add(user.membership.squareCustomerId);
     if (user?.squareCustomerId) customerIds.add(user.squareCustomerId);
 
-    // Also look up by email in Square in case a new customer was created at checkout
+    // Also search Square customers by this user's email — Square may have created
+    // a new customer during subscription plan checkout. We only use this to find
+    // Square customer IDs, never to update a different user record.
     if (user?.email) {
         try {
-            const { result: custResult } = await squareClient.customersApi.searchCustomers({
-                query: { filter: { emailAddress: { exact: user.email } } },
-            });
-            for (const c of (custResult.customers || [])) customerIds.add(c.id);
+            // email is stored hashed — decode or search directly in Square by plain email
+            // We store the plaintext email in the session but not in DB. Use Square's
+            // customer search with the stored squareCustomerId's email as fallback.
+            // Try fetching the stored customer's profile to get their email, then search.
+            if (user.membership?.squareCustomerId || user.squareCustomerId) {
+                const knownId = user.membership?.squareCustomerId || user.squareCustomerId;
+                try {
+                    const { result: custR } = await squareClient.customersApi.retrieveCustomer(knownId);
+                    const knownEmail = custR.customer?.emailAddress;
+                    if (knownEmail) {
+                        const { result: searchR } = await squareClient.customersApi.searchCustomers({
+                            query: { filter: { emailAddress: { exact: knownEmail } } },
+                        });
+                        for (const c of (searchR.customers || [])) customerIds.add(c.id);
+                    }
+                } catch { /* non-fatal */ }
+            }
         } catch { /* non-fatal */ }
     }
 
