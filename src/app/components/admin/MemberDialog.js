@@ -70,17 +70,17 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
 
     const activeStep = (() => {
         const m = formData.membership;
-        if (!m.applicationDate) return 1;
-        if (!m.contacted) return 2;
-        if (!m.onboardingComplete) return 3;
+        if (!m.applicationDate) return 2;
+        if (!m.contacted) return 3;
+        if (!m.onboardingComplete) return 4;
         const isSponsorValid = m.sponsorshipExpiresAt && new Date(m.sponsorshipExpiresAt) > new Date();
         const isSubscribed = m.subscriptionStatus === 'ACTIVE' || m.isWaived || isSponsorValid;
-        if (!isSubscribed && m.status !== 'active' && m.status !== 'probation') return 4;
-        if (!formData.profileCompleted && !formData.isPublic) return 5;
-        if (totalHours < 4) return 6;
-        if (!m.accessKey?.issued) return 7;
-        if (m.status !== 'active') return 8;
-        return 9;
+        if (!isSubscribed && m.status !== 'active' && m.status !== 'probation') return 5;
+        if (!formData.profileCompleted && !formData.isPublic) return 6;
+        // step 7 (volunteer hours) is a nag — never blocks progression
+        if (!m.accessKey?.issued) return 8;
+        if (m.status !== 'active') return 9;
+        return 10; // all steps done
     })();
 
     const canAssignKey = (() => {
@@ -417,7 +417,7 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                                 <div style={{ fontSize: 11, color: done ? 'var(--green)' : active ? 'var(--text-bright)' : 'var(--text-dim)', fontWeight: active ? 600 : 400, marginBottom: 6, fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>
                                                     {stepLabel}
                                                 </div>
-                                                {(active || done) && renderContent()}
+                                                {(active || done || stepNum === 7) && renderContent()}
                                             </div>
                                         </div>
                                     );
