@@ -206,7 +206,7 @@ export default function MembersPage() {
                 </>
             )}
 
-            <MemberDialog open={dialogOpen} onClose={() => setDialogOpen(false)} user={selectedUser} onUpdate={handleUserUpdate} />
+            <MemberDialog open={dialogOpen} onClose={() => setDialogOpen(false)} user={selectedUser} onUpdate={handleUserUpdate} onDelete={(deletedId) => { setUsers(u => u.filter(x => x.userID !== deletedId)); setDialogOpen(false); }} />
 
             {/* Merge Dialog */}
             <Modal open={mergeOpen} onClose={() => setMergeOpen(false)} title="merge user accounts"

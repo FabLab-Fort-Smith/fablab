@@ -152,6 +152,17 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
         finally { setNudgeLoading(false); }
     };
 
+    const handleDelete = async () => {
+        if (!confirm(`Permanently delete ${user.firstName} ${user.lastName} (${user.email})?\n\nThis cannot be undone.`)) return;
+        if (!confirm(`Second confirmation: delete ${user.userID}?`)) return;
+        try {
+            const res = await fetch(`/api/v1/users?userID=${user.userID}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Failed');
+            onClose();
+            if (typeof onDelete === 'function') onDelete(user.userID);
+        } catch { alert('Failed to delete user'); }
+    };
+
     const handleSave = async () => {
         setLoading(true);
         try {
@@ -504,9 +515,12 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                     </div>
 
                     {/* Footer */}
-                    <div style={{ padding: '12px 24px', borderTop: '1px solid var(--bd)', display: 'flex', justifyContent: 'flex-end', gap: 10, flexShrink: 0 }}>
-                        <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={onClose}>cancel</button>
-                        <button className="btn btn--filled btn--sm" style={{ fontSize: 10 }} onClick={handleSave} disabled={loading}>{loading ? '$ saving...' : '$ save changes'}</button>
+                    <div style={{ padding: '12px 24px', borderTop: '1px solid var(--bd)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                        <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, borderColor: 'var(--red, #ff4444)', color: 'var(--red, #ff4444)' }} onClick={handleDelete}>$ delete account</button>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            <button className="btn btn--ghost btn--sm" style={{ fontSize: 10 }} onClick={onClose}>cancel</button>
+                            <button className="btn btn--filled btn--sm" style={{ fontSize: 10 }} onClick={handleSave} disabled={loading}>{loading ? '$ saving...' : '$ save changes'}</button>
+                        </div>
                     </div>
                 </div>
             </div>
