@@ -36,6 +36,11 @@ const MembershipTab = ({ user, onUpdateMembership, membershipApplied = false }) 
     const [syncing, setSyncing] = useState(false);
     const [successDismissed, setSuccessDismissed] = useState(false);
     const [couponCode, setCouponCode] = useState('');
+    const [showPairInstructions, setShowPairInstructions] = useState(false);
+    const [pairingActive, setPairingActive] = useState(false);
+    const [pairingCountdown, setPairingCountdown] = useState(60);
+    const [pairLoading, setPairLoading] = useState(false);
+    const [cardCode, setCardCode] = useState(user?.membership?.accessKey?.code || null);
 
     const membershipStatus = user?.membership || {};
     const isReadyForPayment = membershipStatus.applicationDate && membershipStatus.contacted && membershipStatus.onboardingComplete;
@@ -140,6 +145,50 @@ const MembershipTab = ({ user, onUpdateMembership, membershipApplied = false }) 
             if (r2.ok) setSubscription(await r2.json());
         } catch { showToast('An error occurred.', 'error'); }
         finally { setActionLoading(false); }
+    };
+
+    // Countdown + polling when pairing is active
+    useEffect(() => {
+        if (!pairingActive) return;
+        if (pairingCountdown <= 0) { setPairingActive(false); return; }
+        const tick = setInterval(() => setPairingCountdown(c => c - 1), 1000);
+        return () => clearInterval(tick);
+    }, [pairingActive, pairingCountdown]);
+
+    useEffect(() => {
+        if (!pairingActive) return;
+        const poll = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/v1/users?userID=${user.userID}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const code = data?.user?.membership?.accessKey?.code;
+                if (code) {
+                    setCardCode(code);
+                    setPairingActive(false);
+                    setShowPairInstructions(false);
+                    showToast('NFC card paired successfully!', 'success');
+                }
+            } catch { /* non-fatal */ }
+        }, 4000);
+        return () => clearInterval(poll);
+    }, [pairingActive, user?.userID]);
+
+    const handleStartPairing = async () => {
+        setPairLoading(true);
+        try {
+            const res = await fetch('/api/v1/memberships/pair-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userID: user.userID }),
+            });
+            const data = await res.json();
+            if (!res.ok) { showToast(data.error || 'Pairing failed.', 'error'); return; }
+            setCardCode(null);
+            setPairingCountdown(60);
+            setPairingActive(true);
+        } catch { showToast('Could not reach panel.', 'error'); }
+        finally { setPairLoading(false); }
     };
 
     const filteredPlans = plans.filter(p =>
@@ -429,6 +478,78 @@ const MembershipTab = ({ user, onUpdateMembership, membershipApplied = false }) 
                         })}
                     </div>
                 </>
+            )}
+
+            {/* ── NFC Access Key ───────────────────────────────────────── */}
+            {currentMembership?.accessKey?.issued && (
+                <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-card)', padding: '20px 24px', marginBottom: 24, fontFamily: 'var(--mono)' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.12em', marginBottom: 12 }}>$ access_key.nfc</div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                        <div>
+                            <div style={{ fontSize: 13, color: 'var(--text-bright)', marginBottom: 4 }}>
+                                {cardCode ? 'NFC Card Paired' : 'No Card Paired'}
+                            </div>
+                            <div style={{ fontSize: 11, color: cardCode ? 'var(--green)' : 'var(--amber)', letterSpacing: '0.06em' }}>
+                                {cardCode ? '● active' : '○ tap required'}
+                            </div>
+                        </div>
+                        <button
+                            className="btn btn--sm"
+                            onClick={() => { setShowPairInstructions(true); setPairingActive(false); setPairingCountdown(60); }}
+                            style={{ fontSize: 10, borderColor: cardCode ? 'var(--text-dim)' : 'var(--green)', color: cardCode ? 'var(--text-dim)' : 'var(--green)' }}
+                        >
+                            {cardCode ? '$ replace_card' : '$ pair_card →'}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── NFC Pairing Instructions Modal ───────────────────────── */}
+            {showPairInstructions && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div style={{ border: '1px solid var(--green)', background: 'var(--bg-card)', padding: '28px 32px', maxWidth: 460, width: '100%', fontFamily: 'var(--mono)' }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)', marginBottom: 4, letterSpacing: '0.08em' }}>PAIR_NFC_KEY</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 24, borderBottom: '1px solid var(--bd)', paddingBottom: 14 }}>
+                            {cardCode ? 'Replacing your card will immediately deactivate your old one.' : 'Follow these steps while physically at the lab.'}
+                        </div>
+
+                        {!pairingActive ? (
+                            <>
+                                {[
+                                    'Head to the door panel at the main entrance.',
+                                    'Click "$ start_pairing" below — you have 60 seconds once the panel beeps.',
+                                    'Hold your blank NFC card or fob to the panel.',
+                                    'The panel will beep twice to confirm. Your card is now your key.',
+                                ].map((step, i) => (
+                                    <div key={i} style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+                                        <div style={{ width: 20, height: 20, border: '1px solid var(--green)', color: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, flexShrink: 0 }}>{i + 1}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.5 }}>{step}</div>
+                                    </div>
+                                ))}
+                                <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 8, marginBottom: 24 }}>
+                                    ⚠ You must be physically at the lab. One card per account.
+                                </div>
+                                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                                    <button className="btn btn--sm" onClick={() => setShowPairInstructions(false)} style={{ fontSize: 10 }}>cancel</button>
+                                    <button className="btn btn--sm" onClick={handleStartPairing} disabled={pairLoading} style={{ fontSize: 10, borderColor: 'var(--green)', color: 'var(--green)' }}>
+                                        {pairLoading ? 'starting...' : '$ start_pairing →'}
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                                    <div style={{ fontSize: 32, color: 'var(--green)', fontFamily: 'var(--display)', letterSpacing: '-0.04em', marginBottom: 8 }}>{pairingCountdown}s</div>
+                                    <div style={{ fontSize: 12, color: 'var(--text-mid)', marginBottom: 4 }}>panel is in write mode</div>
+                                    <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>hold your NFC card or fob to the panel now</div>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 20 }}>
+                                    <button className="btn btn--sm" onClick={() => { setPairingActive(false); setShowPairInstructions(false); }} style={{ fontSize: 10 }}>cancel</button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
             )}
 
             <VolunteerLog user={user} onUpdate={onUpdateMembership} />

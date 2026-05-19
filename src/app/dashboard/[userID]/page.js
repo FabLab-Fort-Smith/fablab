@@ -252,6 +252,14 @@ export default function DashboardPage({ params }) {
                 </details>
             )}
 
+            {/* NFC card not yet paired — prompt them to do it */}
+            {userData?.membership?.accessKey?.issued && !userData?.membership?.accessKey?.code && (
+                <div style={{ border: '1px solid var(--green)', color: 'var(--green)', background: 'rgba(57,255,20,0.05)', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--mono)', fontSize: 11 }}>
+                    <span>&gt; your access key is approved — pair an NFC card at the door panel to start using it.</span>
+                    <button className="btn btn--sm" style={{ fontSize: 10, flexShrink: 0, borderColor: 'var(--green)', color: 'var(--green)' }} onClick={() => router.push(`/dashboard/${uid}/profile?tab=1`)}>$ ./pair-card</button>
+                </div>
+            )}
+
             {showVolunteerNag && (
                 <div style={{ border: '1px solid var(--amber)', color: 'var(--amber)', background: 'rgba(255,170,0,0.05)', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--mono)', fontSize: 11 }}>
                     <span>&gt; reminder: log your volunteer hours to stay in good standing. 4h/month required.</span>
