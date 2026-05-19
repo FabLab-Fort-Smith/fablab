@@ -149,9 +149,10 @@ export default class UserModel {
                 query["membership.subscriptionStatus"] = { $ne: "ACTIVE" };
                 query["membership.isWaived"] = { $ne: true };
             } else if (filters.memberType === 'delinquent') {
-                // Had a subscription at some point but it's no longer active
+                // Has a subscription on record but both status fields show lapsed
                 query["membership.squareSubscriptionId"] = { $exists: true, $ne: null };
-                query["membership.subscriptionStatus"] = { $in: ["CANCELED", "DEACTIVATED", "PAST_DUE", "SUSPENDED"] };
+                query["membership.subscriptionStatus"] = { $in: ["CANCELED", "DEACTIVATED", "PAST_DUE"] };
+                query["membership.status"] = "suspended";
                 query["membership.isWaived"] = { $ne: true };
             }
 
@@ -221,7 +222,8 @@ export default class UserModel {
                 query["membership.isWaived"] = { $ne: true };
             } else if (filters.memberType === 'delinquent') {
                 query["membership.squareSubscriptionId"] = { $exists: true, $ne: null };
-                query["membership.subscriptionStatus"] = { $in: ["CANCELED", "DEACTIVATED", "PAST_DUE", "SUSPENDED"] };
+                query["membership.subscriptionStatus"] = { $in: ["CANCELED", "DEACTIVATED", "PAST_DUE"] };
+                query["membership.status"] = "suspended";
                 query["membership.isWaived"] = { $ne: true };
             }
 
