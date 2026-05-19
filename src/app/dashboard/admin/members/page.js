@@ -44,7 +44,6 @@ export default function MembersPage() {
     const [dupes, setDupes] = useState([]);
     const [dupesLoading, setDupesLoading] = useState(false);
     const [dupesLoaded, setDupesLoaded] = useState(false);
-    const [delinquentSyncing, setDelinquentSyncing] = useState(false);
     const PAGE_SIZE = 25;
 
     useEffect(() => {
@@ -140,20 +139,10 @@ export default function MembersPage() {
         finally { setDupesLoading(false); }
     };
 
-    const handleTabChange = async (tab) => {
+    const handleTabChange = (tab) => {
         setActiveTab(tab);
         if (tab === 'dupes' && !dupesLoaded) fetchDupes();
-        if (tab === 'delinquent') {
-            // Sync all subscriptions first so DB reflects current Square status
-            setDelinquentSyncing(true);
-            try { await fetch('/api/v1/admin/square/sync', { method: 'POST' }); } catch {}
-            setDelinquentSyncing(false);
-            setPage(1);
-            fetchUsers(1, search, 'delinquent');
-        } else if (tab !== 'dupes') {
-            setPage(1);
-            fetchUsers(1, search, tab);
-        }
+        if (tab !== 'dupes') { setPage(1); fetchUsers(1, search, tab); }
     };
 
     const REASON_LABEL = { email: 'same email', google_id: 'same Google ID', discord_id: 'same Discord ID', username: 'same username', name: 'same name' };
@@ -289,9 +278,7 @@ export default function MembersPage() {
                 </div>
             )}
 
-            {activeTab !== 'dupes' && (delinquentSyncing ? (
-                <div style={{ color: 'var(--red, #ff4444)', fontSize: 12, fontFamily: 'var(--mono)' }}>$ syncing subscriptions against Square...</div>
-            ) : loading ? (
+            {activeTab !== 'dupes' && (loading ? (
                 <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>loading<span className="caret-block" style={{ marginLeft: 4 }} /></div>
             ) : (
                 <>

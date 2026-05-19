@@ -149,10 +149,10 @@ export default class UserModel {
                 query["membership.subscriptionStatus"] = { $ne: "ACTIVE" };
                 query["membership.isWaived"] = { $ne: true };
             } else if (filters.memberType === 'delinquent') {
-                // Has a subscription on record but both status fields show lapsed
+                // Co-op members (active subscription holders) whose Square sub is lapsed
+                query["membership.type"] = "co-op";
                 query["membership.squareSubscriptionId"] = { $exists: true, $ne: null };
                 query["membership.subscriptionStatus"] = { $in: ["CANCELED", "DEACTIVATED", "PAST_DUE"] };
-                query["membership.status"] = "suspended";
                 query["membership.isWaived"] = { $ne: true };
             }
 
@@ -221,9 +221,9 @@ export default class UserModel {
                 query["membership.subscriptionStatus"] = { $ne: "ACTIVE" };
                 query["membership.isWaived"] = { $ne: true };
             } else if (filters.memberType === 'delinquent') {
+                query["membership.type"] = "co-op";
                 query["membership.squareSubscriptionId"] = { $exists: true, $ne: null };
                 query["membership.subscriptionStatus"] = { $in: ["CANCELED", "DEACTIVATED", "PAST_DUE"] };
-                query["membership.status"] = "suspended";
                 query["membership.isWaived"] = { $ne: true };
             }
 
