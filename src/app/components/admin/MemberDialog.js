@@ -671,11 +671,12 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                                                             {editingStartDate[s.id] && editingStartDate[s.id] !== s.startDate && (
                                                                                 <button className="btn btn--ghost btn--sm" style={{ fontSize: 9, borderColor: 'var(--amber, #ffaa00)', color: 'var(--amber, #ffaa00)', padding: '1px 6px' }}
                                                                                     onClick={async () => {
+                                                                                        if (!confirm(`Square doesn't allow editing start dates directly. This will cancel the current subscription and create a new one starting ${editingStartDate[s.id]}. Continue?`)) return;
                                                                                         try {
                                                                                             const res = await fetch('/api/v1/admin/member-plans', {
                                                                                                 method: 'PATCH',
                                                                                                 headers: { 'Content-Type': 'application/json' },
-                                                                                                body: JSON.stringify({ subscriptionId: s.id, startDate: editingStartDate[s.id] }),
+                                                                                                body: JSON.stringify({ subscriptionId: s.id, startDate: editingStartDate[s.id], userID: user.userID }),
                                                                                             });
                                                                                             const d = await res.json();
                                                                                             if (!res.ok) { alert(d.error); return; }

@@ -94,23 +94,23 @@ export async function GET(request) {
 }
 
 // PATCH /api/v1/admin/member-plans
-// Update a subscription's start date (PENDING only).
-// Body: { subscriptionId, startDate: "YYYY-MM-DD" }
+// Fix a PENDING subscription's start date.
+// Square does not allow mutating startDate — so we cancel the old sub and
+// create a new one with the same plan/variation/customer/card and the new date.
+// Body: { subscriptionId, startDate: "YYYY-MM-DD", userID }
 export async function PATCH(request) {
     if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const { subscriptionId, startDate } = await request.json();
+    const { subscriptionId, startDate, userID } = await request.json();
     if (!subscriptionId || !startDate) {
         return NextResponse.json({ error: "subscriptionId and startDate required" }, { status: 400 });
     }
-
-    // Validate date format
     if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
         return NextResponse.json({ error: "startDate must be YYYY-MM-DD" }, { status: 400 });
     }
 
     try {
-        // Fetch current version (required for Square's optimistic locking)
+        // 1. Fetch the existing subscription
         const { result: current } = await squareClient.subscriptionsApi.retrieveSubscription(subscriptionId);
         const sub = current.subscription;
 
@@ -118,17 +118,38 @@ export async function PATCH(request) {
             return NextResponse.json({ error: `Cannot change start date — subscription is ${sub.status}, not PENDING` }, { status: 400 });
         }
 
-        const { result } = await squareClient.subscriptionsApi.updateSubscription(subscriptionId, {
-            subscription: {
-                startDate,
-                version: sub.version,
-            },
-        });
+        // 2. Cancel the old subscription
+        await squareClient.subscriptionsApi.cancelSubscription(subscriptionId);
 
-        return NextResponse.json({ subscription: result.subscription });
+        // 3. Re-create with corrected start date, same plan/customer/card
+        const { v4: uuidv4 } = await import("uuid");
+        const newSubBody = {
+            idempotencyKey: uuidv4(),
+            locationId: process.env.SQUARE_LOCATION_ID,
+            planVariationId: sub.planVariationId,
+            customerId: sub.customerId,
+            startDate,
+        };
+        if (sub.cardId) newSubBody.cardId = sub.cardId;
+
+        const { result: created } = await squareClient.subscriptionsApi.createSubscription(newSubBody);
+        const newSub = created.subscription;
+
+        // 4. Update the user's squareSubscriptionId in the DB
+        const targetUserID = userID || null;
+        if (targetUserID) {
+            const usersCol = await db.dbUsers();
+            await usersCol.updateOne(
+                { userID: targetUserID },
+                { $set: { "membership.squareSubscriptionId": newSub.id } }
+            );
+        }
+
+        console.log(`✅ Replaced subscription ${subscriptionId} → ${newSub.id} with startDate ${startDate}`);
+        return NextResponse.json({ subscription: newSub, replacedId: subscriptionId });
     } catch (err) {
         const detail = err?.errors?.[0]?.detail || err?.message || "Square API error";
-        console.error("Failed to update subscription start date:", detail);
+        console.error("Failed to replace subscription:", detail);
         return NextResponse.json({ error: detail }, { status: 502 });
     }
 }
