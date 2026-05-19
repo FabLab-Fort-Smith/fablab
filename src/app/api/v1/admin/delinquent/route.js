@@ -19,15 +19,17 @@ export async function GET() {
     const usersCol = await db.dbUsers();
 
     // Pull every non-waived member that has a Square customer ID on record.
-    // Customer ID may live at membership.squareCustomerId OR top-level squareID (legacy field).
+    // Customer ID may live at three different field locations depending on when the account was created.
     const candidates = await usersCol.find({
         $or: [
             { "membership.squareCustomerId": { $exists: true, $ne: null } },
+            { squareCustomerId: { $exists: true, $ne: null } },
             { squareID: { $exists: true, $ne: null } },
         ],
         "membership.isWaived": { $ne: true },
     }).toArray();
 
+    console.log(`🔍 Delinquent scan: ${candidates.length} candidates found`);
     if (candidates.length === 0) return NextResponse.json([]);
 
     // Check Square in parallel (batch size 10 to avoid rate limits)
@@ -39,12 +41,13 @@ export async function GET() {
 
         await Promise.all(batch.map(async (member) => {
             try {
-                const customerId = member.membership?.squareCustomerId || member.squareID;
+                const customerId = member.membership?.squareCustomerId || member.squareCustomerId || member.squareID;
                 const { result } = await squareClient.subscriptionsApi.searchSubscriptions({
                     query: { filter: { customerIds: [customerId] } },
                 });
 
                 const subs = result.subscriptions || [];
+                console.log(`  ${member.userID} (${member.firstName} ${member.lastName}) — customerId: ${customerId} — ${subs.length} sub(s): ${subs.map(s => s.status).join(', ') || 'none'}`);
                 if (subs.length === 0) return; // never had a subscription — skip
 
                 // ACTIVE = paying, PENDING = future start date (just converted), PAUSED = intentionally paused
@@ -82,8 +85,8 @@ export async function GET() {
                         chargedThroughDate: latest.chargedThroughDate,
                     },
                 });
-            } catch {
-                // Square API error for this member — skip silently
+            } catch (err) {
+                console.error(`⚠️ Delinquent check failed for ${member.userID}:`, err?.message || err);
             }
         }));
     }
