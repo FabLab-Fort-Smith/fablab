@@ -18,9 +18,13 @@ export async function GET() {
 
     const usersCol = await db.dbUsers();
 
-    // Pull every non-waived member that has a Square customer ID on record
+    // Pull every non-waived member that has a Square customer ID on record.
+    // Customer ID may live at membership.squareCustomerId OR top-level squareID (legacy field).
     const candidates = await usersCol.find({
-        "membership.squareCustomerId": { $exists: true, $ne: null },
+        $or: [
+            { "membership.squareCustomerId": { $exists: true, $ne: null } },
+            { squareID: { $exists: true, $ne: null } },
+        ],
         "membership.isWaived": { $ne: true },
     }).toArray();
 
@@ -35,7 +39,7 @@ export async function GET() {
 
         await Promise.all(batch.map(async (member) => {
             try {
-                const customerId = member.membership.squareCustomerId;
+                const customerId = member.membership?.squareCustomerId || member.squareID;
                 const { result } = await squareClient.subscriptionsApi.searchSubscriptions({
                     query: { filter: { customerIds: [customerId] } },
                 });
@@ -43,9 +47,11 @@ export async function GET() {
                 const subs = result.subscriptions || [];
                 if (subs.length === 0) return; // never had a subscription — skip
 
-                // If ANY subscription is ACTIVE, they're in good standing
-                const hasActive = subs.some(s => s.status === "ACTIVE");
-                if (hasActive) return;
+                // ACTIVE = paying, PENDING = future start date (just converted), PAUSED = intentionally paused
+                // All three are considered good standing.
+                const IN_GOOD_STANDING = ["ACTIVE", "PENDING", "PAUSED"];
+                const inGoodStanding = subs.some(s => IN_GOOD_STANDING.includes(s.status));
+                if (inGoodStanding) return;
 
                 // All subscriptions lapsed — this member is delinquent
                 const latest = subs.sort((a, b) =>
@@ -64,7 +70,7 @@ export async function GET() {
                         status: member.membership?.status,
                         subscriptionStatus: latest.status,
                         squareCustomerId: customerId,
-                        squareSubscriptionId: latest.id,
+                        squareSubscriptionId: member.membership?.squareSubscriptionId || latest.id,
                         lastPaymentDate: member.membership?.lastPaymentDate,
                         accessKey: member.membership?.accessKey,
                     },
