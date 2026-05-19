@@ -11,10 +11,14 @@ async function requireAdmin() {
 }
 
 // GET /api/v1/admin/delinquent
-// Returns co-op members whose Square subscription is lapsed.
-// Queries Square directly — does not rely on stale DB fields.
-// Delinquent = subscription CANCELED/DEACTIVATED/PAST_DUE, OR subscription is ACTIVE
-// but chargedThroughDate is in the past (Square retrying failed payment).
+// Returns co-op members whose Square subscription payment is failing.
+// Strategy:
+//   1. Pre-fetch recent payments to find customers whose latest payment FAILED.
+//   2. For each subscription member, flag as delinquent if:
+//      - subscription status is CANCELED / DEACTIVATED / PAST_DUE, OR
+//      - subscription is ACTIVE but the customer's most recent payment failed.
+// Note: chargedThroughDate is set by Square at period start before payment is attempted,
+// so it is NOT a reliable indicator of payment success.
 export async function GET() {
     if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -34,7 +38,36 @@ export async function GET() {
     console.log(`🔍 Delinquent scan: ${candidates.length} candidates found`);
     if (candidates.length === 0) return NextResponse.json([]);
 
-    // Check Square in parallel (batch size 10 to avoid rate limits)
+    // Pre-fetch recent payments (60 days) to detect failed billing attempts.
+    // Square keeps subscription ACTIVE during retry windows — we must check payment history.
+    const failedPayerIds = new Set();
+    try {
+        const sixtyDaysAgo = new Date();
+        sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+        const { result: pmtResult } = await squareClient.paymentsApi.listPayments(
+            sixtyDaysAgo.toISOString(), undefined, undefined, undefined,
+            undefined, undefined, undefined, undefined, 200
+        );
+        const payments = pmtResult.payments || [];
+
+        // For each customer, keep only their most recent payment
+        const latestByCustomer = {};
+        for (const p of payments) {
+            if (!p.customerId) continue;
+            if (!latestByCustomer[p.customerId] ||
+                new Date(p.createdAt) > new Date(latestByCustomer[p.customerId].createdAt)) {
+                latestByCustomer[p.customerId] = p;
+            }
+        }
+        for (const [cid, p] of Object.entries(latestByCustomer)) {
+            if (p.status === "FAILED") failedPayerIds.add(cid);
+        }
+        console.log(`💳 Recent payments scanned — ${failedPayerIds.size} customer(s) with latest payment FAILED`);
+    } catch (err) {
+        console.error("⚠️ Could not fetch recent payments for delinquency check:", err?.message);
+    }
+
+    // Check Square subscriptions in parallel (batch size 10 to avoid rate limits)
     const delinquent = [];
     const batchSize = 10;
 
@@ -49,19 +82,16 @@ export async function GET() {
                 });
 
                 const subs = result.subscriptions || [];
-                const today = new Date(); today.setHours(0, 0, 0, 0);
-                console.log(`  ${member.userID} (${member.firstName} ${member.lastName}) — customerId: ${customerId} — ${subs.length} sub(s): ${subs.map(s => `${s.status}(thru:${s.chargedThroughDate || 'n/a'})`).join(', ') || 'none'}`);
+                console.log(`  ${member.userID} (${member.firstName} ${member.lastName}) — ${subs.length} sub(s): ${subs.map(s => s.status).join(', ') || 'none'} | latestPaymentFailed: ${failedPayerIds.has(customerId)}`);
                 if (subs.length === 0) return; // never had a subscription — skip
 
-                // Good standing: PENDING (future start) or PAUSED (intentionally paused), OR
-                // ACTIVE with chargedThroughDate >= today (current billing cycle is paid).
-                // ACTIVE with chargedThroughDate in the past = payment failing, Square retrying.
+                // Good standing checks:
+                //   PENDING = future start date (just enrolled, payment not yet due)
+                //   PAUSED  = intentionally paused
+                //   ACTIVE  = OK unless their most recent payment just failed (Square retrying)
                 const inGoodStanding = subs.some(s => {
                     if (s.status === "PENDING" || s.status === "PAUSED") return true;
-                    if (s.status === "ACTIVE") {
-                        if (!s.chargedThroughDate) return true; // no date info — assume ok
-                        return new Date(s.chargedThroughDate) >= today;
-                    }
+                    if (s.status === "ACTIVE") return !failedPayerIds.has(customerId);
                     return false; // CANCELED, DEACTIVATED, PAST_DUE
                 });
                 if (inGoodStanding) return;
@@ -71,10 +101,8 @@ export async function GET() {
                     new Date(b.startDate || 0) - new Date(a.startDate || 0)
                 )[0];
 
-                // Determine a useful display status
-                const displayStatus = latest.status === "ACTIVE"
-                    ? "PAST_DUE" // ACTIVE but chargedThroughDate lapsed = effectively past due
-                    : latest.status;
+                // Show PAST_DUE for ACTIVE subs whose payment is failing (more meaningful than ACTIVE)
+                const displayStatus = latest.status === "ACTIVE" ? "PAST_DUE" : latest.status;
 
                 delinquent.push({
                     userID: member.userID,
