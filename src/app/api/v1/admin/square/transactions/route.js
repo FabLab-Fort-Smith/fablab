@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "../../../../../../../auth";
 import squareClient from "@/lib/square";
 import { db } from "@/lib/database";
+import { v4 as uuidv4 } from "uuid";
+import UserService from "@/app/api/v1/users/service";
 import SubscriptionService from "@/app/api/v1/square/subscriptions/service";
 
 // GET: List recent Square payments with linked user info
@@ -109,7 +111,7 @@ export async function POST(request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { userID, squareCustomerId, grantAccess } = await request.json();
+    const { userID, squareCustomerId, grantAccess, planVariationId } = await request.json();
     if (!userID || !squareCustomerId) {
       return NextResponse.json({ error: "userID and squareCustomerId are required." }, { status: 400 });
     }
@@ -139,6 +141,50 @@ export async function POST(request) {
       }
     } catch (syncErr) {
       console.warn("⚠️ Subscription sync skipped:", syncErr?.message || syncErr);
+    }
+
+    // Convert to a Square subscription using the customer's card on file
+    if (planVariationId && !subscriptionFound) {
+      try {
+        const { result: cardsResult } = await squareClient.cardsApi.listCards(undefined, squareCustomerId);
+        const card = (cardsResult.cards || []).find(c => c.enabled !== false);
+        const today = new Date().toISOString().split("T")[0];
+        const subBody = {
+          idempotencyKey: uuidv4(),
+          locationId: process.env.SQUARE_LOCATION_ID,
+          planVariationId,
+          customerId: squareCustomerId,
+          startDate: today,
+        };
+        if (card) subBody.cardId = card.id;
+        const { result: subResult } = await squareClient.subscriptionsApi.createSubscription(subBody);
+        const sub = subResult.subscription;
+        if (sub) {
+          const updateData = {
+            "membership.squareSubscriptionId": sub.id,
+            "membership.squareCustomerId": squareCustomerId,
+            "membership.subscriptionStatus": sub.status,
+            "membership.status": sub.status === "ACTIVE" ? "active" : "probation",
+            "membership.type": "co-op",
+            "membership.accessKey.issued": true,
+          };
+          try {
+            const { result: varR } = await squareClient.catalogApi.retrieveCatalogObject(planVariationId);
+            updateData["membership.variationName"] = varR.object?.subscriptionPlanVariationData?.name || "";
+            const parentId = varR.object?.subscriptionPlanVariationData?.subscriptionPlanId;
+            if (parentId) {
+              const { result: planR } = await squareClient.catalogApi.retrieveCatalogObject(parentId);
+              updateData["membership.planName"] = planR.object?.subscriptionPlanData?.name || "";
+            }
+          } catch { /* non-fatal */ }
+          await UserService.updateUser(userID, updateData);
+          subscriptionFound = true;
+          subscriptionStatus = sub.status;
+        }
+      } catch (subErr) {
+        console.warn("⚠️ Could not create subscription:", subErr?.errors?.[0]?.detail || subErr?.message);
+        return NextResponse.json({ error: subErr?.errors?.[0]?.detail || "Failed to create subscription." }, { status: 400 });
+      }
     }
 
     // If admin explicitly grants access (no subscription in Square, paid via invoice etc.)

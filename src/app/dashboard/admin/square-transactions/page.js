@@ -17,6 +17,8 @@ export default function SquareTransactionsPage() {
     const [linking, setLinking] = useState(false);
     const [postLinkResult, setPostLinkResult] = useState(null);
     const [toast, setToast] = useState(null);
+    const [plans, setPlans] = useState([]);
+    const [selectedVariationId, setSelectedVariationId] = useState('');
 
     useEffect(() => {
         if (status === 'unauthenticated') router.push('/auth/signin');
@@ -54,6 +56,31 @@ export default function SquareTransactionsPage() {
         setSelectedUser(null);
         setUserQuery('');
         setPostLinkResult(null);
+        setSelectedVariationId('');
+        if (!plans.length) fetch('/api/v1/plans').then(r => r.json()).then(setPlans).catch(() => {});
+    };
+
+    const handleConvertToSubscription = async () => {
+        if (!selectedVariationId || !postLinkResult) return;
+        setLinking(true);
+        try {
+            const res = await fetch('/api/v1/admin/square/transactions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userID: postLinkResult.user.userID,
+                    squareCustomerId: postLinkResult.customerId,
+                    planVariationId: selectedVariationId,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) { showToast(data.error || 'Failed to create subscription.', 'error'); return; }
+            showToast(`Subscription created for ${postLinkResult.user.firstName} ${postLinkResult.user.lastName}.`);
+            setLinkDialog({ open: false, customerId: null });
+            setPostLinkResult(null);
+            fetchTransactions();
+        } catch { showToast('An error occurred.', 'error'); }
+        finally { setLinking(false); }
     };
 
     const handleLink = async (grantAccess = false) => {
@@ -284,19 +311,43 @@ export default function SquareTransactionsPage() {
                         </div>
 
                         {postLinkResult ? (
-                            // No subscription found after linking — ask admin what to do
+                            // No subscription found after linking — convert or grant manually
                             <>
                                 <div style={{ border: '1px solid var(--amber)', padding: '12px 14px', marginBottom: 16, fontSize: 11, color: 'var(--amber)' }}>
-                                    ⚠ Linked {postLinkResult.user.firstName} {postLinkResult.user.lastName} but no active Square subscription was found for this customer.
-                                    This payment may have been processed as a one-time invoice.
+                                    ⚠ Linked {postLinkResult.user.firstName} {postLinkResult.user.lastName} but no active Square subscription was found.
+                                    This payment may have been a one-time invoice.
                                 </div>
-                                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 12 }}>
-                                    You can manually grant active membership access, or close and investigate in Square.
+
+                                {/* Convert to subscription */}
+                                <div style={{ marginBottom: 16 }}>
+                                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 8 }}>convert to recurring subscription:</div>
+                                    <select
+                                        value={selectedVariationId}
+                                        onChange={e => setSelectedVariationId(e.target.value)}
+                                        style={{ width: '100%', background: 'var(--bg-1)', border: '1px solid var(--bd)', color: selectedVariationId ? 'var(--text)' : 'var(--text-dim)', padding: '8px 10px', fontSize: 11, fontFamily: 'var(--mono)', outline: 'none', marginBottom: 8 }}
+                                    >
+                                        <option value="">select a plan...</option>
+                                        {plans.map(plan => plan.variations?.length
+                                            ? plan.variations.map(v => (
+                                                <option key={v.id} value={v.id}>
+                                                    {plan.name} — {v.name || v.cadence}{v.priceCents != null ? ` ($${(v.priceCents / 100).toFixed(2)})` : ''}
+                                                </option>
+                                            ))
+                                            : <option key={plan.id} value={plan.id}>{plan.name}</option>
+                                        )}
+                                    </select>
+                                    <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>
+                                        uses card on file — customer must have a saved card in Square.
+                                    </div>
                                 </div>
-                                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+
+                                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                                     <button className="btn btn--sm" onClick={() => { setLinkDialog({ open: false, customerId: null }); setPostLinkResult(null); fetchTransactions(); }} style={{ fontSize: 10 }}>close</button>
                                     <button className="btn btn--sm" onClick={() => handleLink(true)} disabled={linking} style={{ fontSize: 10, borderColor: 'var(--amber)', color: 'var(--amber)' }}>
                                         {linking ? 'granting...' : '$ grant access manually'}
+                                    </button>
+                                    <button className="btn btn--sm" onClick={handleConvertToSubscription} disabled={!selectedVariationId || linking} style={{ fontSize: 10, borderColor: 'var(--green)', color: 'var(--green)' }}>
+                                        {linking ? 'creating...' : '$ convert to subscription →'}
                                     </button>
                                 </div>
                             </>
