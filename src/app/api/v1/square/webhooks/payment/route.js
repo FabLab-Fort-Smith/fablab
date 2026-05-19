@@ -219,12 +219,11 @@ export async function POST(request) {
                 console.log(`⏭ Skipping revocation for waived member ${user.userID}`);
             } else if (user) {
                 console.log(`⚠️ Revoking access for user ${user.userID} due to subscription status: ${status}`);
-                
                 await UserService.updateUser(user.userID, {
                     "membership.status": "suspended",
-                    "membership.type": "community", // ✅ Revert to community
+                    "membership.type": "community",
                     "membership.subscriptionStatus": status,
-                    "membership.accessKey.issued": false, // Deactivate Key
+                    "membership.accessKey.issued": false,
                     "membership.accessKey.revokedReason": `Subscription ${status}`
                 });
             }

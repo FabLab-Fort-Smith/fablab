@@ -141,7 +141,7 @@ export default class SubscriptionService {
       const isActive = activeSubscription.status === 'ACTIVE';
       const membershipType = isActive ? 'co-op' : 'community';
 
-      // Update the user — also enforce access based on subscription status
+      // Update the user — also enforce door access based on subscription status
       const updateData = {
         squareID: squareID,
         "membership.squareSubscriptionId": activeSubscription.id,
