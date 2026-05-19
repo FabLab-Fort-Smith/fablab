@@ -11,8 +11,10 @@ async function requireAdmin() {
 }
 
 // GET /api/v1/admin/delinquent
-// Returns co-op members whose Square subscription is not ACTIVE.
+// Returns co-op members whose Square subscription is lapsed.
 // Queries Square directly — does not rely on stale DB fields.
+// Delinquent = subscription CANCELED/DEACTIVATED/PAST_DUE, OR subscription is ACTIVE
+// but chargedThroughDate is in the past (Square retrying failed payment).
 export async function GET() {
     if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -47,19 +49,32 @@ export async function GET() {
                 });
 
                 const subs = result.subscriptions || [];
-                console.log(`  ${member.userID} (${member.firstName} ${member.lastName}) — customerId: ${customerId} — ${subs.length} sub(s): ${subs.map(s => s.status).join(', ') || 'none'}`);
+                const today = new Date(); today.setHours(0, 0, 0, 0);
+                console.log(`  ${member.userID} (${member.firstName} ${member.lastName}) — customerId: ${customerId} — ${subs.length} sub(s): ${subs.map(s => `${s.status}(thru:${s.chargedThroughDate || 'n/a'})`).join(', ') || 'none'}`);
                 if (subs.length === 0) return; // never had a subscription — skip
 
-                // ACTIVE = paying, PENDING = future start date (just converted), PAUSED = intentionally paused
-                // All three are considered good standing.
-                const IN_GOOD_STANDING = ["ACTIVE", "PENDING", "PAUSED"];
-                const inGoodStanding = subs.some(s => IN_GOOD_STANDING.includes(s.status));
+                // Good standing: PENDING (future start) or PAUSED (intentionally paused), OR
+                // ACTIVE with chargedThroughDate >= today (current billing cycle is paid).
+                // ACTIVE with chargedThroughDate in the past = payment failing, Square retrying.
+                const inGoodStanding = subs.some(s => {
+                    if (s.status === "PENDING" || s.status === "PAUSED") return true;
+                    if (s.status === "ACTIVE") {
+                        if (!s.chargedThroughDate) return true; // no date info — assume ok
+                        return new Date(s.chargedThroughDate) >= today;
+                    }
+                    return false; // CANCELED, DEACTIVATED, PAST_DUE
+                });
                 if (inGoodStanding) return;
 
-                // All subscriptions lapsed — this member is delinquent
+                // Member is delinquent — pick the most recent subscription for details
                 const latest = subs.sort((a, b) =>
                     new Date(b.startDate || 0) - new Date(a.startDate || 0)
                 )[0];
+
+                // Determine a useful display status
+                const displayStatus = latest.status === "ACTIVE"
+                    ? "PAST_DUE" // ACTIVE but chargedThroughDate lapsed = effectively past due
+                    : latest.status;
 
                 delinquent.push({
                     userID: member.userID,
@@ -71,7 +86,7 @@ export async function GET() {
                     role: member.role,
                     membership: {
                         status: member.membership?.status,
-                        subscriptionStatus: latest.status,
+                        subscriptionStatus: displayStatus,
                         squareCustomerId: customerId,
                         squareSubscriptionId: member.membership?.squareSubscriptionId || latest.id,
                         lastPaymentDate: member.membership?.lastPaymentDate,
@@ -79,7 +94,8 @@ export async function GET() {
                     },
                     squareSubscription: {
                         id: latest.id,
-                        status: latest.status,
+                        status: displayStatus,
+                        squareStatus: latest.status, // actual Square status for reference
                         startDate: latest.startDate,
                         canceledDate: latest.canceledDate,
                         chargedThroughDate: latest.chargedThroughDate,
