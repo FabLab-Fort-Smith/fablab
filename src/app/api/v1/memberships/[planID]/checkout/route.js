@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "../../../../../../auth";
+import { auth } from "../../../../../../../auth";
 import squareClient from "@/lib/square";
 import { db } from "@/lib/database";
 import { v4 as uuidv4 } from "uuid";
