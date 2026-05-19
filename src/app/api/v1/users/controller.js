@@ -97,6 +97,10 @@ export default class UserController {
                 filters.search = searchParams.get('search');
             }
 
+            if (searchParams.get('memberType')) {
+                filters.memberType = searchParams.get('memberType');
+            }
+
             const page = parseInt(searchParams.get('page') || '1');
             const limit = parseInt(searchParams.get('limit') || '12');
             

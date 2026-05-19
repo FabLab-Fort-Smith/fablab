@@ -40,7 +40,7 @@ export default function MembersPage() {
     const [merging, setMerging] = useState(false);
     const [allUsersForMerge, setAllUsersForMerge] = useState([]);
     const [toast, setToast] = useState(null);
-    const [activeTab, setActiveTab] = useState('members');
+    const [activeTab, setActiveTab] = useState('all');
     const [dupes, setDupes] = useState([]);
     const [dupesLoading, setDupesLoading] = useState(false);
     const [dupesLoaded, setDupesLoaded] = useState(false);
@@ -50,13 +50,13 @@ export default function MembersPage() {
         if (status === 'unauthenticated') router.push('/auth/signin');
         else if (status === 'authenticated') {
             if (session.user.role !== 'admin') router.push('/dashboard');
-            else fetchUsers(page, search);
+            else fetchUsers(page, search, activeTab);
         }
     }, [status, session, router, page]);
 
     // Server-side search: debounce and reset to page 1
     useEffect(() => {
-        const t = setTimeout(() => { setPage(1); fetchUsers(1, search); }, 350);
+        const t = setTimeout(() => { setPage(1); fetchUsers(1, search, activeTab); }, 350);
         return () => clearTimeout(t);
     }, [search]);
 
@@ -66,7 +66,7 @@ export default function MembersPage() {
 
     const showToast = (msg, color = 'var(--green)') => { setToast({ msg, color }); setTimeout(() => setToast(null), 3500); };
 
-    const fetchUsers = async (p = 1, q = '') => {
+    const fetchUsers = async (p = 1, q = '', tab = 'all') => {
         setLoading(true);
         setError('');
         const controller = new AbortController();
@@ -74,6 +74,8 @@ export default function MembersPage() {
         try {
             const params = new URLSearchParams({ page: p, limit: PAGE_SIZE });
             if (q) params.set('search', q);
+            if (tab === 'coop') params.set('memberType', 'coop');
+            if (tab === 'community') params.set('memberType', 'community');
             const res = await fetch(`/api/v1/users?${params}`, { signal: controller.signal });
             clearTimeout(timeout);
             if (res.ok) {
@@ -140,6 +142,7 @@ export default function MembersPage() {
     const handleTabChange = (tab) => {
         setActiveTab(tab);
         if (tab === 'dupes' && !dupesLoaded) fetchDupes();
+        if (tab !== 'dupes') { setPage(1); fetchUsers(1, search, tab); }
     };
 
     const REASON_LABEL = { email: 'same email', google_id: 'same Google ID', discord_id: 'same Discord ID', username: 'same username', name: 'same name' };
@@ -167,14 +170,19 @@ export default function MembersPage() {
 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--bd)' }}>
-                {[['members', 'members'], ['dupes', `dupes${dupesLoaded && dupes.length ? ` (${dupes.length})` : ''}`]].map(([id, label]) => (
+                {[
+                    ['all',       'all members'],
+                    ['coop',      'co-op'],
+                    ['community', 'community'],
+                    ['dupes',     `dupes${dupesLoaded && dupes.length ? ` (${dupes.length})` : ''}`],
+                ].map(([id, label]) => (
                     <button key={id} onClick={() => handleTabChange(id)} style={{ padding: '8px 20px', background: 'none', border: 'none', borderBottom: `2px solid ${activeTab === id ? 'var(--green)' : 'transparent'}`, color: activeTab === id ? 'var(--green)' : 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.08em', marginBottom: -1 }}>
                         {label}
                     </button>
                 ))}
             </div>
 
-            {activeTab === 'members' && <div style={{ marginBottom: 16 }}>
+            {activeTab !== 'dupes' && <div style={{ marginBottom: 16 }}>
                 <input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder="search by name or email..." style={{ width: '100%', maxWidth: 360, boxSizing: 'border-box', fontSize: 12 }} />
             </div>}
 
@@ -258,14 +266,14 @@ export default function MembersPage() {
                 </div>
             )}
 
-            {activeTab === 'members' && error && (
+            {activeTab !== 'dupes' && error && (
                 <div style={{ border: '1px solid var(--red)', color: 'var(--red)', padding: '12px 16px', marginBottom: 16, fontFamily: 'var(--mono)', fontSize: 12 }}>
                     ✗ {error}
                     <button className="btn btn--ghost btn--sm" style={{ fontSize: 10, marginLeft: 16, borderColor: 'var(--red)', color: 'var(--red)' }} onClick={() => fetchUsers(page, search)}>retry</button>
                 </div>
             )}
 
-            {activeTab === 'members' && (loading ? (
+            {activeTab !== 'dupes' && (loading ? (
                 <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>loading<span className="caret-block" style={{ marginLeft: 4 }} /></div>
             ) : (
                 <>

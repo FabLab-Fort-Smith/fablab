@@ -140,6 +140,16 @@ export default class UserModel {
                 query.$and = [...(query.$and || []), { $or: searchOr }];
             }
 
+            if (filters.memberType === 'coop') {
+                query.$and = [...(query.$and || []), { $or: [
+                    { "membership.subscriptionStatus": "ACTIVE" },
+                    { "membership.isWaived": true },
+                ]}];
+            } else if (filters.memberType === 'community') {
+                query["membership.subscriptionStatus"] = { $ne: "ACTIVE" };
+                query["membership.isWaived"] = { $ne: true };
+            }
+
             let cursor = dbUsers.find(query);
             if (skip > 0) cursor = cursor.skip(skip);
             if (limit > 0) cursor = cursor.limit(limit);
@@ -194,6 +204,16 @@ export default class UserModel {
                     { firstName: re }, { lastName: re }, { email: re }, { username: re },
                 ];
                 query.$and = [...(query.$and || []), { $or: searchOr }];
+            }
+
+            if (filters.memberType === 'coop') {
+                query.$and = [...(query.$and || []), { $or: [
+                    { "membership.subscriptionStatus": "ACTIVE" },
+                    { "membership.isWaived": true },
+                ]}];
+            } else if (filters.memberType === 'community') {
+                query["membership.subscriptionStatus"] = { $ne: "ACTIVE" };
+                query["membership.isWaived"] = { $ne: true };
             }
 
             return await dbUsers.countDocuments(query);
