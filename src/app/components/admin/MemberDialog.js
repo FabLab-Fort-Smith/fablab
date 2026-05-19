@@ -43,6 +43,7 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
     const [awardLoading, setAwardLoading] = useState(false);
     const [plans, setPlans] = useState(null);
     const [plansLoading, setPlansLoading] = useState(false);
+    const [editingStartDate, setEditingStartDate] = useState({}); // { [subId]: 'YYYY-MM-DD' }
 
     useEffect(() => {
         if (open) {
@@ -656,7 +657,41 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                                         </div>
                                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px', color: 'var(--text-dim)', fontSize: 10 }}>
                                                             {s.price != null && <div><span style={{ color: 'var(--text-dim)' }}>price: </span><span style={{ color: 'var(--text-mid)' }}>${s.price}/mo</span></div>}
-                                                            {s.startDate && <div><span style={{ color: 'var(--text-dim)' }}>starts: </span><span style={{ color: 'var(--text-mid)' }}>{s.startDate}</span></div>}
+                                                            {s.startDate && (
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                                    <span style={{ color: 'var(--text-dim)' }}>starts: </span>
+                                                                    {s.status === 'PENDING' ? (
+                                                                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                                            <input
+                                                                                type="date"
+                                                                                value={editingStartDate[s.id] ?? s.startDate}
+                                                                                onChange={e => setEditingStartDate(p => ({ ...p, [s.id]: e.target.value }))}
+                                                                                style={{ fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--bg)', color: 'var(--text-mid)', border: '1px solid var(--amber, #ffaa00)', padding: '1px 4px' }}
+                                                                            />
+                                                                            {editingStartDate[s.id] && editingStartDate[s.id] !== s.startDate && (
+                                                                                <button className="btn btn--ghost btn--sm" style={{ fontSize: 9, borderColor: 'var(--amber, #ffaa00)', color: 'var(--amber, #ffaa00)', padding: '1px 6px' }}
+                                                                                    onClick={async () => {
+                                                                                        try {
+                                                                                            const res = await fetch('/api/v1/admin/member-plans', {
+                                                                                                method: 'PATCH',
+                                                                                                headers: { 'Content-Type': 'application/json' },
+                                                                                                body: JSON.stringify({ subscriptionId: s.id, startDate: editingStartDate[s.id] }),
+                                                                                            });
+                                                                                            const d = await res.json();
+                                                                                            if (!res.ok) { alert(d.error); return; }
+                                                                                            setEditingStartDate(p => { const n = { ...p }; delete n[s.id]; return n; });
+                                                                                            fetchPlans();
+                                                                                        } catch { alert('Failed to update start date'); }
+                                                                                    }}>
+                                                                                    save
+                                                                                </button>
+                                                                            )}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span style={{ color: 'var(--text-mid)' }}>{s.startDate}</span>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                             {s.chargedThroughDate && <div><span style={{ color: 'var(--text-dim)' }}>paid thru: </span><span style={{ color: 'var(--text-mid)' }}>{s.chargedThroughDate}</span></div>}
                                                             {s.canceledDate && <div><span style={{ color: 'var(--red)' }}>canceled: </span><span style={{ color: 'var(--text-mid)' }}>{s.canceledDate}</span></div>}
                                                             {s.pausedUntilDate && <div><span style={{ color: 'var(--text-dim)' }}>paused until: </span><span style={{ color: 'var(--text-mid)' }}>{s.pausedUntilDate}</span></div>}

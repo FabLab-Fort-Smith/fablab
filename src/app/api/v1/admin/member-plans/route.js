@@ -92,3 +92,43 @@ export async function GET(request) {
 
     return NextResponse.json({ subscriptions: enriched, customerId });
 }
+
+// PATCH /api/v1/admin/member-plans
+// Update a subscription's start date (PENDING only).
+// Body: { subscriptionId, startDate: "YYYY-MM-DD" }
+export async function PATCH(request) {
+    if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    const { subscriptionId, startDate } = await request.json();
+    if (!subscriptionId || !startDate) {
+        return NextResponse.json({ error: "subscriptionId and startDate required" }, { status: 400 });
+    }
+
+    // Validate date format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+        return NextResponse.json({ error: "startDate must be YYYY-MM-DD" }, { status: 400 });
+    }
+
+    try {
+        // Fetch current version (required for Square's optimistic locking)
+        const { result: current } = await squareClient.subscriptionsApi.retrieveSubscription(subscriptionId);
+        const sub = current.subscription;
+
+        if (sub.status !== "PENDING") {
+            return NextResponse.json({ error: `Cannot change start date — subscription is ${sub.status}, not PENDING` }, { status: 400 });
+        }
+
+        const { result } = await squareClient.subscriptionsApi.updateSubscription(subscriptionId, {
+            subscription: {
+                startDate,
+                version: sub.version,
+            },
+        });
+
+        return NextResponse.json({ subscription: result.subscription });
+    } catch (err) {
+        const detail = err?.errors?.[0]?.detail || err?.message || "Square API error";
+        console.error("Failed to update subscription start date:", detail);
+        return NextResponse.json({ error: detail }, { status: 502 });
+    }
+}
