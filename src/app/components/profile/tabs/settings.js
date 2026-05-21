@@ -132,7 +132,7 @@ const SettingsTab = ({ user }) => {
 
             <Section title="// INTEGRATIONS">
                 {[
-                    { name: 'Discord', desc: 'Link your Discord account to access the FabLab bot and community features.', connected: !!user.discordHandle, handle: user.discordHandle, onConnect: () => { window.location.href = '/api/v1/auth/discord/link'; } },
+                    { name: 'Discord', desc: 'Link your Discord account to access the FabLab bot and community features.', connected: !!user.discordHandle, handle: user.discordHandle, onConnect: async () => { try { await fetch('/api/v1/auth/link-intent', { method: 'POST' }); } catch(e) {} signIn('discord', { callbackUrl: `/dashboard/${user.userID}/profile?tab=3` }); } },
                     { name: 'Google', desc: 'Link your Google account for easier login.', connected: !!user.googleId, handle: null, onConnect: () => signIn('google', { callbackUrl: `/dashboard/${user.userID}/profile?tab=3` }) },
                 ].map(({ name, desc, connected, handle, onConnect }, i) => (
                     <div key={name}>

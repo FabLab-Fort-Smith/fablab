@@ -100,6 +100,50 @@ const providers = [
                 ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
                 : null;
 
+            // ── Link intent check ──────────────────────────────────────────────
+            // When a logged-in user clicks "Connect Discord" in settings we set a
+            // short-lived HttpOnly cookie with their signed userID before calling
+            // signIn(). Read it here to return the EXISTING user instead of
+            // creating a ghost account.
+            try {
+                const { cookies } = await import("next/headers");
+                const cookieStore = await cookies();
+                const linkCookie = cookieStore.get("discord_link_for");
+                if (linkCookie?.value) {
+                    const jwtLib = await import("jsonwebtoken");
+                    const payload = jwtLib.default.verify(linkCookie.value, process.env.JWT_SECRET);
+                    const targetUser = await UsersService.getUserByQuery({ userID: payload.userID });
+                    if (targetUser) {
+                        console.log(`🔗 Link intent: attaching Discord ${profile.id} to ${targetUser.userID}`);
+                        await UsersService.updateUser(targetUser.userID, {
+                            discordId: profile.id,
+                            discordHandle: profile.username,
+                            image: targetUser.image || avatarUrl,
+                        });
+                        // Clear the cookie
+                        cookieStore.delete("discord_link_for");
+                        // Return the existing user — NextAuth logs in as them, no ghost created
+                        return {
+                            userID: targetUser.userID,
+                            name: `${targetUser.firstName} ${targetUser.lastName}`.trim(),
+                            firstName: targetUser.firstName,
+                            lastName: targetUser.lastName,
+                            username: targetUser.username,
+                            email: AuthService.decryptEmail(targetUser.email),
+                            role: targetUser.role,
+                            image: avatarUrl || targetUser.image,
+                            discordId: profile.id,
+                        };
+                    }
+                }
+            } catch (e) {
+                // No link intent or invalid cookie — fall through to normal sign-in
+                if (e.name !== "JsonWebTokenError" && e.name !== "TokenExpiredError") {
+                    console.error("Link intent check failed:", e.message);
+                }
+            }
+            // ── End link intent check ──────────────────────────────────────────
+
             // Emails are stored encrypted in the DB — encrypt before lookup so we
             // actually match existing accounts (plaintext regex never matches hex).
             const encryptedEmail = profile.email ? AuthService.encryptEmail(profile.email) : null;
