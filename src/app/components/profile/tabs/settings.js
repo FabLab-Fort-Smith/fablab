@@ -143,8 +143,8 @@ const SettingsTab = ({ user }) => {
                                 <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>{desc}</div>
                                 {connected && <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--green)', border: '1px solid var(--green)', padding: '2px 8px', display: 'inline-block' }}>✓ {handle ? `Connected as: ${handle}` : 'Connected'}</div>}
                             </div>
-                            <button className="btn btn--sm" style={{ fontSize: 10, borderColor: connected ? 'var(--bd)' : 'var(--green)', color: connected ? 'var(--text-dim)' : 'var(--green)' }} disabled={connected} onClick={onConnect}>
-                                {connected ? 'Disconnect' : `Connect ${name}`}
+                            <button className="btn btn--sm" style={{ fontSize: 10, borderColor: connected ? 'var(--amber)' : 'var(--green)', color: connected ? 'var(--amber)' : 'var(--green)' }} onClick={onConnect}>
+                                {connected ? `Reconnect ${name}` : `Connect ${name}`}
                             </button>
                         </div>
                     </div>

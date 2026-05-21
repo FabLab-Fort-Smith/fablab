@@ -5,6 +5,7 @@ import DiscordProvider from 'next-auth/providers/discord'; // Added Discord prov
 import CredentialsProvider from 'next-auth/providers/credentials';
 import UsersService from '@/app/api/v1/users/service'; // Import Server Service
 import AuthController from '@/app/api/auth/[...nextauth]/controller'; // Import Auth Controller
+import AuthService from '@/app/api/auth/[...nextauth]/service'; // Email encryption helpers
 import DiscordService from '@/lib/discord';
 import TransactionService from '@/app/api/v1/transactions/service';
 
@@ -95,9 +96,18 @@ const providers = [
         async profile(profile) {
             console.log("Discord Profile:", profile);
 
-            // Look up by email first, then fall back to discordId so a changed
-            // or mismatched email never creates a duplicate account.
-            let existingUser = await UsersService.getUserByQuery({ email: profile.email });
+            const avatarUrl = profile.avatar
+                ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
+                : null;
+
+            // Emails are stored encrypted in the DB — encrypt before lookup so we
+            // actually match existing accounts (plaintext regex never matches hex).
+            const encryptedEmail = profile.email ? AuthService.encryptEmail(profile.email) : null;
+
+            // 1. Look up by encrypted email first, then by discordId.
+            let existingUser = encryptedEmail
+                ? await UsersService.getUserByQuery({ email: encryptedEmail })
+                : null;
             if (!existingUser && profile.id) {
                 existingUser = await UsersService.getUserByQuery({ discordId: profile.id });
                 if (existingUser) console.log("Matched existing user by discordId:", existingUser.userID);
@@ -105,55 +115,98 @@ const providers = [
             console.log("Existing User:", existingUser);
 
             if (!existingUser) {
-                // ✅ Create the user if not found
-                const newUser = await AuthController.register({
-                    firstName: '',
-                    lastName: '',
-                    username: profile.username,
-                    email: profile.email,
-                    provider: 'discord',
-                    discordHandle: profile.username,
-                    discordId: profile.id,
-                    status: "verified",
-                    image: profile.avatar ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png` : null
-                });
+                // Parse a reasonable name from Discord's global_name (display name).
+                const displayName = profile.global_name || profile.username || '';
+                const nameParts = displayName.split(' ');
+                const firstName = nameParts[0] || '';
+                const lastName = nameParts.slice(1).join(' ') || '';
 
-                console.log("New User:", newUser);
+                // Username must be unique — fall back to username+id-suffix on conflict.
+                let username = profile.username || '';
+                let newUser;
 
-                // ✅ Claim Pending Tips
                 try {
-                    const claimedAmount = await TransactionService.claimPendingTips(newUser.userID, profile.id);
-                    if (claimedAmount > 0) console.log(`💰 Claimed ${claimedAmount} stake for new user ${newUser.userID}`);
-                } catch (err) {
-                    console.error("Error claiming tips:", err);
+                    newUser = await AuthController.register({
+                        firstName,
+                        lastName,
+                        username,
+                        email: profile.email,
+                        provider: 'discord',
+                        discordHandle: profile.username,
+                        discordId: profile.id,
+                        status: "verified",
+                        image: avatarUrl
+                    });
+                } catch (regErr) {
+                    if (regErr.message === "Username is already taken.") {
+                        // Append last 4 chars of Discord ID to make it unique and retry.
+                        username = `${username}_${profile.id.slice(-4)}`;
+                        newUser = await AuthController.register({
+                            firstName,
+                            lastName,
+                            username,
+                            email: profile.email,
+                            provider: 'discord',
+                            discordHandle: profile.username,
+                            discordId: profile.id,
+                            status: "verified",
+                            image: avatarUrl
+                        });
+                    } else if (regErr.message === "User already exists with this email.") {
+                        // Email already in DB (registered via a different provider).
+                        // Find that account and link the Discord identity to it.
+                        existingUser = encryptedEmail
+                            ? await UsersService.getUserByQuery({ email: encryptedEmail })
+                            : null;
+                        if (!existingUser) throw regErr; // Shouldn't happen, but surface the error if so.
+                        console.log("Linking Discord to existing account:", existingUser.userID);
+                        await UsersService.updateUser(existingUser.userID, {
+                            discordId: profile.id,
+                            discordHandle: profile.username,
+                            image: existingUser.image || avatarUrl,
+                        });
+                        // Fall through to the "return existing user" block below.
+                    } else {
+                        throw regErr;
+                    }
                 }
 
-                return {
-                    userID: newUser.userID,
-                    name: `${newUser.firstName} ${newUser.lastName}`,
-                    firstName: newUser.firstName,
-                    lastName: newUser.lastName,
-                    username: newUser.username,
-                    email: profile.email, // Use profile.email as newUser.email is encrypted
-                    role: newUser.role,
-                    image: profile.avatar ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png` : null,
-                    discordId: newUser.discordId
-                };
+                // If we successfully created a new user, return them.
+                if (newUser) {
+                    console.log("New User:", newUser);
+                    try {
+                        const claimedAmount = await TransactionService.claimPendingTips(newUser.userID, profile.id);
+                        if (claimedAmount > 0) console.log(`💰 Claimed ${claimedAmount} stake for new user ${newUser.userID}`);
+                    } catch (err) {
+                        console.error("Error claiming tips:", err);
+                    }
+                    return {
+                        userID: newUser.userID,
+                        name: `${newUser.firstName} ${newUser.lastName}`.trim(),
+                        firstName: newUser.firstName,
+                        lastName: newUser.lastName,
+                        username: newUser.username,
+                        email: profile.email, // Use profile.email — newUser.email is encrypted
+                        role: newUser.role,
+                        image: avatarUrl,
+                        discordId: newUser.discordId
+                    };
+                }
+                // existingUser was set during the email-conflict recovery above — fall through.
             }
 
             // ✅ Return existing user data
             const user = existingUser;
 
-            // ✅ Backwards Compatibility: Update user if provider or discordHandle is missing or image is missing
-            if (!user.provider || !user.discordHandle || !user.discordId || !user.image) {
+            // Always keep discordId / discordHandle current on the record.
+            if (!user.discordId || user.discordId !== profile.id || !user.discordHandle) {
                 console.log("Updating existing user with Discord provider info...");
                 await UsersService.updateUser(
                     { userID: user.userID },
                     {
-                        provider: 'discord',
                         discordHandle: profile.username,
                         discordId: profile.id,
-                        image: user.image || (profile.avatar ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png` : null)
+                        image: user.image || avatarUrl,
                     }
                 );
             }
@@ -168,14 +221,14 @@ const providers = [
 
             return {
                 userID: user.userID,
-                name: `${user.firstName} ${user.lastName}`,
+                name: `${user.firstName} ${user.lastName}`.trim(),
                 firstName: user.firstName,
                 lastName: user.lastName,
                 username: user.username,
                 email: user.email,
                 role: user.role,
-                image: profile.avatar ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png` : null,
-                discordId: user.discordId
+                image: avatarUrl || user.image,
+                discordId: profile.id // always return the live Discord ID
             };
         }
     }),
@@ -290,7 +343,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
                 // Enforce grace period expiry on login
                 try {
-                    const freshUser = await UsersService.getUserByID(token.userID);
+                    const freshUser = await UsersService.getUserByQuery({ userID: token.userID });
                     const m = freshUser?.membership;
                     if (m?.gracePeriodStartedAt && !m?.isWaived) {
                         const GRACE_DAYS = 7;
