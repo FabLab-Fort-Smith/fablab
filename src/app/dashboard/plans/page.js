@@ -54,7 +54,8 @@ export default function PlansPage() {
                             <div style={{ fontFamily: 'var(--mono)', color: 'var(--green)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>
                                 {plan.name}
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, marginBottom: 18 }}>
+                            {/* pricing rows */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                                 {(plan.variations || []).map(v => (
                                     <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '1px solid var(--bd)', paddingBottom: 6 }}>
                                         <span style={{ color: 'var(--text-mid)', fontSize: 11 }}>
@@ -71,6 +72,26 @@ export default function PlansPage() {
                                     </div>
                                 ))}
                             </div>
+
+                            {/* description */}
+                            {plan.description && (
+                                <p style={{ color: 'var(--text-dim)', fontSize: 11, lineHeight: 1.6, margin: '0 0 12px' }}>
+                                    {plan.description}
+                                </p>
+                            )}
+
+                            {/* benefits list */}
+                            {(plan.benefits || []).length > 0 && (
+                                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 16px', display: 'flex', flexDirection: 'column', gap: 5, flex: 1 }}>
+                                    {plan.benefits.map((b, bi) => (
+                                        <li key={bi} style={{ display: 'flex', gap: 7, alignItems: 'flex-start', fontSize: 11, color: 'var(--text-mid)', lineHeight: 1.45 }}>
+                                            <span style={{ color: 'var(--green)', fontFamily: 'var(--mono)', fontSize: 10, marginTop: 1, flexShrink: 0 }}>✓</span>
+                                            {b}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+
                             <div style={{ border: '1px solid var(--amber)', background: 'rgba(255,176,0,0.05)', padding: '6px 10px', fontSize: 10, color: 'var(--amber)', letterSpacing: '0.08em', marginBottom: 16 }}>
                                 +25 STAKE on first subscription
                             </div>
