@@ -21,7 +21,8 @@ export async function GET(request) {
     const state = searchParams.get("state");
     const error = searchParams.get("error");
 
-    const dashboardBase = process.env.NEXT_PUBLIC_URL + "/dashboard";
+    const baseUrl = (process.env.NEXT_PUBLIC_URL || '').replace(/\/$/, '');
+    const dashboardBase = baseUrl + "/dashboard";
 
     // User cancelled the Discord auth
     if (error) {
@@ -54,7 +55,7 @@ export async function GET(request) {
                 client_secret: process.env.DISCORD_CLIENT_SECRET,
                 grant_type: "authorization_code",
                 code,
-                redirect_uri: `${process.env.NEXT_PUBLIC_URL}/api/v1/auth/discord/callback`,
+                redirect_uri: `${baseUrl}/api/v1/auth/discord/callback`,
             }),
         });
         if (!tokenRes.ok) throw new Error(`Token exchange failed: ${tokenRes.status}`);
@@ -100,7 +101,7 @@ export async function GET(request) {
     // Redirect back to profile settings tab
     const user = await UserService.getUserByQuery({ userID: targetUserID }).catch(() => null);
     const returnURL = user
-        ? `${process.env.NEXT_PUBLIC_URL}/dashboard/${user.userID}/profile?tab=3&discord_link=success`
+        ? `${baseUrl}/dashboard/${user.userID}/profile?tab=3&discord_link=success`
         : `${dashboardBase}?discord_link=success`;
 
     return NextResponse.redirect(returnURL);

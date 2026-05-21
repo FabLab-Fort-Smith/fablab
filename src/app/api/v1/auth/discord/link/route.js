@@ -25,9 +25,10 @@ export async function GET(request) {
         { expiresIn: "10m" }
     );
 
+    const baseUrl = (process.env.NEXT_PUBLIC_URL || '').replace(/\/$/, '');
     const params = new URLSearchParams({
         client_id: process.env.DISCORD_CLIENT_ID,
-        redirect_uri: `${process.env.NEXT_PUBLIC_URL}/api/v1/auth/discord/callback`,
+        redirect_uri: `${baseUrl}/api/v1/auth/discord/callback`,
         response_type: "code",
         scope: "identify email guilds.join",
         state,
