@@ -305,10 +305,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 // Check for Merge Scenario
                 if (token.userID && token.userID !== user.userID) {
                     console.log(`⚠️ Merge Detected: Merging ${user.userID} into ${token.userID}`);
+
+                    // If the incoming user has Discord credentials (OAuth link flow), write them
+                    // to the existing account immediately — before the merge — so the link is
+                    // saved even if the full merge throws (e.g. reference-update failures).
+                    if (user.discordId) {
+                        try {
+                            await UsersService.updateUser(token.userID, {
+                                discordId: user.discordId,
+                                discordHandle: user.username || '',
+                            });
+                            token.discordId = user.discordId;
+                            console.log(`🔗 Discord credentials linked to ${token.userID} pre-merge`);
+                        } catch (linkErr) {
+                            console.error("❌ Pre-merge Discord link failed:", linkErr);
+                        }
+                    }
+
                     try {
                         // Merge the new user (user.userID) into the existing session user (token.userID)
                         const mergedUser = await UsersService.mergeUsers(token.userID, user.userID);
-                        
+
                         // Update token with merged user data
                         token.userID = mergedUser.userID;
                         token.name = `${mergedUser.firstName} ${mergedUser.lastName}`;
@@ -318,7 +335,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         token.role = mergedUser.role;
                         token.image = mergedUser.image || token.image;
                         token.discordId = mergedUser.discordId;
-                        
+
                         console.log("✅ Merge Successful");
                     } catch (error) {
                         console.error("❌ Merge Failed:", error);
