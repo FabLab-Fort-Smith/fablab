@@ -132,9 +132,9 @@ const SettingsTab = ({ user }) => {
 
             <Section title="// INTEGRATIONS">
                 {[
-                    { name: 'Discord', desc: 'Link your Discord account to access the FabLab bot and community features.', connected: !!user.discordHandle, handle: user.discordHandle, onConnect: async () => { try { await fetch('/api/v1/auth/link-intent', { method: 'POST' }); } catch(e) {} signIn('discord', { callbackUrl: `/dashboard/${user.userID}/profile?tab=3` }); } },
-                    { name: 'Google', desc: 'Link your Google account for easier login.', connected: !!user.googleId, handle: null, onConnect: () => signIn('google', { callbackUrl: `/dashboard/${user.userID}/profile?tab=3` }) },
-                ].map(({ name, desc, connected, handle, onConnect }, i) => (
+                    { name: 'Discord', desc: 'Link your Discord account to access the FabLab bot and community features.', connected: !!user.discordHandle, handle: user.discordHandle, onConnect: async () => { try { await fetch('/api/v1/auth/link-intent', { method: 'POST' }); } catch(e) {} signIn('discord', { callbackUrl: `/dashboard/${user.userID}/profile?tab=3` }); }, onDisconnect: async () => { if (!confirm('Disconnect your Discord account?')) return; const res = await fetch(`/api/v1/users?userID=${user.userID}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discordId: '', discordHandle: '', discordLinked: false }) }); if (res.ok) { showToast('Discord disconnected.', 'success'); setTimeout(() => window.location.reload(), 1200); } else showToast('Failed to disconnect Discord.', 'error'); } },
+                    { name: 'Google', desc: 'Link your Google account for easier login.', connected: !!user.googleId, handle: null, onConnect: () => signIn('google', { callbackUrl: `/dashboard/${user.userID}/profile?tab=3` }), onDisconnect: null },
+                ].map(({ name, desc, connected, handle, onConnect, onDisconnect }, i) => (
                     <div key={name}>
                         {i > 0 && <div style={{ borderTop: '1px solid var(--bd)', margin: '16px 0' }} />}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
@@ -143,9 +143,16 @@ const SettingsTab = ({ user }) => {
                                 <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>{desc}</div>
                                 {connected && <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--green)', border: '1px solid var(--green)', padding: '2px 8px', display: 'inline-block' }}>✓ {handle ? `Connected as: ${handle}` : 'Connected'}</div>}
                             </div>
-                            <button className="btn btn--sm" style={{ fontSize: 10, borderColor: connected ? 'var(--amber)' : 'var(--green)', color: connected ? 'var(--amber)' : 'var(--green)' }} onClick={onConnect}>
-                                {connected ? `Reconnect ${name}` : `Connect ${name}`}
-                            </button>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <button className="btn btn--sm" style={{ fontSize: 10, borderColor: connected ? 'var(--amber)' : 'var(--green)', color: connected ? 'var(--amber)' : 'var(--green)' }} onClick={onConnect}>
+                                    {connected ? `Reconnect ${name}` : `Connect ${name}`}
+                                </button>
+                                {connected && onDisconnect && (
+                                    <button className="btn btn--sm" style={{ fontSize: 10, borderColor: 'var(--red)', color: 'var(--red)' }} onClick={onDisconnect}>
+                                        Disconnect
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 ))}
