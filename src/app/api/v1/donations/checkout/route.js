@@ -36,27 +36,28 @@ export async function POST(req) {
         const checkoutBody = {
             idempotencyKey: uuidv4(),
             quickPay: {
-                name: frequency === 'monthly' ? "Monthly Donation" : "Donation to Fab Lab",
+                name: frequency === 'monthly' ? "Monthly Donation" : "Donation to Fab Lab Fort Smith",
                 priceMoney: {
-                    amount: BigInt(amountCents), 
+                    amount: amountCents,
                     currency: "USD"
                 },
                 locationId: process.env.SQUARE_LOCATION_ID
             },
-            checkoutOptions: {
-                redirectUrl: redirectUrl || `${process.env.NEXT_PUBLIC_URL}/donate/success?txnId=${transactionId}`,
-                allowTipping: false
-            }
+            redirectUrl: redirectUrl || `${process.env.NEXT_PUBLIC_URL}/donate/success?txnId=${transactionId}`,
         };
 
         const { result } = await squareClient.checkoutApi.createPaymentLink(checkoutBody);
-        
+
+        if (!result.paymentLink) {
+            return NextResponse.json({ error: "Square did not return a payment link" }, { status: 500 });
+        }
+
         // Update transaction with Square payment link ID
         await transactions.updateOne(
             { transactionId },
             { $set: { 'metadata.paymentLinkId': result.paymentLink.id } }
         );
-        
+
         return NextResponse.json({ url: result.paymentLink.url });
     } catch (error) {
         console.error("Donation Checkout Error:", error);

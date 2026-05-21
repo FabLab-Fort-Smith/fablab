@@ -95,16 +95,23 @@ export default function DonateClient() {
             return (
               <button
                 key={t.label}
+                type="button"
                 onClick={() => handleDonate(t)}
                 disabled={loading !== null}
-                className="card"
+                className="card donate-tier-btn"
                 style={{
-                  padding: '22px 18px', textAlign: 'left',
+                  display: 'block',
+                  width: '100%',
+                  padding: '22px 18px',
+                  textAlign: 'left',
                   cursor: loading !== null ? 'wait' : 'pointer',
                   border: '1px solid var(--bd)',
                   background: 'var(--bg-card)',
-                  transition: 'border-color 0.15s',
+                  color: 'inherit',
+                  font: 'inherit',
+                  transition: 'border-color 0.15s, opacity 0.15s',
                   opacity: loading !== null && !isLoading ? 0.5 : 1,
+                  outline: 'none',
                 }}
                 onMouseEnter={e => { if (!loading) e.currentTarget.style.borderColor = 'var(--green)'; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--bd)'; }}
