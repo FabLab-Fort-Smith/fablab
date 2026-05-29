@@ -4,6 +4,7 @@ import { createServer } from 'http';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import { verifyDeviceSecret, loadDeviceSecrets } from './lib/deviceAuth.js';
+import { requireApiSecret } from './lib/apiAuth.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -170,7 +171,7 @@ app.get('/api/devices', (req, res) => {
 });
 
 // Endpoint to trigger unlock (Used by Next.js App)
-app.post('/api/unlock', (req, res) => {
+app.post('/api/unlock', requireApiSecret, (req, res) => {
     const { deviceId } = req.body;
 
     if (!deviceId) {
@@ -194,7 +195,7 @@ app.post('/api/unlock', (req, res) => {
 });
 
 // Endpoint to toggle light (Used by Next.js App)
-app.post('/api/toggle-light', (req, res) => {
+app.post('/api/toggle-light', requireApiSecret, (req, res) => {
     const { deviceId } = req.body;
 
     if (!deviceId) {

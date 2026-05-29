@@ -1,10 +1,19 @@
 const ACCESS_CONTROL_API_URL = process.env.ACCESS_CONTROL_API_URL || 'http://localhost:3001';
 
+// Bearer secret for the socket server's control endpoints (SEC-05). The server
+// rejects requests that don't carry it, so device control is no longer open.
+function authHeaders(extra = {}) {
+    return {
+        ...extra,
+        Authorization: `Bearer ${process.env.SOCKET_API_SECRET || ''}`,
+    };
+}
+
 export async function unlockDoor(deviceId) {
     try {
         const res = await fetch(`${ACCESS_CONTROL_API_URL}/api/unlock`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ deviceId }),
         });
         if (!res.ok) {
@@ -22,7 +31,7 @@ export async function toggleLight(deviceId) {
     try {
         const res = await fetch(`${ACCESS_CONTROL_API_URL}/api/toggle-light`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ deviceId }),
         });
         if (!res.ok) {
@@ -38,7 +47,9 @@ export async function toggleLight(deviceId) {
 
 export async function getDeviceStatus(deviceId) {
     try {
-        const res = await fetch(`${ACCESS_CONTROL_API_URL}/api/status/${deviceId}`);
+        const res = await fetch(`${ACCESS_CONTROL_API_URL}/api/status/${deviceId}`, {
+            headers: authHeaders(),
+        });
         if (!res.ok) return false;
         const data = await res.json();
         return data.connected;
