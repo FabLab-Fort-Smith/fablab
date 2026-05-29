@@ -1,12 +1,21 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
+import { auth } from '@/auth';
 import UserModel from '../model';
 
 export async function POST(req) {
     try {
-        const { userID, currentPassword, newPassword } = await req.json();
+        // SEC-02: bind to the session user — a caller can only change their own
+        // password, never another account's (any client-supplied userID is ignored).
+        const session = await auth();
+        if (!session?.user?.userID) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        const userID = session.user.userID;
 
-        if (!userID || !currentPassword || !newPassword) {
+        const { currentPassword, newPassword } = await req.json();
+
+        if (!currentPassword || !newPassword) {
             return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
         }
 

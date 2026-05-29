@@ -115,6 +115,17 @@ Owners: **SEC** (security), **DEV** (app dev), **OPS** (devops/infra). Effort: *
 | T-2.4.3 | Test: `?username=.*` / ReDoS payload returns no arbitrary user | tests | Tests pass | T-2.3.3/4 | DEV | S |
 | T-2.4.4 | Manual `curl` smoke against a staging deploy | staging | Documented results | WI-2.1–2.3 | SEC | S |
 
+### Implementation notes & consumer audit (branch `remediation/e2-wi2.1-2.3-user-api-lockdown`)
+**Design.** Authorization is centralized in a new policy module `src/app/api/v1/users/access.js` (single source of truth for: privileged role, the public-safe projection, and the self-update sanitizer). The controller authenticates at the HTTP edge and passes an `actor` into the service; the service enforces field-level authz and the read projection. **A `undefined` actor means a trusted server-side caller** — the ~7 internal `UserService` importers (Square webhook, Discord callback, memberships, register-card, analytics) keep full access; untrusted input only ever enters through the controller, which always supplies an actor or returns 401.
+
+**Authn/authz applied:** POST create → admin-only (no public consumer; signup uses `/api/auth/register`). PUT → session required, **non-admins forced to their own `userID`** (ownership). DELETE / merge (admin path) / nudge → admin-only. `change-password` → session-bound to self (client `userID` ignored). `verify-credentials` → session required (was an open password/enumeration oracle). Self-merge preserved but now requires **server-side verification of the source account's credentials** (consumer `settings.js` updated to pass them).
+
+**Field hardening:** non-admin self-updates pass through a whitelist; `role`/`status`/`stake`/`badges`/`boardPosition` are dropped, access-granting `membership.*` fields (status, isWaived, accessKey, subscription/Square, sponsorship, type) are rebuilt from the stored record, new volunteer-log entries are forced to `pending` (no self-approval), and `$`-prefixed keys are stripped (operator injection). The SEC-12 regex-injection fix shipped earlier (`escapeRegExp`, `users-model-query.test.js`).
+
+**Read projection:** anonymous/non-owner reads return only public, opted-in active members with a safe field set (no email/phone/password/integration IDs; membership reduced to `status/type/isWaived/subscriptionStatus`). Owner and admin reads return the full record minus the password hash.
+
+**Consumer audit (44 HTTP callers + 8 server-side importers swept).** Self dashboard reads (`?userID=self`) → unchanged (owner = full). Directory, public profile (`/members/[slug]`), `/board-members`, homepage board strip → keep working on the projected fields they render. Admin pages (members, onboarding-reviews, volunteers, square-transactions) → full data + all filters (admin). **Intentional, documented behavior change:** non-admin list calls (share dialogs, showcase, community feeds) now return *public members only, without PII* instead of all users with decrypted email — a privacy improvement, callers still get name/username/userID/image. The homepage member-count ticker now counts public members rather than all users. Server-side importers unaffected (trusted, no actor).
+
 ---
 
 ## E3 — Eliminate fail-open trust & hardcoded secrets
@@ -253,10 +264,10 @@ One feature branch + one PR per Work Item (see `05` §2). Each PR **refs** its e
 | WI-1.3 purge history | `e1-wi1.3-history-purge` | — | not-started |
 | WI-1.4 restrict network | `e1-wi1.4-db-network-isolation` | — | not-started |
 | WI-1.5 verify & scan | `e1-wi1.5-verify-secret-scan` | — | not-started |
-| WI-2.1 users authn | `e2-wi2.1-users-authn` | — | not-started |
-| WI-2.2 users authz | `e2-wi2.2-users-authz` | — | not-started |
-| WI-2.3 input hardening | `e2-wi2.3-users-input-hardening` | — | not-started |
-| WI-2.4 tests | `e2-wi2.4-users-e2e-tests` | — | not-started |
+| WI-2.1 users authn | `remediation/e2-wi2.1-2.3-user-api-lockdown` | — | in-review |
+| WI-2.2 users authz | `remediation/e2-wi2.1-2.3-user-api-lockdown` | — | in-review |
+| WI-2.3 input hardening | `remediation/e2-wi2.1-2.3-user-api-lockdown` (regex hardening shipped earlier on `e2-wi2.3-regex-hardening`) | — | in-review |
+| WI-2.4 tests | shipped with the fixes (`remediation/e2-wi2.1-2.3-user-api-lockdown`) | — | in-review |
 | WI-3.1 webhook fail-closed | `e3-wi3.1-square-failclosed` | — | not-started |
 | WI-3.2 remove fallback secrets | `e3-wi3.2-remove-fallback-secrets` | — | not-started |
 | WI-3.3 rotate secrets | `e3-wi3.3-rotate-secrets` | — | not-started |

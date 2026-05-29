@@ -1,7 +1,9 @@
 // src/app/api/users/user.service.js
 
+import bcrypt from "bcryptjs";
 import User from "./class";
 import UserModel from "./model";
+import { isAdmin, toPublicUser, stripSensitive, isPublicActiveMember, sanitizeSelfUpdate } from "./access";
 import BadgeModel from "../badges/model";
 import BountyModel from "../bounties/model";
 import PortfolioModel from "../portfolio/model";
@@ -56,24 +58,35 @@ export default class UserService {
     }
 
     /**
-     * ✅ Fetch a user based on a query
+     * ✅ Fetch a user based on a query.
+     *
      * @param {Object} query - The query to find a user
-     * @returns {Object|null} - User data or null if not found
+     * @param {Object} [actor] - HTTP caller context `{ userID, role }`. Omit for
+     *   trusted server-side callers (they receive the full record). When present,
+     *   the owner and admins get the full record (minus the password hash) with
+     *   decrypted PII; everyone else gets a public-safe projection, and only if
+     *   the target is a public active member.
+     * @returns {Object|null} - User data or null if not found / not visible
      */
-    static getUserByQuery = async (query) => {
+    static getUserByQuery = async (query, actor) => {
         try {
             // Encrypt email in query if present
             if (query.email) query.email = AuthService.encryptEmail(query.email);
-            console.log("🔍 Fetching user in UserService for query:", query);
-            const user = await UserModel.getUserByQuery(query); 
-            if (user) {
+            const user = await UserModel.getUserByQuery(query);
+            if (!user) return null;
+
+            const privileged = actor === undefined || isAdmin(actor) || actor.userID === user.userID;
+
+            if (privileged) {
                 user.email = AuthService.decryptEmail(user.email);
                 if (user.phoneNumber) user.phoneNumber = AuthService.decryptPhone(user.phoneNumber);
-                console.log("✅ User found in service:", user);
-            } else {
-                console.warn("⚠️ No user found in service.");
+                // Trusted server-side caller gets the raw record; HTTP owner/admin
+                // gets it minus the password hash.
+                return actor === undefined ? user : stripSensitive(user);
             }
-            return user;
+
+            // Non-owner / anonymous: only public active members, projected.
+            return isPublicActiveMember(user) ? toPublicUser(user) : null;
         } catch (error) {
             console.error("❌ Error in UserService.getUserByQuery:", error);
             throw new Error("Failed to fetch user.");
@@ -89,24 +102,31 @@ export default class UserService {
      * @param {number} limit - Items per page
      * @returns {Object} - List of users and pagination info
      */
-    static getAllUsers = async (filters = {}, page = 1, limit = 10) => {
+    static getAllUsers = async (filters = {}, page = 1, limit = 10, actor) => {
         try {
+            // Trusted server-side callers and admins get the full directory with
+            // decrypted PII. Everyone else is restricted to public members and
+            // receives a public-safe projection (no PII, no credentials).
+            const privileged = actor === undefined || isAdmin(actor);
+            const effectiveFilters = privileged ? filters : { ...filters, isPublic: true };
+
             const skip = (page - 1) * limit;
-            const users = await UserModel.getAllUsers(filters, skip, limit);
-            const total = await UserModel.countUsers(filters);
-            
-            const decryptedUsers = users.map(user => {
-                // Decrypt fields for each user
-                user.email = AuthService.decryptEmail(user.email);
-                if(user.phoneNumber) user.phoneNumber = AuthService.decryptPhone(user.phoneNumber);
-                return user;
-            });
-            
-            return { 
-                users: decryptedUsers, 
-                total, 
-                page, 
-                totalPages: Math.ceil(total / limit) 
+            const users = await UserModel.getAllUsers(effectiveFilters, skip, limit);
+            const total = await UserModel.countUsers(effectiveFilters);
+
+            const projected = privileged
+                ? users.map(user => {
+                    user.email = AuthService.decryptEmail(user.email);
+                    if (user.phoneNumber) user.phoneNumber = AuthService.decryptPhone(user.phoneNumber);
+                    return actor === undefined ? user : stripSensitive(user);
+                })
+                : users.map(toPublicUser);
+
+            return {
+                users: projected,
+                total,
+                page,
+                totalPages: Math.ceil(total / limit)
             };
         } catch (error) {
             console.error("Error in UserService.getAllUsers:", error);
@@ -118,9 +138,13 @@ export default class UserService {
      * ✅ Update a user's data
      * @param {Object} query - Query to find the user
      * @param {Object} updateData - Data to update
+     * @param {Object} [actor] - HTTP caller context `{ userID, role }`. Omit for
+     *   trusted server-side callers (full write access). A non-admin actor may
+     *   only set self-writable fields on their own record (see sanitizeSelfUpdate);
+     *   role/status/stake/access-granting membership fields are dropped.
      * @returns {Object|null} - Updated user or null if failed
      */
-    static updateUser = async (query, updateData) => {
+    static updateUser = async (query, updateData, actor) => {
         try {
             // Encrypt email and phone in updateData if present
             if(updateData.email) updateData.email = AuthService.encryptEmail(updateData.email);
@@ -145,7 +169,16 @@ export default class UserService {
             };
             
             const currentUser = await UserModel.getUserByQuery(searchObj);
-            
+
+            // SEC-02: a non-admin updating their own record may only set
+            // self-writable fields. Drop role/status/stake/badges and rebuild
+            // membership from the stored record so access can't be self-granted.
+            // Trusted server-side callers (actor === undefined) and admins are
+            // unrestricted.
+            if (actor !== undefined && !isAdmin(actor)) {
+                updateData = sanitizeSelfUpdate(updateData, currentUser);
+            }
+
             // Flags for rewards to be issued AFTER user update
             let shouldAwardProfile = false;
             let shouldAwardApplication = false;
@@ -403,7 +436,9 @@ export default class UserService {
                      ).catch(err => console.error("Failed to award application stake:", err));
                 }
             }
-            return updatedUser;
+            // Never return the password hash to an HTTP caller (response-shape).
+            // Server-side callers (actor === undefined) get the record unchanged.
+            return actor === undefined ? updatedUser : stripSensitive(updatedUser);
         } catch (error) {
             console.error("Error in UserService.updateUser:", error);
             throw error;
@@ -576,7 +611,7 @@ export default class UserService {
      * @param {string} sourceUserID - The ID of the user to delete
      * @param {Object} overrides - Optional field overrides { fieldName: 'source' | 'target' }
      */
-    static mergeUsers = async (targetUserID, sourceUserID, overrides = {}) => {
+    static mergeUsers = async (targetUserID, sourceUserID, overrides = {}, actor) => {
         try {
             console.log(`🔀 Merging User ${sourceUserID} into ${targetUserID}`);
             
@@ -673,11 +708,42 @@ export default class UserService {
             console.log("Deleting source user:", sourceUserID);
             await this.deleteUser({ userID: sourceUserID });
 
-            return await this.getUserByQuery({ userID: targetUserID });
+            return await this.getUserByQuery({ userID: targetUserID }, actor);
 
         } catch (error) {
             console.error("❌ Error in UserService.mergeUsers:", error);
             throw error;
+        }
+    }
+
+    /**
+     * ✅ Verify ownership of an account by its credentials. Used to authorize a
+     * self-merge: the caller must prove they control the source account before
+     * its data is absorbed and the account deleted.
+     * @param {string} userID - the source account's userID
+     * @param {string} email - the source account's email (defence-in-depth bind)
+     * @param {string} password - the source account's plaintext password
+     * @returns {boolean} true only if the password (and email, if given) match
+     */
+    static verifyCredentials = async (userID, email, password) => {
+        try {
+            if (!userID || !password) return false;
+            const user = await UserModel.getUserByID(userID);
+            if (!user || !user.password) return false;
+
+            const passwordMatches = await bcrypt.compare(password, user.password);
+            if (!passwordMatches) return false;
+
+            if (email) {
+                const storedEmail = AuthService.decryptEmail(user.email);
+                if (!storedEmail || storedEmail.toLowerCase() !== String(email).toLowerCase()) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (error) {
+            console.error("Error in UserService.verifyCredentials:", error);
+            return false;
         }
     }
 }

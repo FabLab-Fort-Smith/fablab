@@ -70,7 +70,9 @@ const SettingsTab = ({ user }) => {
         if (!legacyUser) return;
         if (!confirm(`Are you sure you want to merge ${legacyUser.email} into your current account? The legacy account will be deleted.`)) return;
         setMerging(true);
-        const res = await fetch('/api/v1/users/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetUserID: user.userID, sourceUserID: legacyUser.userID, overrides: mergeOverrides }) });
+        // Re-send the legacy credentials so the server can verify ownership of the
+        // source account before merging + deleting it (a non-admin self-merge).
+        const res = await fetch('/api/v1/users/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetUserID: user.userID, sourceUserID: legacyUser.userID, overrides: mergeOverrides, sourceEmail: legacyEmail, sourcePassword: legacyPassword }) });
         const data = await res.json();
         if (data.success) { showToast("Accounts merged successfully! Reloading...", 'success'); setTimeout(() => window.location.reload(), 1500); }
         else showToast(data.error || "Merge failed.", 'error');

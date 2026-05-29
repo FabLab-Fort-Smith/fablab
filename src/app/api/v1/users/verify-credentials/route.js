@@ -1,10 +1,19 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@/auth';
 import UserModel from '@/app/api/auth/[...nextauth]/model';
 import AuthService from '@/app/api/auth/[...nextauth]/service';
 import bcrypt from 'bcryptjs';
 
 export async function POST(request) {
     try {
+        // SEC-02: require a session — this endpoint verifies a legacy account's
+        // password during account linking and must not be an open credential
+        // (and user-enumeration) oracle for anonymous callers.
+        const session = await auth();
+        if (!session?.user?.userID) {
+            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { email, password } = await request.json();
 
         if (!email || !password) {
