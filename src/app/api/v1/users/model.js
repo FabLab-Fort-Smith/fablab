@@ -1,5 +1,6 @@
 // src/app/api/users/user.model.js
 import { db } from "@/lib/database";
+import { escapeRegExp } from "@/lib/escapeRegExp";
 
 // Helper to sanitize null bytes from strings
 const sanitizeStrings = (obj) => {
@@ -76,7 +77,7 @@ export default class UserModel {
                 console.log("🔍 Searching user by ID (optimized):", query.userID);
                 // Use case-insensitive match to be robust against "User-..." vs "user-..."
                 const user = await dbUsers.findOne({ 
-                    userID: { $regex: new RegExp(`^${query.userID}$`, "i") } 
+                    userID: { $regex: new RegExp(`^${escapeRegExp(query.userID)}$`, "i") } 
                 });
                 
                 if (user) {
@@ -91,7 +92,7 @@ export default class UserModel {
 
             console.log("🔍 Searching user in the database with query:", query);
             const user = await dbUsers.findOne({
-                $or: Object.keys(query).map(key => ({ [key]: { $regex: query[key], $options: "i" } }))
+                $or: Object.keys(query).map(key => ({ [key]: { $regex: `^${escapeRegExp(query[key])}$`, $options: "i" } }))
             });
 
             if (!user) {
@@ -133,7 +134,7 @@ export default class UserModel {
             }
 
             if (filters.search) {
-                const re = { $regex: filters.search, $options: "i" };
+                const re = { $regex: escapeRegExp(filters.search), $options: "i" };
                 const searchOr = [
                     { firstName: re }, { lastName: re }, { email: re }, { username: re },
                 ];
@@ -205,7 +206,7 @@ export default class UserModel {
             }
 
             if (filters.search) {
-                const re = { $regex: filters.search, $options: "i" };
+                const re = { $regex: escapeRegExp(filters.search), $options: "i" };
                 const searchOr = [
                     { firstName: re }, { lastName: re }, { email: re }, { username: re },
                 ];
@@ -275,7 +276,7 @@ export default class UserModel {
             if (typeof query === 'object') {
                 // Handle object query (e.g. { userID: '...' })
                 filter = {
-                    $or: Object.keys(query).map(key => ({ [key]: { $regex: query[key], $options: "i" } }))
+                    $or: Object.keys(query).map(key => ({ [key]: { $regex: `^${escapeRegExp(query[key])}$`, $options: "i" } }))
                 };
             } else {
                 // Handle string query (search across multiple fields)
