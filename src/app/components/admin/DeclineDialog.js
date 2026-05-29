@@ -55,7 +55,7 @@ export default function DeclineDialog({ open, onClose, onConfirm, user, loading 
                         <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-1)', padding: '12px 16px' }}>
                             <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.12em', marginBottom: 6 }}>EMAIL_PREVIEW</div>
                             <div style={{ fontSize: 11, color: 'var(--text-mid)', lineHeight: 1.7, fontStyle: 'italic' }}>
-                                "{previewText}"
+                                &quot;{previewText}&quot;
                             </div>
                         </div>
                     )}

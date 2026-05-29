@@ -3,10 +3,10 @@ name: CI
 # Secure-SDLC CI gates. See CLAUDE.md §7, docs/audit/05-engineering-process.md §5, 06-security-standards.md §8.
 #
 # Gate enforcement policy:
-#   ENFORCED now  : test, dependency-review (new deps only)
-#   REPORT-ONLY   : lint, secret-scan, sast (semgrep), sca (npm audit), build
+#   ENFORCED now  : test, lint, dependency-review (new deps only)
+#   REPORT-ONLY   : secret-scan, sast (semgrep), sca (npm audit), build
 #                   -> these flip to ENFORCED once the matching remediation lands:
-#                      lint         after lint debt (#53) cleared
+#                      lint         ENFORCED — lint debt cleared (#53)
 #                      secret-scan  after SEC-01  (#11)
 #                      sast/crypto  after SEC-23  (#24)
 #                      log-leak     after SEC-24  (#25)
@@ -30,9 +30,8 @@ concurrency:
 
 jobs:
   lint:
-    name: Lint (report-only until lint debt #53 cleared)
+    name: Lint (enforced)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6

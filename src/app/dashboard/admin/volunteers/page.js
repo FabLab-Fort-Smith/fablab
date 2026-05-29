@@ -80,7 +80,7 @@ export default function VolunteersPage() {
                             <div key={item.id} style={{ background: 'var(--bg-card)', border: '1px solid var(--bd)', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                                 <div>
                                     <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>{item.user.firstName} {item.user.lastName}</div>
-                                    <div style={{ fontSize: 11, color: 'var(--text-mid)' }}>{item.hours}h on {new Date(item.date).toLocaleDateString()} — "{item.description}"</div>
+                                    <div style={{ fontSize: 11, color: 'var(--text-mid)' }}>{item.hours}h on {new Date(item.date).toLocaleDateString()} — &quot;{item.description}&quot;</div>
                                 </div>
                                 <div style={{ display: 'flex', gap: 8 }}>
                                     <button className="btn btn--sm" style={{ fontSize: 9, borderColor: 'var(--green)', color: 'var(--green)' }} onClick={() => handleLogAction(item.user, item.id, 'approve')}>✓ approve</button>

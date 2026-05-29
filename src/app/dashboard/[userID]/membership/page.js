@@ -73,7 +73,7 @@ const ManageMembership = () => {
                     </div>
                 </div>
             ) : (
-                !loading && <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>You don't have an active membership. Select a plan to get started.</div>
+                !loading && <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>You don&apos;t have an active membership. Select a plan to get started.</div>
             )}
         </div>
     );

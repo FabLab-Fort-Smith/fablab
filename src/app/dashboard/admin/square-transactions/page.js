@@ -351,7 +351,7 @@ export default function SquareTransactionsPage() {
                                         />
                                     </div>
                                     <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>
-                                        defaults to +30 days so they aren't charged again immediately. uses card on file.
+                                        defaults to +30 days so they aren&apos;t charged again immediately. uses card on file.
                                     </div>
                                 </div>
 

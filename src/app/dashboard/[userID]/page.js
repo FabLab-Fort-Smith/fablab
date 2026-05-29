@@ -137,7 +137,7 @@ export default function DashboardPage({ params }) {
                 if (applied) {
                     return (
                         <div style={{ border: '1px solid var(--green)', color: 'var(--green)', background: 'rgba(57,255,20,0.05)', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--mono)', fontSize: 12 }}>
-                            <span>✓ Application submitted! We'll reach out within 3-5 business days.</span>
+                            <span>✓ Application submitted! We&apos;ll reach out within 3-5 business days.</span>
                             <button onClick={() => setBannerDismissed(true)} style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', fontSize: 14, padding: 0 }}>×</button>
                         </div>
                     );

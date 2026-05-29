@@ -204,7 +204,7 @@ const MembershipTab = ({ user, onUpdateMembership, membershipApplied = false }) 
                 <div style={{ fontFamily: 'var(--display)', fontSize: '1.3rem', letterSpacing: '-0.04em', color: 'var(--text-bright)', marginBottom: 4 }}>Membership Application Status</div>
                 {showApplicationSuccess && (
                     <div style={{ border: '1px solid var(--green)', color: 'var(--green)', background: 'rgba(57,255,20,0.05)', padding: '10px 14px', fontSize: 12, fontFamily: 'var(--mono)', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>✓ Application submitted! We'll reach out within 3-5 business days.</span>
+                        <span>✓ Application submitted! We&apos;ll reach out within 3-5 business days.</span>
                         <button onClick={() => setSuccessDismissed(true)} style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', fontSize: 14 }}>×</button>
                     </div>
                 )}

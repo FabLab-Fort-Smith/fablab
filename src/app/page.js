@@ -134,7 +134,7 @@ function HeroBoot({ memberCount }) {
         {/* Left: headline + CTAs */}
         <div>
           <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: 'var(--green)' }}>//</span> Fort Smith, AR · Est. 2018
+            <span style={{ color: 'var(--green)' }}>{'//'}</span> Fort Smith, AR · Est. 2018
           </div>
           <h1 className="chroma" style={{
             fontFamily: 'var(--display)', fontSize: 'clamp(2.4rem, 5vw, 4rem)',
@@ -144,7 +144,7 @@ function HeroBoot({ memberCount }) {
             hack.<br />make.<br />create.
           </h1>
           <p style={{ color: 'var(--text)', fontSize: 14, lineHeight: 1.7, maxWidth: 460, marginBottom: 32 }}>
-            Fort Smith's community makerspace. 3D printers, laser cutters, vinyl cutters, electronics lab — and a growing community of makers who show you how to use them. Open to everyone.
+            Fort Smith&apos;s community makerspace. 3D printers, laser cutters, vinyl cutters, electronics lab — and a growing community of makers who show you how to use them. Open to everyone.
           </p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <Link href="/auth/register" className="btn btn--filled" style={{ fontSize: 11 }}>$ ./join --now</Link>
@@ -556,7 +556,7 @@ function ContactSection() {
             </button>
             {status === 'sent' && (
               <div style={{ color: 'var(--green)', fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span className="dot pulse" style={{ background: 'var(--green)' }} /> message transmitted. we'll reply soon.
+                <span className="dot pulse" style={{ background: 'var(--green)' }} /> message transmitted. we&apos;ll reply soon.
               </div>
             )}
             {status === 'error' && (
@@ -579,7 +579,7 @@ function PublicFooter() {
       <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 32 }}>
         <div>
           <div style={{ fontFamily: 'var(--display)', fontSize: 18, color: 'var(--green)', letterSpacing: '-0.04em', marginBottom: 8 }}>THE_LAB</div>
-          <div style={{ color: 'var(--text-dim)', fontSize: 11 }}>Fort Smith's community makerspace</div>
+          <div style={{ color: 'var(--text-dim)', fontSize: 11 }}>Fort Smith&apos;s community makerspace</div>
           <div style={{ color: 'var(--text-dim)', fontSize: 10, marginTop: 4 }}>805 N Greenwood Ave · Fort Smith, AR</div>
         </div>
         <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap' }}>

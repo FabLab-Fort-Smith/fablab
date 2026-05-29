@@ -16,7 +16,7 @@ export default function NudgeConfirmDialog({ open, onClose, onConfirm, nudgeDeta
                     </div>
                     <div style={{ border: '1px solid var(--bd)', background: 'var(--bg-1)', padding: '12px 16px' }}>
                         <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.12em', marginBottom: 6 }}>STEP: {nudgeDetails.step}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text)', fontStyle: 'italic', lineHeight: 1.6, marginBottom: 10 }}>"{nudgeDetails.message}"</div>
+                        <div style={{ fontSize: 12, color: 'var(--text)', fontStyle: 'italic', lineHeight: 1.6, marginBottom: 10 }}>&quot;{nudgeDetails.message}&quot;</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                             <span className="pill" style={{ fontSize: 10, opacity: 0.6 }}>{nudgeDetails.actionText}</span>
                             <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--mono)', wordBreak: 'break-all' }}>{nudgeDetails.actionLink}</span>

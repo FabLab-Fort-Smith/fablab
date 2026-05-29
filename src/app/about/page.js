@@ -56,7 +56,7 @@ export default function AboutPage() {
               We exist to democratize access to the tools of invention. When you give people the power to create, they build amazing things — from 3D-printed prosthetics to laser-cut art, PCB prototypes to custom furniture.
             </p>
             <p style={{ color: 'var(--text-mid)', fontSize: 13, lineHeight: 1.9, marginBottom: 16 }}>
-              We're reclaiming the word "hacker." To us, a hacker is anyone who looks at a system — a toaster, a line of code, a piece of furniture — and asks: "How can I make this better?"
+              We&apos;re reclaiming the word &quot;hacker.&quot; To us, a hacker is anyone who looks at a system — a toaster, a line of code, a piece of furniture — and asks: &quot;How can I make this better?&quot;
             </p>
             <p style={{ color: 'var(--text-mid)', fontSize: 13, lineHeight: 1.9 }}>
               We are a do-ocracy: if you want to see it happen, you have the power to make it happen.

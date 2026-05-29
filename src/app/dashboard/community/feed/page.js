@@ -193,7 +193,7 @@ export default function FeedPage() {
             <div style={{ marginBottom: 20 }}>
                 <div style={{ color: 'var(--text-dim)', fontSize: 10, letterSpacing: '0.18em', marginBottom: 8 }}><span style={{ color: 'var(--green)' }}>$</span> ./feed --live</div>
                 <h1 style={{ fontFamily: 'var(--display)', fontSize: 'clamp(1.4rem, 3vw, 2rem)', letterSpacing: '-0.04em', color: 'var(--text-bright)', margin: 0 }}>the lab feed</h1>
-                <p style={{ color: 'var(--text-mid)', fontSize: 12, marginTop: 6 }}>see what's happening in the community.</p>
+                <p style={{ color: 'var(--text-mid)', fontSize: 12, marginTop: 6 }}>see what&apos;s happening in the community.</p>
             </div>
 
             {/* Sort toggle */}

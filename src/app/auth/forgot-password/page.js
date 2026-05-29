@@ -24,7 +24,7 @@ export default function ForgotPasswordPage() {
             reset password
           </h1>
           <p style={{ color: 'var(--text-mid)', fontSize: 12, lineHeight: 1.7, marginBottom: 24 }}>
-            Enter your email and we'll send a reset link if an account exists.
+            Enter your email and we&apos;ll send a reset link if an account exists.
           </p>
 
           {status === 'sent' ? (

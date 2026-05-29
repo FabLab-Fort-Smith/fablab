@@ -148,7 +148,7 @@ export default function CommandPalette({ open, onClose }) {
           ))}
           {filtered.length === 0 && (
             <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-dim)', fontFamily: 'var(--mono)', fontSize: 12 }}>
-              // no matches · try a route name or path
+              {'// no matches · try a route name or path'}
             </div>
           )}
         </div>

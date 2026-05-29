@@ -136,7 +136,7 @@ export default function EmailTemplatesPage() {
                     </button>
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 8 }}>
-                    Nudge is context-aware — it detects the user's current onboarding step and sends the appropriate prompt.
+                    Nudge is context-aware — it detects the user&apos;s current onboarding step and sends the appropriate prompt.
                 </div>
             </div>
 

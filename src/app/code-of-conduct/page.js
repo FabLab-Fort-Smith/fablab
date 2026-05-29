@@ -105,7 +105,7 @@ export default function CodeOfConductPage() {
         <div style={{ marginTop: 48, border: '1px solid var(--bd-1)', padding: '28px 24px', background: 'var(--bg-card)' }}>
           <div style={{ fontFamily: 'var(--mono)', color: 'var(--green)', fontSize: 10, letterSpacing: '0.14em', marginBottom: 12 }}>CONCLUSION</div>
           <p style={{ color: 'var(--text)', fontSize: 13, lineHeight: 1.8, margin: 0 }}>
-            Fab Lab Fort Smith is a space for creativity and growth. By adhering to this code, we build a stronger, more collaborative community. Let's innovate and inspire together.
+            Fab Lab Fort Smith is a space for creativity and growth. By adhering to this code, we build a stronger, more collaborative community. Let&apos;s innovate and inspire together.
           </p>
           <div style={{ marginTop: 20, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <Link href="/auth/register" className="btn btn--filled" style={{ fontSize: 11 }}>$ ./join --agree</Link>

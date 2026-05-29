@@ -62,9 +62,9 @@ export default function InstallPrompt() {
 
                 {isIOS && (
                     <div style={{ border: '1px solid var(--bd)', padding: '10px 14px', marginBottom: 16, fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text-mid)' }}>
-                        <div style={{ color: 'var(--text-bright)', marginBottom: 6 }}>// TO INSTALL ON IOS:</div>
+                        <div style={{ color: 'var(--text-bright)', marginBottom: 6 }}>{'// TO INSTALL ON IOS:'}</div>
                         <div style={{ marginBottom: 4 }}>1. Tap the Share button ↑</div>
-                        <div>2. Tap "Add to Home Screen"</div>
+                        <div>2. Tap &quot;Add to Home Screen&quot;</div>
                     </div>
                 )}
 
