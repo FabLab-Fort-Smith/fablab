@@ -176,6 +176,8 @@ const DEVICE_SECRETS = {
 
 **Remediation:** Allowlist permitted hosts (e.g. the S3 domain); reject non-`http(s)`; resolve and block private/link-local/loopback ranges (incl. `169.254.169.254`, `10/8`, `172.16/12`, `192.168/16`, `::1`); cap response size and add a timeout.
 
+**Status:** ✅ Remediated (branch `remediation/sec-09-image-proxy-ssrf`). New SSRF guard `src/lib/ssrf.js` (host allowlist + scheme check + private/loopback/link-local/metadata IP rejection) applied in `image-proxy/route.js`, with per-redirect-hop re-validation, a 5s timeout, a 10 MB cap, and an `image/*` content-type check. Allowlist: S3 host (`S3_ENDPOINT`), `cdn.discordapp.com`, `.googleusercontent.com`, `images.unsplash.com`, extendable via `IMAGE_PROXY_ALLOWED_HOSTS`. Regression tests: `test/unit/ssrf-guard.test.js`, `test/e2e/image-proxy-ssrf.test.js`.
+
 ---
 
 ### SEC-10 — `/api/*` routes are outside middleware protection
