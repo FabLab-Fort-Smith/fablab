@@ -164,6 +164,8 @@ const DEVICE_SECRETS = {
 
 **Remediation:** Require auth; enforce a MIME allowlist and max size; generate server-side random keys (ignore client filename); set `ContentType` from a validated set; disable bucket auto-create; consider presigned uploads (`@aws-sdk/s3-presigned-post` is already a dependency).
 
+**Status:** ✅ Remediated (branch `remediation/sec-08-s3-upload-hardening`). `upload/route.js` now requires a session; validates the file by **magic bytes** (jpeg/png/gif/webp — SVG excluded to block stored XSS), not the client MIME; caps size at 5 MB; uses a **server-generated UUID key** (`uploads/<uuid>.<ext>`, client filename ignored); sets `ContentType` from the detected type; **removes bucket auto-create**; and drops the hardcoded endpoint/bucket fallbacks (also closes the `upload/route.js` half of SEC-21) with a lazy S3 client. Regression tests: `test/e2e/upload-hardening.test.js`.
+
 ---
 
 ### SEC-09 — SSRF in the image proxy

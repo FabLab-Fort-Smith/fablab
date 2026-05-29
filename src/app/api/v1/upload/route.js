@@ -1,77 +1,99 @@
 import { NextResponse } from 'next/server';
-import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand } from "@aws-sdk/client-s3";
+import { randomUUID } from 'crypto';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { auth } from '@/auth';
 
 export const maxDuration = 60; // Increase timeout to 60s for slow uploads
 export const dynamic = 'force-dynamic';
 
-// Initialize S3 Client (Server-Side Only)
-const s3Client = new S3Client({
-    region: process.env.S3_REGION || 'us-east-1',
-    endpoint: process.env.S3_ENDPOINT || 'https://s3.crittercodes.dev',
-    forcePathStyle: true,
-    credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY,
-        secretAccessKey: process.env.S3_SECRET_KEY,
-    }
-});
+const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 
-const ensureBucketExists = async (bucketName) => {
-    try {
-        await s3Client.send(new HeadBucketCommand({ Bucket: bucketName }));
-    } catch (error) {
-        if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
-            console.log(`Bucket ${bucketName} not found. Creating...`);
-            await s3Client.send(new CreateBucketCommand({ Bucket: bucketName }));
-            console.log(`Bucket ${bucketName} created.`);
-        } else if (error.$metadata?.httpStatusCode === 403) {
-            console.warn(`Bucket ${bucketName} exists but access is forbidden (403). Attempting upload anyway...`);
-        } else {
-            throw error;
-        }
+// SEC-08: trust the file's *content*, not the client-supplied MIME/extension.
+// Allowed image types are identified by magic bytes; the matched entry decides
+// the stored ContentType and extension. SVG is intentionally excluded (it can
+// carry script → stored XSS when served from a trusted origin).
+const IMAGE_TYPES = [
+    { mime: 'image/jpeg', ext: 'jpg', match: (b) => b.length > 2 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+    { mime: 'image/png',  ext: 'png', match: (b) => b.length > 7 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 },
+    { mime: 'image/gif',  ext: 'gif', match: (b) => b.length > 5 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38 },
+    { mime: 'image/webp', ext: 'webp', match: (b) => b.length > 11 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50 },
+];
+
+export function detectImageType(buffer) {
+    return IMAGE_TYPES.find((t) => t.match(buffer)) || null;
+}
+
+// Lazily build the S3 client so a missing config doesn't break module import
+// (cf. the MongoClient import-time lesson). No hardcoded endpoint/bucket
+// fallbacks (SEC-21) — config comes from the environment or the request fails.
+let _s3Client;
+function getS3Client() {
+    if (!_s3Client) {
+        _s3Client = new S3Client({
+            region: process.env.S3_REGION || 'us-east-1',
+            endpoint: process.env.S3_ENDPOINT,
+            forcePathStyle: true,
+            credentials: {
+                accessKeyId: process.env.S3_ACCESS_KEY,
+                secretAccessKey: process.env.S3_SECRET_KEY,
+            },
+        });
     }
-};
+    return _s3Client;
+}
 
 export async function POST(req) {
     try {
-        const formData = await req.formData();
-        const file = formData.get('file');
-
-        // Fallback to hardcoded bucket if env var is missing (temporary fix)
-        const bucketName = process.env.S3_BUCKET_NAME || 'fablab-bounties';
-
-        if (!file) {
-            return NextResponse.json({ error: "No file provided" }, { status: 400 });
+        // SEC-08: uploads require an authenticated session (was anonymous).
+        const session = await auth();
+        if (!session?.user?.userID) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        if (!bucketName) {
-            console.error("S3_BUCKET_NAME is not defined");
+        const bucketName = process.env.S3_BUCKET_NAME;
+        const endpoint = process.env.S3_ENDPOINT;
+        if (!bucketName || !endpoint) {
+            console.error("S3 storage is not configured (S3_BUCKET_NAME / S3_ENDPOINT).");
             return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
         }
 
-        await ensureBucketExists(bucketName);
+        const formData = await req.formData();
+        const file = formData.get('file');
+
+        if (!file || typeof file.arrayBuffer !== 'function') {
+            return NextResponse.json({ error: "No file provided" }, { status: 400 });
+        }
+
+        if (typeof file.size === 'number' && file.size > MAX_BYTES) {
+            return NextResponse.json({ error: "File too large (max 5 MB)" }, { status: 413 });
+        }
 
         const buffer = Buffer.from(await file.arrayBuffer());
-        const fileKey = `${Date.now()}-${file.name.replace(/\s/g, '_')}`;
+        if (buffer.byteLength > MAX_BYTES) {
+            return NextResponse.json({ error: "File too large (max 5 MB)" }, { status: 413 });
+        }
 
-        const uploadParams = {
+        // Validate by content, not by the client-declared type.
+        const kind = detectImageType(buffer);
+        if (!kind) {
+            return NextResponse.json({ error: "Unsupported file type (images only)" }, { status: 415 });
+        }
+
+        // Server-generated key — never trust the client filename (path/special chars).
+        const fileKey = `uploads/${randomUUID()}.${kind.ext}`;
+
+        await getS3Client().send(new PutObjectCommand({
             Bucket: bucketName,
             Key: fileKey,
             Body: buffer,
-            ContentType: file.type,
-            // ACL: 'public-read', // Removed ACL to prevent 403s on restricted buckets
-        };
+            ContentType: kind.mime,
+        }));
 
-        await s3Client.send(new PutObjectCommand(uploadParams));
-
-        // Construct public URL
-        // We always want to use the domain name for the frontend, never the internal IP
-        const publicEndpoint = 'https://s3.crittercodes.dev';
-        const publicUrl = `${publicEndpoint}/${bucketName}/${fileKey}`;
-
+        const publicUrl = `${endpoint.replace(/\/+$/, '')}/${bucketName}/${fileKey}`;
         return NextResponse.json({ url: publicUrl });
 
     } catch (error) {
-        console.error("Error uploading to S3:", error);
-        return NextResponse.json({ error: "Failed to upload file: " + (error.message || "Unknown error") }, { status: 500 });
+        console.error("Error uploading to S3:", error?.message);
+        return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });
     }
 }
