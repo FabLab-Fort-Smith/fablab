@@ -258,6 +258,8 @@ User-supplied values are interpolated into a regex without escaping.
 
 **Remediation:** Derive `userID` from the session; ignore client-supplied `userID` for ownership.
 
+**Status:** ✅ Remediated (branch `remediation/sec-14-notifications-idor`). `notifications/controller.js` now requires a session on GET/PUT/POST and derives the owner from `session.user.userID`, ignoring any request-supplied `userID` (read + mark-read are scoped to the caller). HTTP POST (which can also fan out to email/Discord) is **admin-only** — app flows create notifications via `NotificationService.create()` server-side, not this endpoint. Sole client (`NotificationBell.js`) already sent its own session userID, so it's unaffected. Regression tests: `test/e2e/notifications-idor.test.js`.
+
 ---
 
 ### SEC-15 — State-changing membership activation on unauthenticated GET
