@@ -51,6 +51,10 @@ Owners: **SEC** (security), **DEV** (app dev), **OPS** (devops/infra). Effort: *
 | T-1.2.3 | If scripts are kept, load env via `dotenv` and document usage | `list-dbs.js`, `debug-leaderboard.js` | Scripts run from env, no hardcoded host | T-1.2.1/2 | DEV | S |
 | T-1.2.4 | Grep whole repo for any remaining `mongodb(+srv)://…:…@` literals | repo | Zero hits outside `.env*` | T-1.2.1/2 | SEC | S |
 
+**Status (branch `remediation/e1-wi1.2-remove-db-literals`):** ✅ WI-1.2 done. Both `list-dbs.js` and `debug-leaderboard.js` were unreferenced one-off debug scripts (not in `package.json`, not imported) — **deleted** rather than converted (T-1.2.1/2, per "remove dead files"; T-1.2.3 n/a). Repo sweep (T-1.2.4) confirms the leaked credential now appears in **no code file** — only in the audit docs (as finding evidence) and the planted "Hack the Lab" CTF strings (intentional, §14). Guarded by the regression sentinel `test/unit/sec-01-no-db-cred.test.js` (fails if the scripts or the credential return).
+
+> ⚠️ **Code half only — the credential is still compromised.** Deleting from the working tree does **not** remove it from git history (it persists in past commits). **WI-1.1 (rotate the `critter` credential), WI-1.3 (purge git history), and WI-1.4 (restrict Mongo network exposure) remain OPS-owned and must still be done** — assume the secret is already exfiltrated. This PR does not close SEC-01 (#11); it only removes the live literal from the tree.
+
 ### WI-1.3 — Purge from git history
 | Task | Action | File / target | Acceptance | Depends | Owner | Eff |
 |------|--------|---------------|------------|---------|-------|-----|
@@ -260,7 +264,7 @@ One feature branch + one PR per Work Item (see `05` §2). Each PR **refs** its e
 | Work Item | Branch (`remediation/…`) | PR | Status |
 |-----------|--------------------------|----|--------|
 | WI-1.1 rotate DB cred | `e1-wi1.1-rotate-db-cred` | — | not-started |
-| WI-1.2 remove literals | `e1-wi1.2-remove-db-literals` | — | not-started |
+| WI-1.2 remove literals | `remediation/e1-wi1.2-remove-db-literals` | — | in-review (code half; SEC-01 stays open for WI-1.1/1.3/1.4) |
 | WI-1.3 purge history | `e1-wi1.3-history-purge` | — | not-started |
 | WI-1.4 restrict network | `e1-wi1.4-db-network-isolation` | — | not-started |
 | WI-1.5 verify & scan | `e1-wi1.5-verify-secret-scan` | — | not-started |
