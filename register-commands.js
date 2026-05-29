@@ -1,4 +1,4 @@
-require('dotenv').config({ path: '.env.local' }); // Load env vars
+require('dotenv').config({ path: '.env.local', quiet: true }); // Load env vars
 const axios = require('axios');
 
 const DISCORD_APP_ID = process.env.DISCORD_APP_ID;
