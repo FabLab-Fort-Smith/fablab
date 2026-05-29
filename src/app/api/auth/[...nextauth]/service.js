@@ -70,16 +70,12 @@ export default class AuthService {
         const plainEmail = email;
         const encryptedEmail = this.encryptEmail(email);
         const encryptedPhone = phoneNumber ? this.encryptPhone(phoneNumber) : '';
-        console.log(userData);
-        console.log('looking for user');
+        // SEC-24: never log userData / user records / hashes / tokens / decrypted PII.
         const existingUser = await UserModel.findByEmail(encryptedEmail);
-        console.log(existingUser);
         if (existingUser) {
             throw new Error("User already exists with this email.");
         };
-        console.log('hashing password');
         const hashedPassword = password ? await bcrypt.hash(password, 10) : 'no password';
-        console.log('creating new user with:', firstName, lastName, encryptedEmail, hashedPassword, encryptedPhone, status);
         
         // Ensure username is lowercased if it exists, though check should handle it
         // We allow display casing in storage if desired, but check is case-insensitive.
@@ -111,15 +107,12 @@ export default class AuthService {
             Constants.ONBOARDING_REWARDS.REGISTER, // stake
             image || '' // image
         );
-        console.log("newUser", newUser);
-        console.log('creating user');
         const results = await UserModel.create(newUser);
 
-        // ✅ Send the verification email using the email utility
-        console.log("user status", newUser.status);
+        // ✅ Send the verification email using the email utility.
+        // SEC-24: do not log the recipient email or the verification token
+        // (token in logs is a direct account-takeover vector).
         if (newUser.status === 'unverified') {
-            // Added logging before sending email
-            console.log("Attempting to send verification email to:", plainEmail, "with token:", newUser.verificationToken);
             await sendVerificationEmail(plainEmail, newUser.verificationToken);
         };
         return results;

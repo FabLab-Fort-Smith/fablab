@@ -31,8 +31,8 @@ export async function sendVerificationEmail(email, token) {
         `
     };
 
-    // Added logging for email details
-    console.log("Sending verification email with options:", mailOptions);
+    // SEC-24: do not log mailOptions — it contains the recipient and the
+    // verification link (token), an account-takeover vector.
 
     try {
         const info = await transporter.sendMail(mailOptions);
