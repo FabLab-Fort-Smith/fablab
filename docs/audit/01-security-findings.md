@@ -284,6 +284,8 @@ User-supplied values are interpolated into a regex without escaping.
 
 **Remediation:** Compare with `crypto.timingSafeEqual` over equal-length buffers.
 
+**Status:** ✅ Remediated (shipped with SEC-03 in PR #47). `verifySquareSignature` (`src/lib/squareSignature.js`) uses `crypto.timingSafeEqual` over equal-length buffers and fails closed; covered by `test/unit/squareSignature.test.js`.
+
 ---
 
 ### SEC-17 — No idempotency on the payment webhook
@@ -295,6 +297,8 @@ User-supplied values are interpolated into a regex without escaping.
 **Impact:** Duplicate processing → double-awarded stake, duplicate state transitions, repeated access-key issuance.
 
 **Remediation:** Persist processed event IDs and short-circuit duplicates; make mutations idempotent (upserts keyed on event/subscription ID).
+
+**Status:** ✅ Remediated (branch `remediation/sec-17-webhook-idempotency`). `src/lib/webhookIdempotency.js` atomically claims each Square `event_id` (unique insert in `processed_webhook_events`, TTL-expired) before any state mutation; a duplicate redelivery is acked 200 and skipped. On processing failure the claim is released so Square's retry reprocesses (exactly-once on success, at-least-once on failure). Guarded by `test/unit/webhook-idempotency.test.js`.
 
 ---
 

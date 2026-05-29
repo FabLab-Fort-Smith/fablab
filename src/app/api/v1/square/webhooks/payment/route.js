@@ -3,8 +3,10 @@ import { NextResponse } from "next/server";
 import UserService from "@/app/api/v1/users/service";
 import squareClient from "@/lib/square";
 import { verifySquareSignature } from "@/lib/squareSignature";
+import { claimWebhookEvent, releaseWebhookEvent } from "@/lib/webhookIdempotency";
 
 export async function POST(request) {
+  let eventId;
   try {
     const rawBody = await request.text();
     const signature = request.headers.get("x-square-hmacsha256-signature") || "";
@@ -16,7 +18,18 @@ export async function POST(request) {
     }
 
     const body = JSON.parse(rawBody);
-    
+
+    // SEC-17: dedupe Square's at-least-once / retried deliveries. Claim the event
+    // id before mutating state; a duplicate means we already processed it, so ack
+    // 200 without re-running side effects (re-extending sponsorships, re-applying
+    // renewals/revocations, …). On failure below we release the claim so a retry
+    // can reprocess.
+    eventId = body.event_id;
+    if (!(await claimWebhookEvent(eventId))) {
+      console.log("↩️ Duplicate Square webhook event — already processed:", eventId);
+      return NextResponse.json({ success: true, deduped: true }, { status: 200 });
+    }
+
     // Square webhooks send events in an array, but usually one at a time
 
     // 0. Handle Failed Payments — start grace period
@@ -226,6 +239,9 @@ export async function POST(request) {
 
   } catch (error) {
     console.error("Error processing payment webhook:", error);
+    // Release the idempotency claim so Square's retry can reprocess this event
+    // (the failure means side effects may not have completed).
+    await releaseWebhookEvent(eventId);
     return NextResponse.json(
       { error: "Webhook processing failed" },
       { status: 500 }
