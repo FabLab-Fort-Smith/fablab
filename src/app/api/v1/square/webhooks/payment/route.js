@@ -1,16 +1,8 @@
 
 import { NextResponse } from "next/server";
-import crypto from "crypto";
 import UserService from "@/app/api/v1/users/service";
 import squareClient from "@/lib/square";
-
-function verifySquareSignature(rawBody, signature, notificationUrl) {
-  const key = process.env.SQUARE_WEBHOOK_SIGNATURE_KEY;
-  if (!key) return true; // skip verification if key not configured
-  const hmac = crypto.createHmac("sha256", key);
-  hmac.update(notificationUrl + rawBody);
-  return hmac.digest("base64") === signature;
-}
+import { verifySquareSignature } from "@/lib/squareSignature";
 
 export async function POST(request) {
   try {
