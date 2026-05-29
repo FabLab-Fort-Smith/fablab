@@ -337,6 +337,8 @@ User-supplied values are interpolated into a regex without escaping.
 **Location:** `auth.js` (e.g. `:21,29,97,159`), various routes
 `console.log` dumps full OAuth profiles, user objects, and raw errors. In production this can leak PII/tokens into log aggregation. **Remediation:** scrub/structure logs; drop profile/object dumps; never log tokens or decrypted email.
 
+**Status:** ✅ Remediated (branch `remediation/sec-20-log-pii`). Removed the full OAuth-profile, full user-record, and **credentials** (`console.log("Credentials:", credentials)`) dumps from `auth.js`, and stripped the decrypted recipient email from `email.util.js` logs. Guarded by `test/unit/sec-20-no-pii-logs.test.js` (complements the SEC-24 log-leak guard). Note: SEC-24 already removed the token/PII dumps in the auth *service*.
+
 ### SEC-21 — Hardcoded infrastructure endpoints as fallbacks
 **Severity:** Low
 **Location:** `src/app/api/v1/upload/route.js:9-14,40,68` (`s3.crittercodes.dev`, `fablab-bounties`), `src/lib/access-control.js:1` (`http://localhost:3001`), `src/app/api/admin/pair-card/route.js:29` (`socket.crittercodes.dev`)

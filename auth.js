@@ -17,7 +17,6 @@ const providers = [
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         async profile(profile) {
             try {
-                console.log("Google Profile:", profile);
 
                 // Look up by email first, then fall back to googleId so a changed
                 // or mismatched email never creates a duplicate account.
@@ -26,7 +25,6 @@ const providers = [
                     existingUser = await UsersService.getUserByQuery({ googleId: profile.sub });
                     if (existingUser) console.log("Matched existing user by googleId:", existingUser.userID);
                 }
-                console.log("Existing User:", existingUser);
 
                 if (!existingUser) {
                     // ✅ Create the user if not found
@@ -41,7 +39,6 @@ const providers = [
                         image: profile.picture
                     });
                     
-                    console.log("New User:", newUser);
                     return {
                         userID: newUser.userID,
                         name: `${newUser.firstName} ${newUser.lastName}`,
@@ -94,7 +91,6 @@ const providers = [
         clientSecret: process.env.DISCORD_CLIENT_SECRET,
         authorization: { params: { scope: 'identify email guilds.join' } },
         async profile(profile) {
-            console.log("Discord Profile:", profile);
 
             const avatarUrl = profile.avatar
                 ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
@@ -156,7 +152,6 @@ const providers = [
                 existingUser = await UsersService.getUserByQuery({ discordId: profile.id });
                 if (existingUser) console.log("Matched existing user by discordId:", existingUser.userID);
             }
-            console.log("Existing User:", existingUser);
 
             if (!existingUser) {
                 // Parse a reasonable name from Discord's global_name (display name).
@@ -217,7 +212,6 @@ const providers = [
 
                 // If we successfully created a new user, return them.
                 if (newUser) {
-                    console.log("New User:", newUser);
                     try {
                         const claimedAmount = await TransactionService.claimPendingTips(newUser.userID, profile.id);
                         if (claimedAmount > 0) console.log(`💰 Claimed ${claimedAmount} stake for new user ${newUser.userID}`);
@@ -283,7 +277,6 @@ const providers = [
         },
         async authorize(credentials) {
             try {
-                console.log("Credentials:", credentials);
                 const response = await fetch(`${baseURL}/api/auth/signin`, {
                     method: "POST",
                     body: JSON.stringify({

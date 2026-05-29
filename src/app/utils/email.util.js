@@ -114,9 +114,9 @@ export async function sendBountyNotificationEmail(email, firstName, bounty) {
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Bounty notification sent to ${email}`);
+        console.log(`Bounty notification sent`);
     } catch (error) {
-        console.error(`Error sending bounty notification to ${email}:`, error);
+        console.error(`Error sending bounty notification:`, error);
         // Don't throw here to prevent blocking the loop
     }
 }
@@ -171,9 +171,9 @@ export async function sendBountyClaimedEmail(email, creatorName, bounty, claimer
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Bounty claimed notification sent to ${email}`);
+        console.log(`Bounty claimed notification sent`);
     } catch (error) {
-        console.error(`Error sending bounty claimed notification to ${email}:`, error);
+        console.error(`Error sending bounty claimed notification:`, error);
     }
 }
 
@@ -205,9 +205,9 @@ export async function sendBountySubmittedEmail(email, creatorName, bounty, submi
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Bounty submitted notification sent to ${email}`);
+        console.log(`Bounty submitted notification sent`);
     } catch (error) {
-        console.error(`Error sending bounty submitted notification to ${email}:`, error);
+        console.error(`Error sending bounty submitted notification:`, error);
     }
 }
 
@@ -242,9 +242,9 @@ export async function sendBountyVerifiedEmail(email, assigneeName, bounty) {
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Bounty verified notification sent to ${email}`);
+        console.log(`Bounty verified notification sent`);
     } catch (error) {
-        console.error(`Error sending bounty verified notification to ${email}:`, error);
+        console.error(`Error sending bounty verified notification:`, error);
     }
 }
 
@@ -268,9 +268,9 @@ export async function sendApplicationReceivedEmail(email, firstName) {
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Application received email sent to ${email}`);
+        console.log(`Application received email sent`);
     } catch (error) {
-        console.error(`Error sending application received email to ${email}:`, error);
+        console.error(`Error sending application received email:`, error);
     }
 }
 
@@ -332,9 +332,9 @@ export async function sendStatusChangeEmail(email, firstName, newStatus) {
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Status change email (${newStatus}) sent to ${email}`);
+        console.log(`Status change email (${newStatus}) sent`);
     } catch (error) {
-        console.error(`Error sending status change email to ${email}:`, error);
+        console.error(`Error sending status change email:`, error);
     }
 }
 
@@ -366,9 +366,9 @@ export async function sendProfileCompletionEmail(email, firstName, userID) {
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Profile completion email sent to ${email}`);
+        console.log(`Profile completion email sent`);
     } catch (error) {
-        console.error(`Error sending profile completion email to ${email}:`, error);
+        console.error(`Error sending profile completion email:`, error);
     }
 }
 
@@ -393,9 +393,9 @@ export async function sendNudgeEmail(email, firstName, step, message, actionLink
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Nudge email sent to ${email} for step: ${step}`);
+        console.log(`Nudge email sent for step: ${step}`);
     } catch (error) {
-        console.error(`Error sending nudge email to ${email}:`, error);
+        console.error(`Error sending nudge email:`, error);
     }
 }
 
@@ -455,9 +455,9 @@ export async function sendVolunteerHoursApprovedEmail(email, firstName, hours, d
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Volunteer hours approved email sent to ${email}`);
+        console.log(`Volunteer hours approved email sent`);
     } catch (error) {
-        console.error(`Error sending volunteer hours approved email to ${email}:`, error);
+        console.error(`Error sending volunteer hours approved email:`, error);
     }
 }
 
@@ -488,7 +488,7 @@ export async function sendContactEmail(name, email, message) {
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Contact form email sent from ${email}`);
+        console.log(`Contact form email sent`);
     } catch (error) {
         console.error(`Error sending contact form email:`, error);
         throw new Error('Failed to send contact email');
