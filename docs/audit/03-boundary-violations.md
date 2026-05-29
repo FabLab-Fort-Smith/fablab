@@ -132,6 +132,8 @@ Significant domain logic lives inside NextAuth lifecycle callbacks rather than b
 **Why it's a violation:** Duplicate/dead files blur which module is authoritative; one-off scripts in the repo root (some carrying secrets — SEC-01) have no boundary separating operational tooling from the deployed app.
 **Direction:** Remove dead copies; move operational scripts into a dedicated `scripts/`/`ops/` area excluded from the deployed build; never embed credentials.
 
+**Status:** ✅ Resolved (branch `chore/industry-standard-structure`). `page copy.js` removed (React 19 PR); `list-dbs.js`/`debug-leaderboard.js` removed (SEC-01). Root brought to industry-standard: ops/mission scripts → `scripts/` & `scripts/missions/`, Discord ops → `scripts/`, seed JSON → `scripts/data/`, CTF design docs → `docs/game/`, dead `theme.js`/`response.json`/duplicate `register-commands.js` removed. The root now holds only config + `README`/`CONTRIBUTING`/`SECURITY`/`CLAUDE`/`AGENTS`. Codified as a mandate in `CLAUDE.md` §13.
+
 ---
 
 ## 4. Summary

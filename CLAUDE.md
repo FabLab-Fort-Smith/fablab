@@ -124,6 +124,7 @@ Generated code must satisfy these **by default**:
 - Use the `@/` path alias for `src` imports. Match the surrounding file's style (naming, structure, comment density).
 - No new top-level scripts with embedded credentials (see the `list-dbs.js`/`debug-leaderboard.js` lesson). Operational scripts read config from env.
 - Remove dead/`* copy.js` files rather than adding more.
+- **Strict industry-standard folder structure (mandate).** Keep the repo root limited to **config and standard top-level docs** — framework/tooling config (`next.config.mjs`, `eslint.config.mjs`, `jest.*`, `jsconfig.json`, `package*.json`, `.editorconfig`, `.npmrc`, dotfiles), the next-auth root entry (`auth.js`/`auth.config.js`), and `README`/`CONTRIBUTING`/`SECURITY`/`CLAUDE`/`AGENTS`. Everything else lives in its conventional home: **app code → `src/`** (App Router under `src/app`, shared libs `src/lib`, helpers `src/utils`, UI `src/app/components`), **operational scripts → `scripts/`** (read config from env), **tests → `test/`**, **docs → `docs/`**, **static assets → `public/`**, **the IoT/device tier → `vps/`**. **No loose scripts, data dumps, one-off `*.py`/`*.sh`, or scattered design docs at the root.** New files go in the correct directory from the start; when you touch an area that violates this, fix the placement (with `git mv` to preserve history) as part of the change.
 - **Labels & contributor-facing writing use plain language**, not codes/jargon — many contributors are not full-time developers (e.g. `goal: secure user accounts`, `priority: urgent`, not `epic:E1`/`P0`). Internal codes (Epic E#, SEC-##) stay in docs/issue titles, not labels.
 
 ## 14. "Hack the Lab" CTF — intentional vulnerabilities (do NOT fix)
@@ -133,7 +134,7 @@ Game/CTF zones (treat as intentional):
 - `vps/missions/**` (mission environments, planted files/creds)
 - `src/app/dashboard/activities/terminal/**` (e.g. the planted `mongodb://admin:secure_password_2025@…` + `flag{…}` string)
 - `src/app/api/v1/holodeck/**`, `src/app/api/v1/arcade/**`, `src/app/components/holodeck/**`
-- design docs: `GAME_DESIGN.md`, `HACK_THE_LAB_V2_*.md`, `ARCADE_*.md`, `MISSION_HINTS.md`
+- design docs under `docs/game/`: `GAME_DESIGN.md`, `HACK_THE_LAB_V2_*.md`, `ARCADE_*.md`, `MISSION_HINTS.md`
 
 **Real infrastructure and member data must still be fully secure** even where it neighbors game code. If unsure whether something is game content or a real defect, **ask** before changing it.
 
