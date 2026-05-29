@@ -32,6 +32,7 @@ Owners: **SEC** (security), **DEV** (app dev), **OPS** (devops/infra). Effort: *
 ## E1 — Contain the leaked database credential
 **Finding:** SEC-01 (`list-dbs.js:3`, `debug-leaderboard.js:3` hold `mongodb://critter:Zapatas2024@23.94.251.158:27017/...`).
 **DoD:** the exposed credential no longer authenticates anywhere, is absent from working tree and git history, the DB is network-restricted, and secret-scanning prevents recurrence.
+**Runbook:** WI-1.1 (rotate) · WI-1.3 (history purge) · WI-1.4 (network) · WI-1.5 (verify) are documented as a step-by-step OPS runbook in [`docs/security/sec-01-credential-purge-runbook.md`](../security/sec-01-credential-purge-runbook.md). WI-1.2 (remove literals from tree) shipped in #60.
 
 ### WI-1.1 — Rotate the credential
 | Task | Action | File / target | Acceptance | Depends | Owner | Eff |

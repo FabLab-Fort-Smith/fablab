@@ -55,7 +55,7 @@ Both files hardcode the same admin connection string (host, port, username, pass
 3. Purge from git history (`git filter-repo` / BFG) since the secret persists in past commits.
 4. Restrict MongoDB network exposure (bind/firewall `23.94.251.158:27017`).
 
-**Status:** ⚠️ Partially remediated — **code half only** (branch `remediation/e1-wi1.2-remove-db-literals`). Step 2 done: the two unreferenced debug scripts (`list-dbs.js`, `debug-leaderboard.js`) were deleted, so the live literal is gone from the working tree (guarded by `test/unit/sec-01-no-db-cred.test.js`). **Steps 1, 3, 4 remain OPS-owned and unblock nothing** — the credential is still in git history and must be rotated, the history purged, and the DB network-restricted before this finding can close. Assume the secret is already compromised.
+**Status:** ⚠️ Partially remediated — **code half only** (branch `remediation/e1-wi1.2-remove-db-literals`). Step 2 done: the two unreferenced debug scripts (`list-dbs.js`, `debug-leaderboard.js`) were deleted, so the live literal is gone from the working tree (guarded by `test/unit/sec-01-no-db-cred.test.js`). **Steps 1, 3, 4 remain OPS-owned and unblock nothing** — the credential is still in git history and must be rotated, the history purged, and the DB network-restricted before this finding can close. Assume the secret is already compromised. **OPS runbook for the rotate + network + history-purge + verify steps:** [`docs/security/sec-01-credential-purge-runbook.md`](../security/sec-01-credential-purge-runbook.md).
 
 ---
 
