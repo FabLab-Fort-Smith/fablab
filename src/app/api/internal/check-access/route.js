@@ -2,13 +2,19 @@
 import { NextResponse } from 'next/server';
 import { db } from "@/lib/database";
 import { API_SECRET_KEY } from '@/lib/constants';
+import { timingSafeEqualStr } from '@/lib/secureCompare';
 
-const SECRET = process.env.INTERNAL_API_SECRET || 'super-secure-internal-secret-882';
+// Required via env — no hardcoded fallback (SEC-04).
+const SECRET = process.env.INTERNAL_API_SECRET;
 
 export async function GET(req) {
     try {
+        if (!SECRET) {
+            console.error('INTERNAL_API_SECRET is not configured');
+            return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+        }
         const authHeader = req.headers.get('authorization');
-        if (authHeader !== `Bearer ${SECRET}`) {
+        if (!timingSafeEqualStr(authHeader, `Bearer ${SECRET}`)) {
              return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 

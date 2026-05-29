@@ -2,7 +2,7 @@
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
+const JWT_SECRET = process.env.JWT_SECRET; // required via env — no fallback (SEC-07)
 const JWT_EXPIRATION = '15m'; // 15 minutes token expiration
 
 export default class User {

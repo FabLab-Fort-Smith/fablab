@@ -10,7 +10,7 @@ import { sendVerificationEmail, sendInviteEmail } from '@/app/utils/email.util.j
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRATION = '7d'; // Token expiration for JWT tokens
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'default_key_32charslong____'; // Must be 32 bytes
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY; // 32 bytes, required via env — no fallback (SEC-23; full GCM redesign tracked under E5)
 const IV_LENGTH = 16; // 16 bytes for AES
 
 export default class AuthService {

@@ -2,14 +2,19 @@
 import { NextResponse } from 'next/server';
 import UserService from '@/app/api/v1/users/service';
 import { API_SECRET_KEY } from '@/lib/constants'; // Needs to be added or hardcoded for now
+import { timingSafeEqualStr } from '@/lib/secureCompare';
 
-// Simple shared secret check
-const SECRET = process.env.INTERNAL_API_SECRET || 'super-secure-internal-secret-882';
+// Shared secret check — required via env, no hardcoded fallback (SEC-04).
+const SECRET = process.env.INTERNAL_API_SECRET;
 
 export async function POST(req) {
     try {
+        if (!SECRET) {
+            console.error('INTERNAL_API_SECRET is not configured');
+            return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+        }
         const authHeader = req.headers.get('authorization');
-        if (authHeader !== `Bearer ${SECRET}`) {
+        if (!timingSafeEqualStr(authHeader, `Bearer ${SECRET}`)) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
