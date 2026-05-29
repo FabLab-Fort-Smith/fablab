@@ -2,15 +2,13 @@ import { NextResponse } from 'next/server';
 import BountyModel from '../model';
 import BountyService from '../service';
 import Constants from '@/lib/constants';
-import { auth } from "../../../../../../auth";
+import { guardOperationalEndpoint } from '@/lib/adminGuard';
 
 export async function POST(request) {
     try {
-        const session = await auth();
-        // TODO: Add admin check
-        if (!session) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        // SEC-18: seeds bounties — admin-only (was login-only, any user).
+        const blocked = await guardOperationalEndpoint();
+        if (blocked) return blocked;
 
         const seedBounties = [
             {

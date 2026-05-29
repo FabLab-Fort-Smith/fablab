@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import { db } from "@/lib/database";
+import { guardOperationalEndpoint } from '@/lib/adminGuard';
 
 export async function GET() {
     try {
+        // SEC-18: bulk migration over all users — admin-only.
+        const blocked = await guardOperationalEndpoint();
+        if (blocked) return blocked;
+
         const dbUsers = await db.dbUsers();
         const users = await dbUsers.find({}).toArray();
         let updatedCount = 0;

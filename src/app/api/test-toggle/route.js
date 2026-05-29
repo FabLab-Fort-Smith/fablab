@@ -1,8 +1,13 @@
 import { toggleLight } from '@/lib/access-control';
 import { NextResponse } from 'next/server';
+import { guardOperationalEndpoint } from '@/lib/adminGuard';
 
 export async function POST(request) {
   try {
+    // SEC-18: hardware test endpoint — admin-only and never reachable in production.
+    const blocked = await guardOperationalEndpoint({ productionDisabled: true });
+    if (blocked) return blocked;
+
     const body = await request.json();
     const { deviceId } = body;
 

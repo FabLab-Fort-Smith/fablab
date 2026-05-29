@@ -3,9 +3,14 @@ import { v4 as uuidv4 } from 'uuid';
 import PortfolioModel from '../v1/portfolio/model';
 import BountyModel from '../v1/bounties/model';
 import UserModel from '../v1/users/model';
+import { guardOperationalEndpoint } from '@/lib/adminGuard';
 
 export async function GET(req) {
     try {
+        // SEC-18: demo-data seeding — admin-only and never reachable in production.
+        const blocked = await guardOperationalEndpoint({ productionDisabled: true });
+        if (blocked) return blocked;
+
         // 1. Get all users to assign as creators
         const users = await UserModel.getAllUsers();
         if (users.length === 0) {

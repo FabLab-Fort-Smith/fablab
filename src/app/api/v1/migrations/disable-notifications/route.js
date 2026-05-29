@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/database';
+import { guardOperationalEndpoint } from '@/lib/adminGuard';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req) {
     try {
+        // SEC-18: bulk migration over all users — admin-only.
+        const blocked = await guardOperationalEndpoint();
+        if (blocked) return blocked;
+
         const database = await db.connect();
         const usersCollection = database.collection('users');
 

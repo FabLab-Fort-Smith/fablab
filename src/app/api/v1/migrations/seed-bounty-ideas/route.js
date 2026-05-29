@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import BountyIdeaService from "../../bounty-ideas/service";
 import BountyIdeaModel from "../../bounty-ideas/model";
+import { guardOperationalEndpoint } from '@/lib/adminGuard';
 
 const BOUNTY_IDEAS = [
     {
@@ -307,6 +308,10 @@ const BOUNTY_IDEAS = [
 
 export async function GET(req) {
     try {
+        // SEC-18: clears + reseeds the bounty-ideas collection — admin-only.
+        const blocked = await guardOperationalEndpoint();
+        if (blocked) return blocked;
+
         // Clear existing ideas to avoid duplicates (optional, but good for seeding)
         const collection = await BountyIdeaModel.getCollection();
         await collection.deleteMany({});

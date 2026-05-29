@@ -308,6 +308,8 @@ User-supplied values are interpolated into a regex without escaping.
 
 **Remediation:** Gate behind admin auth (or remove from the deployed build); never ship migration/seed/test handlers as open endpoints.
 
+**Status:** ✅ Remediated (branch `remediation/sec-18-gate-seed-migration`, issue #63). New shared guard `src/lib/adminGuard.js` (`guardOperationalEndpoint`) applied to `seed`, `test-toggle`, `migrations/{disable-notifications, merge-interests, seed-bounty-ideas}`, `badges/seed`, and `bounties/seed`: all now require an **admin** session (anon→401, non-admin→403). The purely dev/test handlers (`seed`, `test-toggle`) additionally **404 in production** (CLAUDE.md §8). Scope notes: `admin/migrate-memberships` was already admin-gated; `holodeck/seed-badges` is intentional CTF content (§14). Regression tests: `test/unit/admin-guard.test.js`, `test/e2e/seed-migration-auth.test.js`.
+
 ---
 
 ### SEC-19 — Body-driven NoSQL operator injection risk on write routes

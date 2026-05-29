@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server';
 import BadgeModel from '../model';
 import Constants from '@/lib/constants';
-import { auth } from "../../../../../../auth";
+import { guardOperationalEndpoint } from '@/lib/adminGuard';
 
 export async function POST(request) {
     try {
-        // const session = await auth();
-        // // TODO: Add admin check
-        // if (!session) {
-        //     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        // }
+        // SEC-18: seeds badge definitions — admin-only (the check was commented out).
+        const blocked = await guardOperationalEndpoint();
+        if (blocked) return blocked;
 
         const badges = Object.values(Constants.BADGES);
         let createdCount = 0;
