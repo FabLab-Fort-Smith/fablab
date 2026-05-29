@@ -351,6 +351,8 @@ Hardcoded hosts/buckets as `||` fallbacks make environments ambiguous and can ro
 **Location:** `vps/orchestrator/*`
 Container/label names are built from `userID`/`missionID`. A character allowlist appears to be applied before use; confirm it covers all sinks (Traefik rule strings, env injection) and cannot be bypassed. **Remediation:** validate against a strict pattern, prefer the Docker SDK's parameterization over string interpolation.
 
+**Status:** ✅ Verified + hardened (branch `remediation/sec-22-orchestrator-input`). Confirmed the allowlist covers **all** sinks — container/volume/image names and the Traefik `Host()` rule all derive from the char-stripped `safeUserID`/`safeMissionID` (`[a-zA-Z0-9]` / `[a-zA-Z0-9-_]`), so backticks/quotes/spaces/`/`/`:`/path-traversal can't break out; `options` from the body is unused (no sink). Hardened the one residual gap: an all-illegal id sanitized to `""` (cross-user `data_` volume / wildcard-host collision) — now coerced to string and **rejected (400) when empty**, via the testable `vps/orchestrator/lib/sanitize.js` helper. Guarded by `test/unit/orchestrator-sanitize.test.js`.
+
 ---
 
 ## Appendix A — API route authentication matrix (verified)

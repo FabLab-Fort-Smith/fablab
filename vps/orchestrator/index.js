@@ -2,6 +2,7 @@ const fastify = require('fastify')({ logger: true });
 const Docker = require('dockerode');
 const { v4: uuidv4 } = require('uuid');
 const { verifyServiceKey } = require('./lib/auth');
+const { safeName, USER_ID, MISSION_ID } = require('./lib/sanitize');
 require('dotenv').config();
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
@@ -30,10 +31,17 @@ fastify.post('/mission/start', async (request, reply) => {
         return reply.code(400).send({ error: 'Missing userID or missionID' });
     }
 
-    // Sanitize inputs
-    const safeUserID = userID.replace(/[^a-zA-Z0-9]/g, '');
-    const safeMissionID = missionID.replace(/[^a-zA-Z0-9-_]/g, '');
-    
+    // SEC-22: strict allowlist sanitization (coerces non-strings too). These feed
+    // the container/volume/image names and the Traefik Host() rule.
+    const safeUserID = safeName(userID, USER_ID);
+    const safeMissionID = safeName(missionID, MISSION_ID);
+
+    // Reject ids that sanitize to empty — an empty id would collide across users
+    // (shared `data_` volume / wildcard host), not just produce an odd name.
+    if (!safeUserID || !safeMissionID) {
+        return reply.code(400).send({ error: 'Invalid userID or missionID' });
+    }
+
     const containerName = `mission-${safeUserID}-${safeMissionID}`;
     const hostRule = `${safeUserID}.${DOMAIN}`;
     const token = uuidv4(); // One-time token for ttyd
