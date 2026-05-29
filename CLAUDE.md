@@ -100,6 +100,7 @@ Generated code must satisfy these **by default**:
 - **Monitoring & alerting** on anomalies: auth brute-force, unusual unlock frequency, webhook signature failures, error spikes, dependency CVE alerts.
 - **Vulnerability management with SLAs** (triage + fix): Critical ≤ 48h, High ≤ 7d, Medium ≤ 30d, Low ≤ 90d — tracked as GitHub issues with the matching severity label.
 - **Patch & dependency management:** automated dependency updates (Dependabot/Renovate, reviewed weekly); apply security patches within the SLA; no unmaintained or critical-CVE dependencies.
+- **Dependabot alerts are always remediated (mandate).** Every Dependabot/security alert is triaged and fixed within its severity SLA (§9) — never dismissed or left to age. **Pin dependencies to known-good versions** (exact versions in the lockfile; prefer exact or tightly-ranged versions in `package.json`) and upgrade only to a version confirmed to clear the alert without regressing CI. **Each remediation lands on its own branch + PR** (`fix/deps-<slug>` or `remediation/<area>-deps`), one rollback unit per advisory or per Dependabot group — never mixed into an unrelated feature branch. Verify the fix locally (`npm audit`, lint, tests, build) before opening the PR.
 - **Backups & recovery:** backups are encrypted and access-controlled; **recovery is tested** periodically against a defined RPO/RTO.
 
 ## 10. Incident response & vulnerability disclosure
