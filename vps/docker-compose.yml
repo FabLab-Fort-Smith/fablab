@@ -27,7 +27,7 @@ services:
     restart: always
     environment:
       - PORT=3000
-      - ORCHESTRATOR_SECRET=change_me_in_prod
+      - ORCHESTRATOR_SECRET=${ORCHESTRATOR_SECRET:?ORCHESTRATOR_SECRET must be set (no default)}
       - DOMAIN=term.crittercodes.dev
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock # Needs access to spawn containers

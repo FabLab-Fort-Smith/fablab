@@ -1,5 +1,5 @@
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:3000';
-const ORCHESTRATOR_SECRET = process.env.ORCHESTRATOR_SECRET || 'change_me_in_prod';
+const ORCHESTRATOR_SECRET = process.env.ORCHESTRATOR_SECRET; // required via env — no fallback (SEC-13)
 
 class OrchestratorService {
     static async startMission(userID, missionID) {

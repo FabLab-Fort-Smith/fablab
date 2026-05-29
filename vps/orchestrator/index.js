@@ -1,20 +1,21 @@
 const fastify = require('fastify')({ logger: true });
 const Docker = require('dockerode');
 const { v4: uuidv4 } = require('uuid');
+const { verifyServiceKey } = require('./lib/auth');
 require('dotenv').config();
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 const DOMAIN = process.env.DOMAIN || 'localhost';
 const SECRET = process.env.ORCHESTRATOR_SECRET;
 
-// Auth Middleware
+// Auth Middleware — constant-time, fails closed if SECRET is unset (SEC-13).
 fastify.addHook('preHandler', async (request, reply) => {
     // Skip auth for health check
     if (request.url === '/health') return;
 
     const key = request.headers['x-service-key'];
-    if (key !== SECRET) {
-        reply.code(401).send({ error: 'Unauthorized' });
+    if (!verifyServiceKey(key, SECRET)) {
+        return reply.code(401).send({ error: 'Unauthorized' });
     }
 });
 
@@ -112,6 +113,11 @@ fastify.post('/mission/start', async (request, reply) => {
 });
 
 const start = async () => {
+    // Fail fast: refuse to start without a configured service secret (SEC-13).
+    if (!SECRET) {
+        fastify.log.error('ORCHESTRATOR_SECRET is not set — refusing to start.');
+        process.exit(1);
+    }
     try {
         await fastify.listen({ port: process.env.PORT || 3000, host: '0.0.0.0' });
     } catch (err) {

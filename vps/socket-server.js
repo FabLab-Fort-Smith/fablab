@@ -3,6 +3,7 @@ import express from 'express';
 import { createServer } from 'http';
 import bodyParser from 'body-parser';
 import cors from 'cors';
+import { verifyDeviceSecret, loadDeviceSecrets } from './lib/deviceAuth.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -16,11 +17,15 @@ const server = createServer(app);
 // Store connected devices: Map<deviceId, { ws, ip, connectedAt }>
 const devices = new Map();
 
-// Device Secrets (In production, fetch this from a database)
-const DEVICE_SECRETS = {
-    'door-controller-01': 'sdflvkjnadflnvgq',
-    'laser-cutter-01': 'laser-secret'
-};
+// Device secrets are loaded from the DEVICE_SECRETS env var (JSON map of
+// deviceId -> secret). No secrets are hardcoded (SEC-06); verification is
+// constant-time — see ./lib/deviceAuth.js.
+const configuredDeviceCount = Object.keys(loadDeviceSecrets()).length;
+if (configuredDeviceCount === 0) {
+    console.warn('⚠️ No DEVICE_SECRETS configured — all device authentication will be rejected.');
+} else {
+    console.log(`Loaded secrets for ${configuredDeviceCount} device(s).`);
+}
 
 // --- WebSocket Server ---
 const wss = new WebSocketServer({ server });
@@ -37,7 +42,7 @@ wss.on('connection', (ws, req) => {
             if (data.type === 'auth') {
                 const { deviceId, secret } = data;
 
-                if (DEVICE_SECRETS[deviceId] === secret) {
+                if (verifyDeviceSecret(deviceId, secret)) {
                     authenticatedDeviceId = deviceId;
                     // Store extra metadata (ws + info)
                     devices.set(deviceId, { 
