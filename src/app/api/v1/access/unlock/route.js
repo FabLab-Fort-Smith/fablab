@@ -3,13 +3,17 @@ import { auth } from '../../../../../../auth';
 import UserModel from '@/app/api/v1/users/model';
 import Constants from '@/lib/constants';
 import { unlockDoor, toggleLight } from '@/lib/access-control';
+import { auditLog } from '@/lib/audit';
 
 export async function POST(request) {
     try {
         const session = await auth();
+        const source = request.headers.get('x-forwarded-for') || null;
         if (!session) {
+            auditLog('access.unlock', { actor: null, target: 'door-controller-01', outcome: 'denied', reason: 'unauthenticated', source });
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
+        const actor = session.user.userID;
 
         const user = await UserModel.getUserByID(session.user.userID);
         if (!user) {
@@ -26,7 +30,8 @@ export async function POST(request) {
         const isCommunity = user.membership?.type === 'community' && !isWaived;
 
         if (isCommunity && !isAdmin) {
-             return NextResponse.json({ 
+             auditLog('access.unlock', { actor, target: 'door-controller-01', outcome: 'denied', reason: 'community_member', source });
+             return NextResponse.json({
                 error: 'Access Denied: Community members do not have door access.',
                 details: { membershipType: 'community' }
             }, { status: 403 });
@@ -65,6 +70,7 @@ export async function POST(request) {
                 volunteerHoursPreviousMonth: volunteerHours,
              });
 
+             auditLog('access.unlock', { actor, target: 'door-controller-01', outcome: 'denied', reason: 'not_in_good_standing', volunteerHours, source });
              return NextResponse.json({
                 error: 'Access Denied: Not in good standing',
                 details: {
@@ -82,10 +88,12 @@ export async function POST(request) {
             // Using toggleLight as the user indicated the test page (which uses toggleLight) is the working switch.
             // In the future, this should likely be switched back to unlockDoor when the firmware supports it.
             const result = await toggleLight(deviceId);
+            auditLog('access.unlock', { actor, target: deviceId, outcome: 'granted', source });
             return NextResponse.json({ success: true, result });
         } catch (unlockError) {
             console.error('Unlock failed:', unlockError.message);
-            return NextResponse.json({ 
+            auditLog('access.unlock', { actor, target: deviceId, outcome: 'error', reason: 'controller_failure', source });
+            return NextResponse.json({
                 error: unlockError.message || 'Failed to unlock door',
                 details: unlockError.response?.data 
             }, { status: 502 }); // 502 Bad Gateway indicates upstream (controller) issue
