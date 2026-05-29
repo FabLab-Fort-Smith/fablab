@@ -1,0 +1,26 @@
+# Code owners — required reviewers per path. CLAUDE.md §12.
+#
+# All active contributors/collaborators are default owners (any of them can review a normal PR).
+# Security-sensitive and governance paths additionally route to security-capable owners so those
+# changes get focused review (CLAUDE.md §2). Only users with repo access are honored by GitHub.
+
+# Default — all contributors
+*                                   @CritterCodes @ShyftXero @FractumSeraph @0xb007ab1e
+
+# Security-relevant code (CLAUDE.md §2) — security owners review
+/auth.js                            @CritterCodes @0xb007ab1e
+/auth.config.js                     @CritterCodes @0xb007ab1e
+/src/middleware.js                  @CritterCodes @0xb007ab1e
+/src/lib/                           @CritterCodes @0xb007ab1e
+/src/app/api/                       @CritterCodes @0xb007ab1e
+/src/app/api/auth/                  @CritterCodes @0xb007ab1e
+/src/app/api/internal/             @CritterCodes @0xb007ab1e
+/vps/                               @CritterCodes @0xb007ab1e
+
+# Governance, policies, CI
+/CLAUDE.md                          @CritterCodes @0xb007ab1e
+/AGENTS.md                          @CritterCodes @0xb007ab1e
+/SECURITY.md                        @CritterCodes @0xb007ab1e
+/docs/audit/                        @CritterCodes @0xb007ab1e
+/docs/security/                     @CritterCodes @0xb007ab1e
+/.github/                           @CritterCodes @0xb007ab1e

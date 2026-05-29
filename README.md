@@ -1,5 +1,7 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+> **Contributing?** Read [`CONTRIBUTING.md`](./CONTRIBUTING.md) first. The full engineering rules for people and AI tools live in [`CLAUDE.md`](./CLAUDE.md) (with binding security/process docs under [`docs/audit/`](./docs/audit/)). Every change goes through a GitHub issue + a pull request into `main`.
+
 ## Getting Started
 
 First, run the development server:

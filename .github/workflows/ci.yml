@@ -1,0 +1,116 @@
+name: CI
+
+# Secure-SDLC CI gates. See CLAUDE.md §7, docs/audit/05-engineering-process.md §5, 06-security-standards.md §8.
+#
+# Gate enforcement policy:
+#   ENFORCED now  : lint, test, dependency-review (new deps only)
+#   REPORT-ONLY   : secret-scan, sast (semgrep), sca (npm audit), build
+#                   -> these flip to ENFORCED once the matching remediation lands:
+#                      secret-scan  after SEC-01  (#11)
+#                      sast/crypto  after SEC-23  (#24)
+#                      log-leak     after SEC-24  (#25)
+#   TODO (stubs)  : e2e, headers-check, tls-config-check, response-shape, boot-env-validation,
+#                   container-iac-scan, license-check  -> implemented as remediation builds them out.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (enforced)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  test:
+    name: Unit/integration tests (enforced)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test -- --passWithNoTests
+
+  build:
+    name: Build (report-only)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  sca:
+    name: Dependency CVE audit (report-only)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: npm audit (high+)
+        run: npm audit --audit-level=high
+
+  dependency-review:
+    name: Dependency review (enforced on PRs)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  secret-scan:
+    name: Secret scan (report-only until SEC-01/#11)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sast:
+    name: SAST - Semgrep (report-only until SEC-23/24)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    container:
+      image: returntocorp/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: semgrep (project rules + JS security packs)
+        run: semgrep ci --config ./.semgrep.yml --config "p/javascript" --config "p/nodejs" --config "p/secrets"
+        env:
+          SEMGREP_RULES: ""
