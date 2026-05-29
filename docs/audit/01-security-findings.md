@@ -383,6 +383,8 @@ These were discovered while defining the encryption/data-protection standard ([`
 **Impact:** Deterministic ciphertext leaks equality: anyone who can read the DB (see SEC-01) can confirm whether a specific email/phone exists and correlate records that share a value — a privacy/PII leak. CBC without a MAC is malleable and integrity-free. The fallback key is a landmine (and being 27 bytes it actually throws on `aes-256-cbc`, so the system already depends on the env var — but the literal must go regardless).
 **Remediation:** Use authenticated encryption (**AES-256-GCM**, random IV per record) for stored values; for equality search use a separate **keyed HMAC blind index**, not deterministic ciphertext; manage the key in a KMS/secret store with rotation; remove the fallback; make decryption fail closed. (Epic E5 / WI-5.1; key-fallback removal also folds into E3/WI-3.2.)
 
+**Status:** ⚠️ Partially done / planned. The hardcoded fallback key is **removed** (`ENCRYPTION_KEY` is env-only). The crypto redesign (CBC→GCM + HMAC blind index + fail-closed) is a **phased, backfilled, staging-validated data migration** — email is a deterministic-ciphertext *search key* (login/dedup/lookup), so switching to GCM without a blind index + backfilling every record would lock members out. Documented as a step-by-step plan: [`docs/migrations/sec-23-pii-encryption-gcm-blind-index.md`](../migrations/sec-23-pii-encryption-gcm-blind-index.md). Deferred for deliberate execution + SEC sign-off.
+
 ### SEC-24 — Sensitive data (incl. verification tokens) written to logs
 **Severity:** High
 **Location:** `src/app/api/auth/[...nextauth]/service.js:73,82,122`; reinforces SEC-20 (`auth.js`).
