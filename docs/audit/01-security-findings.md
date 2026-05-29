@@ -326,6 +326,8 @@ User-supplied values are interpolated into a regex without escaping.
 
 **Remediation:** Validate/whitelist body fields per route (zod or equivalent); reject `$`-prefixed keys; coerce expected scalar types.
 
+**Status:** ✅ Remediated (branch `remediation/sec-19-operator-injection`). Shared `src/lib/mongoSanitize.js` (`stripMongoOperators`, recursive `$`-key strip) applied to the body-driven writes: `users/service.createUser` and `notifications/service.create`. The user self-update path was already whitelisted in E2 (SEC-02, `sanitizeSelfUpdate`, now sharing this helper). GET routes use `searchParams` (strings), not operator-injectable. Guarded by `test/unit/mongo-sanitize.test.js`.
+
 ---
 
 ## Low / Informational

@@ -12,6 +12,8 @@
 // untrusted input only ever enters through the controller, which always
 // supplies an actor or returns 401 first.
 
+import { stripMongoOperators } from "@/lib/mongoSanitize";
+
 /** @typedef {{ userID: string, role?: string }} Actor */
 
 /** True only for the `admin` role (the single privileged role in this app). */
@@ -99,19 +101,8 @@ export const SELF_WRITABLE_FIELDS = new Set([
 // review state) are server-controlled and preserved from the stored record.
 const SELF_WRITABLE_MEMBERSHIP_FIELDS = new Set(["applicationDate", "volunteerLog"]);
 
-/** Recursively drop `$`-prefixed keys so a client body can't inject Mongo operators. */
-export const stripOperatorKeys = (value) => {
-    if (Array.isArray(value)) return value.map(stripOperatorKeys);
-    if (value && typeof value === "object" && !(value instanceof Date)) {
-        const out = {};
-        for (const [k, v] of Object.entries(value)) {
-            if (k.startsWith("$")) continue;
-            out[k] = stripOperatorKeys(v);
-        }
-        return out;
-    }
-    return value;
-};
+/** Recursively drop `$`-prefixed keys so a client body can't inject Mongo operators (SEC-19). */
+export const stripOperatorKeys = stripMongoOperators;
 
 /**
  * Reconcile a client-supplied volunteer log against the stored one so a member

@@ -3,6 +3,7 @@ import Notification from './class';
 import UserModel from '../users/model';
 import DiscordService from '@/lib/discord';
 import AuthService from '../../auth/[...nextauth]/service';
+import { stripMongoOperators } from '@/lib/mongoSanitize';
 import { 
     sendBountyNotificationEmail, 
     sendBountyClaimedEmail, 
@@ -15,7 +16,9 @@ import {
 
 export default class NotificationService {
     static async create(data) {
-        const { userID, type, title, message, link, metadata, emailType, emailData } = data;
+        // SEC-19: strip any $-prefixed (Mongo operator) keys so a crafted body
+        // (incl. nested metadata) can't inject operators into the stored doc.
+        const { userID, type, title, message, link, metadata, emailType, emailData } = stripMongoOperators(data || {});
         if (!userID || !title || !message) {
             throw new Error("Missing required fields");
         }

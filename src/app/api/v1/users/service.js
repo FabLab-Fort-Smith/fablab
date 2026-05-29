@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import User from "./class";
 import UserModel from "./model";
 import { isAdmin, toPublicUser, stripSensitive, isPublicActiveMember, sanitizeSelfUpdate } from "./access";
+import { stripMongoOperators } from "@/lib/mongoSanitize";
 import BadgeModel from "../badges/model";
 import BountyModel from "../bounties/model";
 import PortfolioModel from "../portfolio/model";
@@ -26,6 +27,9 @@ export default class UserService {
      */
     static createUser = async (userData) => {
         try {
+            // SEC-19: strip any $-prefixed (Mongo operator) keys from the raw body
+            // before it touches persistence.
+            userData = stripMongoOperators(userData || {});
             // Encrypt email and phone before creating a new user
             if(userData.email) userData.email = AuthService.encryptEmail(userData.email);
             if(userData.phoneNumber) userData.phoneNumber = AuthService.encryptPhone(userData.phoneNumber);
