@@ -19,10 +19,14 @@ export async function POST(req) {
 
         const targetDevice = deviceId || 'access-scanner-01'; // Default or from UI
 
-        // Call WebSocket Server
-        // Use Prod URL as default
-        const wsServerUrl = process.env.WS_SERVER_URL || 'https://socket.crittercodes.dev';
-        
+        // Call WebSocket Server. SEC-21: require the URL from env (no hardcoded
+        // fallback that could point card pairing at the wrong host).
+        const wsServerUrl = process.env.WS_SERVER_URL;
+        if (!wsServerUrl) {
+            console.error('WS_SERVER_URL is not configured');
+            return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+        }
+
         const response = await fetch(`${wsServerUrl}/api/v2/pairing/start`, {
             method: 'POST',
             headers: {

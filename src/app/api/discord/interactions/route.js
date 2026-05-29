@@ -323,8 +323,13 @@ export async function POST(request) {
                     return NextResponse.json({ type: 4, data: { content: "🔒 Wi-Fi access is reserved for active members.", flags: 64 } });
                 }
 
-                const wifiSSID = process.env.WIFI_SSID || "FabLab-core";
-                const wifiPass = process.env.WIFI_PASSWORD || "FabLabFS";
+                // SEC-21: no hardcoded Wi-Fi credentials — read from env, and if
+                // unset, don't leak a default password.
+                const wifiSSID = process.env.WIFI_SSID;
+                const wifiPass = process.env.WIFI_PASSWORD;
+                if (!wifiSSID || !wifiPass) {
+                    return NextResponse.json({ type: 4, data: { content: "⚠️ Wi-Fi details aren't configured yet. Please ask an admin.", flags: 64 } });
+                }
 
                 return NextResponse.json({
                     type: 4,

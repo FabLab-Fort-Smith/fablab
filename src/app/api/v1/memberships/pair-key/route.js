@@ -29,7 +29,12 @@ export async function POST(req) {
     // Clear old card code immediately so the previous card stops working
     await UserService.updateUser(userID, { "membership.accessKey.code": null });
 
-    const wsServerUrl = process.env.WS_SERVER_URL || "https://socket.crittercodes.dev";
+    // SEC-21: require the socket-server URL from env (no hardcoded fallback).
+    const wsServerUrl = process.env.WS_SERVER_URL;
+    if (!wsServerUrl) {
+        console.error("WS_SERVER_URL is not configured");
+        return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
+    }
 
     try {
         const response = await fetch(`${wsServerUrl}/api/v2/pairing/start`, {

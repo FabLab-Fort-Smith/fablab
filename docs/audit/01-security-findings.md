@@ -344,6 +344,8 @@ User-supplied values are interpolated into a regex without escaping.
 **Location:** `src/app/api/v1/upload/route.js:9-14,40,68` (`s3.crittercodes.dev`, `fablab-bounties`), `src/lib/access-control.js:1` (`http://localhost:3001`), `src/app/api/admin/pair-card/route.js:29` (`socket.crittercodes.dev`)
 Hardcoded hosts/buckets as `||` fallbacks make environments ambiguous and can route traffic to the wrong target if env vars are missing. **Remediation:** require config explicitly; fail if unset.
 
+**Status:** ✅ Remediated (branch `remediation/sec-21-infra-fallbacks`). Removed the `process.env.X || '<literal>'` fallbacks: `upload/route.js` S3 endpoint/bucket (in SEC-08 #59), `access-control.js` (`ACCESS_CONTROL_API_URL` → required), `pair-card` + `memberships/pair-key` (`WS_SERVER_URL` → required, 500 if unset). Also removed two hardcoded **secret** fallbacks found in the sweep (SEC-04 class): the Wi-Fi password in `discord/interactions` and the reCAPTCHA secret key in `auth/register` (now fail-closed if unset), plus the `console.log(data)` password leak there. Guarded by `test/unit/sec-21-no-infra-fallbacks.test.js`.
+
 ### SEC-22 — Orchestrator container spawn input handling
 **Severity:** Low (verify)
 **Location:** `vps/orchestrator/*`

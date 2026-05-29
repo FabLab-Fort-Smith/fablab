@@ -16,9 +16,12 @@ function post(body = { userId: "u1" }) {
 }
 
 afterEach(() => jest.restoreAllMocks());
+const ORIGINAL_WS = process.env.WS_SERVER_URL;
 afterAll(() => {
   if (ORIGINAL === undefined) delete process.env.SOCKET_API_SECRET;
   else process.env.SOCKET_API_SECRET = ORIGINAL;
+  if (ORIGINAL_WS === undefined) delete process.env.WS_SERVER_URL;
+  else process.env.WS_SERVER_URL = ORIGINAL_WS;
 });
 
 describe("POST /api/admin/pair-card — admin authorization (SEC-11)", () => {
@@ -37,6 +40,7 @@ describe("POST /api/admin/pair-card — admin authorization (SEC-11)", () => {
   test("admin session -> calls the WS pairing endpoint with a Bearer secret", async () => {
     auth.mockResolvedValue({ user: { role: "admin" } });
     process.env.SOCKET_API_SECRET = "sock-secret";
+    process.env.WS_SERVER_URL = "https://socket.example.test"; // SEC-21: now required (no hardcoded fallback)
     const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ paired: true }), {
         status: 200,

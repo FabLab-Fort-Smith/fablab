@@ -24,7 +24,13 @@ export async function POST(req) {
              return NextResponse.json({ error: "Captcha token is missing." }, { status: 400 });
         }
 
-        const secretKey = process.env.RECAPTCHA_SECRET_KEY || "6LeIxAcTAAAAAGG-vFI1TnRWxPZ7d02F2KbTK44"; // Test Secret Key
+        // SEC-21: require the reCAPTCHA secret from env — no hardcoded fallback
+        // key. Fail closed (don't silently verify) if it's unset.
+        const secretKey = process.env.RECAPTCHA_SECRET_KEY;
+        if (!secretKey) {
+            console.error("RECAPTCHA_SECRET_KEY is not configured");
+            return NextResponse.json({ error: "Captcha verification is unavailable." }, { status: 500 });
+        }
         const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${secretKey}&response=${captchaToken}`;
 
         const captchaRes = await fetch(verificationUrl, { method: "POST" });
@@ -34,8 +40,7 @@ export async function POST(req) {
             return NextResponse.json({ error: "Captcha verification failed." }, { status: 400 });
         }
 
-        console.log(data);
-        console.log('sending to auth controller');
+        // SEC-20: don't log the registration body (contains the plaintext password).
         // Register the new user using the AuthController service
         const result = await AuthController.register(data);
 

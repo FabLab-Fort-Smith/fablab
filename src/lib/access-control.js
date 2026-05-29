@@ -1,4 +1,11 @@
-const ACCESS_CONTROL_API_URL = process.env.ACCESS_CONTROL_API_URL || 'http://localhost:3001';
+// SEC-21: no hardcoded fallback — the access-control (socket-server) URL must
+// come from the environment. Resolved per call so a missing config fails loudly
+// instead of silently pointing device control at localhost.
+function controlApiUrl() {
+    const url = process.env.ACCESS_CONTROL_API_URL;
+    if (!url) throw new Error('ACCESS_CONTROL_API_URL is not configured');
+    return url;
+}
 
 // Bearer secret for the socket server's control endpoints (SEC-05). The server
 // rejects requests that don't carry it, so device control is no longer open.
@@ -11,7 +18,7 @@ function authHeaders(extra = {}) {
 
 export async function unlockDoor(deviceId) {
     try {
-        const res = await fetch(`${ACCESS_CONTROL_API_URL}/api/unlock`, {
+        const res = await fetch(`${controlApiUrl()}/api/unlock`, {
             method: 'POST',
             headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ deviceId }),
@@ -29,7 +36,7 @@ export async function unlockDoor(deviceId) {
 
 export async function toggleLight(deviceId) {
     try {
-        const res = await fetch(`${ACCESS_CONTROL_API_URL}/api/toggle-light`, {
+        const res = await fetch(`${controlApiUrl()}/api/toggle-light`, {
             method: 'POST',
             headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ deviceId }),
@@ -47,7 +54,7 @@ export async function toggleLight(deviceId) {
 
 export async function getDeviceStatus(deviceId) {
     try {
-        const res = await fetch(`${ACCESS_CONTROL_API_URL}/api/status/${deviceId}`, {
+        const res = await fetch(`${controlApiUrl()}/api/status/${deviceId}`, {
             headers: authHeaders(),
         });
         if (!res.ok) return false;
