@@ -11,9 +11,10 @@ const config = {
   // mongodb-memory-server may download a binary on first run.
   testTimeout: 60000,
   clearMocks: true,
-  // App Router uses the "@/" path alias (see jsconfig.json).
+  // App Router uses the "@/" path alias. jsconfig maps it to ["./src/*","./*"],
+  // so try src first, then the repo root (e.g. root-level auth.js).
   moduleNameMapper: {
-    "^@/(.*)$": "<rootDir>/src/$1",
+    "^@/(.*)$": ["<rootDir>/src/$1", "<rootDir>/$1"],
   },
 };
 

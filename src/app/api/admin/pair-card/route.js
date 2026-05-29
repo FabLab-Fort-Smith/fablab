@@ -4,15 +4,10 @@ import { auth } from '@/auth';
 
 export async function POST(req) {
     const session = await auth();
-    
-    // Check if admin
 
-    // Note: Adjust the role check based on your actual auth schema
+    // Only staff/admins may pair access cards (SEC-11) — fail closed.
     if (!session || !session.user || !['admin', 'staff'].includes(session.user.role)) {
-       // return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-       // For dev speed/debugging, I'm commenting out strict role check if schema varies, 
-       // but strictly you should uncomment it.
-       // Assuming specific valid emails for now if role missing
+       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
@@ -30,7 +25,10 @@ export async function POST(req) {
         
         const response = await fetch(`${wsServerUrl}/api/v2/pairing/start`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${process.env.SOCKET_API_SECRET || ''}`,
+            },
             body: JSON.stringify({
                 userId,
                 deviceId: targetDevice
