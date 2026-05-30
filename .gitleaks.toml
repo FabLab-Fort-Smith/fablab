@@ -1,0 +1,38 @@
+# gitleaks config for The-Lab — see CLAUDE.md §7 (secret-scan gate) and §14 (CTF).
+#
+# We run the open-source gitleaks CLI (not the licensed GitHub Action). This config
+# extends the default ruleset and allowlists the intentionally-vulnerable
+# "Hack the Lab" CTF zones, which ship planted fake secrets/flags on purpose
+# (CLAUDE.md §14). Those are game content, not defects — allowlisting them keeps a
+# real leak from being buried in CTF noise. Real infra/member-data paths are NOT
+# allowlisted and are still scanned.
+
+title = "The-Lab gitleaks"
+
+# Inherit gitleaks' built-in rules.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "CTF content (CLAUDE.md §14) + confirmed-public / test-fixture false positives"
+paths = [
+  # --- Hack the Lab CTF zones (CLAUDE.md §14): planted fake secrets/flags ---
+  '''vps/missions/.*''',
+  '''src/app/dashboard/activities/terminal/.*''',
+  '''src/app/api/v1/holodeck/.*''',
+  '''src/app/api/v1/arcade/.*''',
+  '''src/app/components/holodeck/.*''',
+  '''docs/game/.*''',
+  # --- Confirmed false positives (triaged 2026-05-29, Refs #111) ---
+  # Test fixtures use deliberately fake/dummy keys (e.g. AUTH_SECRET="a").
+  '''test/.*''',
+  # Public Discord channel/role snowflake IDs (not secrets; client-visible config).
+  '''src/lib/constants\.js''',
+  # gitleaks' own config carries example secret patterns.
+  '''\.gitleaks\.toml''',
+]
+regexes = [
+  # NEXT_PUBLIC_RECAPTCHA_SITE_KEY — reCAPTCHA *site* keys are public by design
+  # (the secret is the server-side reCAPTCHA secret key, which is not in source).
+  '''6L[0-9A-Za-z_-]{38}''',
+]

@@ -10,8 +10,13 @@ name: CI
 #                      secret-scan  after SEC-01  (#11)
 #                      sast/crypto  after SEC-23  (#24)
 #                      log-leak     after SEC-24  (#25)
-# Note: CodeQL workflow removed — code scanning needs GitHub Advanced Security
-#       (unavailable on this private repo's free plan). Re-add on upgrade.
+# Free-plan tooling (this repo has no GitHub Advanced Security / paid licenses):
+#   - CodeQL workflow removed — code scanning needs GHAS. Re-add on upgrade.
+#   - dependency-review: uses OSV-Scanner (free) instead of actions/dependency-
+#     review-action (needs GHAS). Gates on High/Critical only (CVSS >= 7.0).
+#   - secret-scan: runs the open-source gitleaks CLI binary instead of
+#     gitleaks-action@v2 (needs a paid GITLEAKS_LICENSE for org repos).
+#     Allowlist + CTF exclusions live in .gitleaks.toml. (Refs #111)
 #   TODO (stubs)  : e2e, headers-check, tls-config-check, response-shape, boot-env-validation,
 #                   container-iac-scan, license-check  -> implemented as remediation builds them out.
 
@@ -83,14 +88,55 @@ jobs:
         run: npm audit --audit-level=high
 
   dependency-review:
+    # OSV-Scanner replaces actions/dependency-review-action: the latter needs
+    # GitHub Advanced Security (paid, unavailable on this free-plan repo).
+    # OSV-Scanner is free and runs anywhere. We gate on High/Critical only
+    # (CVSS >= 7.0), mirroring the prior `fail-on-severity: high`; lower-severity
+    # findings are reported to the log but don't block (their fix is a separate
+    # deps PR per the Dependabot-remediation mandate).
     name: Dependency review (enforced on PRs)
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/dependency-review-action@v5
-        with:
-          fail-on-severity: high
+      - name: Install OSV-Scanner
+        env:
+          OSV_VERSION: 2.3.8
+        run: |
+          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" -o /usr/local/bin/osv-scanner
+          chmod +x /usr/local/bin/osv-scanner
+          osv-scanner --version
+      - name: Scan dependencies (report all to log)
+        run: osv-scanner scan --lockfile=package-lock.json --format=json --output=osv.json || true
+      - name: Gate on High/Critical (CVSS >= 7.0)
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          data = json.load(open("osv.json"))
+          blocking, reported = [], []
+          for res in data.get("results", []):
+              for pkg in res.get("packages", []):
+                  name = pkg.get("package", {}).get("name", "?")
+                  for grp in pkg.get("groups", []):
+                      try:
+                          score = float(grp.get("max_severity") or 0)
+                      except ValueError:
+                          score = 0.0
+                      line = f"{name}: {', '.join(grp.get('ids', []))} (CVSS {score})"
+                      reported.append(line)
+                      if score >= 7.0:
+                          blocking.append(line)
+          if reported:
+              print("All dependency findings:")
+              for r in reported:
+                  print(f"  - {r}")
+          if blocking:
+              print("High/Critical dependency vulnerabilities (blocking):")
+              for b in blocking:
+                  print(f"  - {b}")
+              sys.exit(1)
+          print("No High/Critical dependency vulnerabilities. (Lower-severity findings, if any, are in the scan log above.)")
+          PY
 
   secret-scan:
     name: Secret scan (report-only until SEC-01/#11)
@@ -100,10 +146,18 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
+      # Run the open-source gitleaks CLI directly. gitleaks/gitleaks-action@v2
+      # requires a paid GITLEAKS_LICENSE for org-owned repos and errors before
+      # scanning; the CLI binary is free. Config + CTF allowlist in .gitleaks.toml.
+      - name: Install gitleaks
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          ./gitleaks version
+      - name: gitleaks detect (full history)
+        run: ./gitleaks detect --source . --config .gitleaks.toml --redact --verbose --exit-code 1
 
   sast:
     name: SAST - Semgrep (report-only until SEC-23/24)
