@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "../../../../../../../auth";
-import squareClient from "@/lib/square";
+import { createCustomer, getCatalogObject, searchCatalogObjects, createPaymentLink } from "@/lib/square";
 import { db } from "@/lib/database";
 import { v4 as uuidv4 } from "uuid";
-
-const customersApi = squareClient.customersApi;
-const checkoutApi = squareClient.checkoutApi;
 
 export async function POST(request, context) {
   try {
@@ -32,7 +29,7 @@ export async function POST(request, context) {
     // Ensure a Square customer record exists for this user
     let squareCustomerId = user.membership?.squareCustomerId || user.squareCustomerId || user.squareID;
     if (!squareCustomerId) {
-      const { result } = await customersApi.createCustomer({
+      const result = await createCustomer({
         idempotencyKey: uuidv4(),
         givenName: user.firstName || "Unknown",
         familyName: user.lastName || "User",
@@ -46,12 +43,12 @@ export async function POST(request, context) {
     // Fetch variation + parent plan name to build a display label
     let itemLabel = "Membership";
     try {
-      const { result: varResult } = await squareClient.catalogApi.retrieveCatalogObject(planID);
+      const varResult = await getCatalogObject(planID);
       const variation = varResult.object;
       const variationName = variation?.subscriptionPlanVariationData?.name || "";
       const parentPlanId = variation?.subscriptionPlanVariationData?.subscriptionPlanId;
       if (parentPlanId) {
-        const { result: planResult } = await squareClient.catalogApi.retrieveCatalogObject(parentPlanId);
+        const planResult = await getCatalogObject(parentPlanId);
         const planName = planResult.object?.subscriptionPlanData?.name || "";
         itemLabel = variationName ? `${planName} — ${variationName}` : planName || itemLabel;
       } else {
@@ -67,7 +64,7 @@ export async function POST(request, context) {
     // Apply coupon discount if provided
     let discountLabel = "";
     if (couponCode) {
-      const { result: searchResult } = await squareClient.catalogApi.searchCatalogObjects({
+      const searchResult = await searchCatalogObjects({
         objectTypes: ["DISCOUNT"],
         query: { exactQuery: { attributeName: "name", attributeValue: couponCode.toUpperCase() } },
       });
@@ -100,7 +97,7 @@ export async function POST(request, context) {
       checkoutOptions.subscriptionPlanId = planID;
     }
 
-    const { result: checkoutResult } = await checkoutApi.createPaymentLink({
+    const checkoutResult = await createPaymentLink({
       idempotencyKey: uuidv4(),
       quickPay: {
         name: itemName,

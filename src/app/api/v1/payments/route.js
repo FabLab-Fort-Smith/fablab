@@ -1,6 +1,6 @@
 // src/app/api/v1/payments/route.js
 import { NextResponse } from 'next/server';
-import squareClient from "@/lib/square";
+import { createPayment, bigintReplacer } from "@/lib/square";
 import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(req) {
@@ -11,7 +11,7 @@ export async function POST(req) {
         return NextResponse.json({ error: "Missing amount or sourceId" }, { status: 400 });
     }
 
-    const { result } = await squareClient.paymentsApi.createPayment({
+    const result = await createPayment({
       idempotencyKey: uuidv4(), // Ensure unique key for each request
       amountMoney: {
         amount: BigInt(amount), // Amount in cents (e.g., $10.00 => 1000)
@@ -22,9 +22,7 @@ export async function POST(req) {
     });
 
     // Note: BigInt cannot be serialized to JSON directly. Convert to string.
-    const response = JSON.parse(JSON.stringify(result, (key, value) =>
-        typeof value === 'bigint' ? value.toString() : value
-    ));
+    const response = JSON.parse(JSON.stringify(result, bigintReplacer));
 
     return NextResponse.json(response);
   } catch (error) {

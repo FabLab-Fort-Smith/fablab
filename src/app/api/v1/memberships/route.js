@@ -1,18 +1,14 @@
 import { NextResponse } from "next/server";
-import squareClient from "@/lib/square";
+import { listCatalog, getCatalogObject, cancelSubscription } from "@/lib/square";
 import { db } from "@/lib/database";
 import UserService from "../users/service";
 import { v4 as uuidv4 } from "uuid";
-
-const catalogApi = squareClient.catalogApi;
-const customersApi = squareClient.customersApi;
-const subscriptionsApi = squareClient.subscriptionsApi;
 
 // 🟢 GET: Retrieve Membership Plans
 export async function GET() {
   try {
     console.log("📢 [GET] Fetching membership plans...");
-    const { result } = await catalogApi.listCatalog(undefined, "SUBSCRIPTION_PLAN");
+    const result = await listCatalog("SUBSCRIPTION_PLAN");
 
     if (!result.objects || !Array.isArray(result.objects) || result.objects.length === 0) {
       console.warn("⚠️ No membership plans found in Square.");
@@ -53,7 +49,7 @@ export async function GET() {
       if (eligibleItemId) {
         try {
           // Fetch item price from Square Catalog
-          const { result: itemResult } = await catalogApi.retrieveCatalogObject(eligibleItemId);
+          const itemResult = await getCatalogObject(eligibleItemId);
           const itemData = itemResult.object?.itemData?.variations?.[0]?.itemVariationData?.priceMoney;
 
           if (itemData) {
@@ -108,7 +104,7 @@ export async function DELETE(req) {
 
     console.log("📤 [DELETE] Sending cancellation request to Square for:", user.membership.id);
 
-    const { result } = await subscriptionsApi.cancelSubscription(user.membership.id);
+    const result = await cancelSubscription(user.membership.id);
 
     if (!result) {
       console.error("❌ [DELETE] Failed to cancel subscription.");

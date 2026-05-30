@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import squareClient from '@/lib/square';
+import { searchOrders } from '@/lib/square';
 import { db } from '@/lib/database';
 
 export const dynamic = 'force-dynamic';
@@ -41,7 +41,7 @@ async function getDonationsTotalCents() {
         const start = startOfCurrentMonth();
         const now = new Date();
 
-        const { result } = await squareClient.ordersApi.searchOrders({
+        const result = await searchOrders({
             locationIds: [process.env.SQUARE_LOCATION_ID],
             query: {
                 filter: {

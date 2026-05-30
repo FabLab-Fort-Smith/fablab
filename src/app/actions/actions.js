@@ -1,18 +1,16 @@
 "use server";
 
-import { Client } from "square";
+import { createPayment } from "@/lib/square";
 import { randomUUID } from "crypto";
 
-// Ensure BigInt can be serialized in JSON responses
+// Ensure BigInt can be serialized in JSON responses.
+// NOTE: this global monkeypatch is slated for removal in P2 (square v44) in
+// favour of explicit bigint→string conversion at response boundaries
+// (see docs/migrations/square-v44-migration.md, inventory correction #3).
+// Kept as-is for P1 to preserve behaviour while only the SDK call moves to the adapter.
 BigInt.prototype.toJSON = function () {
   return this.toString();
 };
-
-// Initialize Square API Client
-const { paymentsApi } = new Client({
-  accessToken: process.env.SQUARE_ACCESS_TOKEN,
-  environment: process.env.SQUARE_ENVIRONMENT
-});
 
 /**
  * Processes a payment with Square's Payments API
@@ -25,7 +23,7 @@ export async function submitPayment(sourceId, amount, currency = "USD") {
   try {
     console.log("🔹 Processing Payment...");
 
-    const { result } = await paymentsApi.createPayment({
+    const result = await createPayment({
       idempotencyKey: randomUUID(),
       sourceId,
       amountMoney: {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "../../../../../../../auth";
-import squareClient from "@/lib/square";
+import { listPayments, searchSubscriptions, getCustomer, listCards, createSubscription, getCatalogObject } from "@/lib/square";
 import { db } from "@/lib/database";
 import { v4 as uuidv4 } from "uuid";
 import UserService from "@/app/api/v1/users/service";
@@ -18,17 +18,7 @@ export async function GET(request) {
     const beginTime = searchParams.get("beginTime") || undefined;
     const endTime = searchParams.get("endTime") || undefined;
 
-    const { result } = await squareClient.paymentsApi.listPayments(
-      beginTime,   // beginTime
-      endTime,     // endTime
-      undefined,   // sortOrder
-      undefined,   // cursor
-      undefined,   // locationId
-      undefined,   // total
-      undefined,   // last4
-      undefined,   // cardBrand
-      100          // limit
-    );
+    const result = await listPayments({ beginTime, endTime, limit: 100 });
 
     const payments = result.payments || [];
 
@@ -41,7 +31,7 @@ export async function GET(request) {
     const subscriberCustomerIds = new Set();
     if (customerIds.length) {
       try {
-        const { result: subResult } = await squareClient.subscriptionsApi.searchSubscriptions({
+        const subResult = await searchSubscriptions({
           query: { filter: { customerIds } },
           limit: 200,
         });
@@ -73,7 +63,7 @@ export async function GET(request) {
     await Promise.allSettled(
       unlinkdIds.map(async (id) => {
         try {
-          const { result } = await squareClient.customersApi.retrieveCustomer(id);
+          const result = await getCustomer(id);
           const c = result.customer;
           if (c) squareCustomerMap[id] = {
             name: [c.givenName, c.familyName].filter(Boolean).join(" ") || null,
@@ -146,7 +136,7 @@ export async function POST(request) {
     // Convert to a Square subscription using the customer's card on file
     if (planVariationId && !subscriptionFound) {
       try {
-        const { result: cardsResult } = await squareClient.cardsApi.listCards(undefined, squareCustomerId);
+        const cardsResult = await listCards({ customerId: squareCustomerId });
         const card = (cardsResult.cards || []).find(c => c.enabled !== false);
         // Use provided startDate (admin sets this to avoid double-charging).
         // Default to 30 days out if not provided.
@@ -160,7 +150,7 @@ export async function POST(request) {
           startDate: subStartDate,
         };
         if (card) subBody.cardId = card.id;
-        const { result: subResult } = await squareClient.subscriptionsApi.createSubscription(subBody);
+        const subResult = await createSubscription(subBody);
         const sub = subResult.subscription;
         if (sub) {
           const updateData = {
@@ -172,11 +162,11 @@ export async function POST(request) {
             "membership.accessKey.issued": true,
           };
           try {
-            const { result: varR } = await squareClient.catalogApi.retrieveCatalogObject(planVariationId);
+            const varR = await getCatalogObject(planVariationId);
             updateData["membership.variationName"] = varR.object?.subscriptionPlanVariationData?.name || "";
             const parentId = varR.object?.subscriptionPlanVariationData?.subscriptionPlanId;
             if (parentId) {
-              const { result: planR } = await squareClient.catalogApi.retrieveCatalogObject(parentId);
+              const planR = await getCatalogObject(parentId);
               updateData["membership.planName"] = planR.object?.subscriptionPlanData?.name || "";
             }
           } catch { /* non-fatal */ }

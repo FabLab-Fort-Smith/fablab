@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { auth } from "../../../../../../auth";
-import squareClient from "@/lib/square";
+import {
+  getCatalogObject, listCatalog, upsertCatalogObject, deleteCatalogObject,
+  searchSubscriptions, cancelSubscription, pauseSubscription, resumeSubscription, swapPlan,
+  getOrder,
+} from "@/lib/square";
 import { db } from "@/lib/database";
 import { v4 as uuidv4 } from "uuid";
-
-const catalogApi = squareClient.catalogApi;
-const subscriptionsApi = squareClient.subscriptionsApi;
-const ordersApi = squareClient.ordersApi;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -70,7 +70,7 @@ async function fetchOrderTemplatePrices(templateIds) {
   await Promise.allSettled(
     [...new Set(templateIds)].filter(Boolean).map(async (id) => {
       try {
-        const { result } = await ordersApi.retrieveOrder(id);
+        const result = await getOrder(id);
         const amount = result.order?.lineItems?.[0]?.basePriceMoney?.amount;
         if (amount != null) priceMap[id] = Number(amount);
       } catch { /* non-fatal */ }
@@ -83,7 +83,7 @@ async function fetchAllSubscriptions(filter) {
   const subs = [];
   let cursor;
   do {
-    const { result } = await subscriptionsApi.searchSubscriptions({ cursor, limit: 200, query: { filter } });
+    const result = await searchSubscriptions({ cursor, limit: 200, query: { filter } });
     subs.push(...(result.subscriptions || []));
     cursor = result.cursor;
   } while (cursor);
@@ -133,7 +133,7 @@ export async function GET(request) {
 
     // ── Subscriber list for a specific plan ──
     if (subscribersPlanId) {
-      const { result: planResult } = await catalogApi.retrieveCatalogObject(subscribersPlanId, true);
+      const planResult = await getCatalogObject(subscribersPlanId, true);
       const variationIds = (planResult.object?.subscriptionPlanData?.subscriptionPlanVariations || [])
         .map(v => v.id).filter(Boolean);
 
@@ -187,15 +187,15 @@ export async function GET(request) {
     }
 
     // ── Full plan list ──
-    const [{ result }, hidden, hiddenVars, planMeta, legacy] = await Promise.all([
-      catalogApi.listCatalog(undefined, "SUBSCRIPTION_PLAN"),
+    const [catalogResult, hidden, hiddenVars, planMeta, legacy] = await Promise.all([
+      listCatalog("SUBSCRIPTION_PLAN"),
       getHiddenPlanIds(),
       getHiddenVariationIds(),
       getPlanMeta(),
       getLegacyPlanIds(),
     ]);
 
-    const rawPlans = result.objects || [];
+    const rawPlans = catalogResult.objects || [];
     const allVariationIds = rawPlans.flatMap(p =>
       (p.subscriptionPlanData?.subscriptionPlanVariations || []).map(v => v.id)
     );
@@ -288,7 +288,7 @@ export async function POST(request) {
       };
     });
 
-    const { result } = await catalogApi.upsertCatalogObject({
+    const result = await upsertCatalogObject({
       idempotencyKey: uuidv4(),
       object: {
         type: "SUBSCRIPTION_PLAN",
@@ -333,7 +333,7 @@ export async function PUT(request) {
     }
 
     if (removeVariationId) {
-      const { result: current } = await catalogApi.retrieveCatalogObject(planId, true);
+      const current = await getCatalogObject(planId, true);
       const existing = current.object;
       if (!existing) return NextResponse.json({ error: "Plan not found." }, { status: 404 });
       const remaining = (existing.subscriptionPlanData?.subscriptionPlanVariations || [])
@@ -341,7 +341,7 @@ export async function PUT(request) {
       if (!remaining.length)
         return NextResponse.json({ error: "Cannot remove the only variation." }, { status: 400 });
       try {
-        const { result: upsertResult } = await catalogApi.upsertCatalogObject({
+        const upsertResult = await upsertCatalogObject({
           idempotencyKey: uuidv4(),
           object: {
             ...existing,
@@ -363,7 +363,7 @@ export async function PUT(request) {
       }
     }
 
-    const { result: current } = await catalogApi.retrieveCatalogObject(planId, true);
+    const current = await getCatalogObject(planId, true);
     const existing = current.object;
     if (!existing)
       return NextResponse.json({ error: "Plan not found." }, { status: 404 });
@@ -413,7 +413,7 @@ export async function PUT(request) {
     }
 
     try {
-      const { result } = await catalogApi.upsertCatalogObject({
+      const result = await upsertCatalogObject({
         idempotencyKey: uuidv4(),
         object: {
           ...existing,
@@ -450,15 +450,15 @@ export async function PATCH(request) {
       return NextResponse.json({ error: "action and subscriptionId are required." }, { status: 400 });
 
     if (action === "pause") {
-      await subscriptionsApi.pauseSubscription(subscriptionId, {});
+      await pauseSubscription(subscriptionId, {});
     } else if (action === "resume") {
-      await subscriptionsApi.resumeSubscription(subscriptionId, {});
+      await resumeSubscription(subscriptionId, {});
     } else if (action === "cancel") {
-      await subscriptionsApi.cancelSubscription(subscriptionId);
+      await cancelSubscription(subscriptionId);
     } else if (action === "migrate") {
       if (!newPlanVariationId)
         return NextResponse.json({ error: "newPlanVariationId is required." }, { status: 400 });
-      const { result: swapResult } = await subscriptionsApi.swapPlan(subscriptionId, { newPlanVariationId });
+      const swapResult = await swapPlan(subscriptionId, { newPlanVariationId });
       // Square queues the swap for the next billing cycle — find the pending action's effective date
       const pendingAction = (swapResult.subscription?.actions || []).find(a => a.type === "SWAP_PLAN");
       const effectiveDate = pendingAction?.effectiveDate || swapResult.subscription?.chargedThroughDate || null;
@@ -489,7 +489,7 @@ export async function DELETE(request) {
 
     let cancelledCount = 0;
     if (cancelSubscriptions) {
-      const { result: planResult } = await catalogApi.retrieveCatalogObject(planId, true);
+      const planResult = await getCatalogObject(planId, true);
       const variationIds = (planResult.object?.subscriptionPlanData?.subscriptionPlanVariations || [])
         .map(v => v.id).filter(Boolean);
 
@@ -497,7 +497,7 @@ export async function DELETE(request) {
         const subs = await fetchAllSubscriptions({ planVariationIds: variationIds, statuses: ["ACTIVE", "PAUSED"] });
         await Promise.allSettled(
           subs.map(s =>
-            subscriptionsApi.cancelSubscription(s.id)
+            cancelSubscription(s.id)
               .then(() => { cancelledCount++; })
               .catch(err => console.warn(`⚠️ Could not cancel ${s.id}:`, err?.message))
           )
@@ -506,7 +506,7 @@ export async function DELETE(request) {
     }
 
     try {
-      const { result } = await catalogApi.deleteCatalogObject(planId);
+      const result = await deleteCatalogObject(planId);
       if (result.errors?.length)
         throw Object.assign(new Error(result.errors[0]?.detail), { errors: result.errors });
       await unsetHiddenPlanId(planId);

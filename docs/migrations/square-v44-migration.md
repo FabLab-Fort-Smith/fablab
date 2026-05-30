@@ -70,6 +70,33 @@ Webhook: `api/v1/square/webhooks/payment/route.js`
 
 (Confirmed v44 namespaces: `catalog.object.*`, `catalog.{list,search}`, `payments.*`, `subscriptions.*`, `customers.*`, `cards.*`, `orders.*`, `checkout.paymentLinks.*`.)
 
+## Inventory corrections (verified 2026-05-30 via full call-site audit)
+The original mapping undercounted; the audit found:
+1. **20th SDK namespace — `webhookSubscriptionsApi`** in `src/lib/squareWebhook.js` (the plan wrongly said this file was crypto-only). Two calls: `listWebhookSubscriptions()` → **`webhookSubscriptions.list()`** (auto-pages); `createWebhookSubscription({ idempotencyKey, subscription })` → **`webhookSubscriptions.create({ idempotencyKey, subscription })`**. Reads `.result.subscriptions` / `.result.subscription.signatureKey` → unwrap per change #2.
+2. **Two inline `new Client(...)` sites** beyond `src/lib/square.js`: `src/app/actions/actions.js` (constructs its own client) and `src/app/api/v1/square/subscriptions/service.js` (`import { Client, Environment }` + inline construct). Both must route through the adapter — editing `src/lib/square.js` alone won't catch them.
+3. **Global `BigInt.prototype.toJSON` monkeypatch** in `actions.js` (added so `JSON.stringify` survives bigint money). In v44 money is bigint *everywhere*; **remove this global patch** (it pollutes serialization process-wide) and convert bigint→`Number`/string explicitly at each response boundary. `src/app/api/v1/payments/route.js` already does a local bigint `JSON.stringify` replacer — fold that into a shared boundary helper.
+4. **`paymentsApi.listPayments(...)`** is called with **9 sparse positional args** (most `undefined`) in `admin/square/transactions/route.js` and `admin/delinquent/route.js` → single options object in v44 (`payments.list({ beginTime, endTime, limit })`).
+5. **`catalogApi.retrieveCatalogObject` is the hottest call (~25 sites)** — its adapter method carries the most conversion risk; cover and test it first.
+
+## P2 implementation notes (verified against the Square sandbox, 2026-05-30)
+Building P2 surfaced v44 behaviours that the method-mapping table didn't capture; the adapter (`src/lib/square.js`) is built to these **verified** facts:
+- **Dual SDK via npm alias:** `square@44` is installed as `square-v44` (`"square-v44": "npm:square@^44"`) alongside `square@39`. Selected by `SQUARE_SDK_VERSION` (default `v39`). v44 is **lazy-loaded** (`await import("square-v44")`) so the ESM package never enters the Jest graph on the default path — **this supersedes the transformIgnorePatterns/mocking fix** (breaking-change #7); no Jest config change was needed.
+- **Webhooks moved:** v44 has **no** top-level `webhookSubscriptionsApi`; it's `client.webhooks.subscriptions.{list,create}`.
+- **`*.search` (POST) return the body directly** (`{ <items>, cursor }`, or `{}` when empty) — *not* a pager. Return as-is; callers' `.<items> || []` and cursor loops keep working.
+- **`*.list` (GET) return a `Page`**; `.data` is the first-page array. The adapter returns `.data` to match v39's single-call-with-limit semantics (no `*.list` caller in this app paginates; only `*.search` callers loop on cursor).
+- **Omitted sort enums are rejected:** the SDK serializes missing optional sort params as `""`, which the API refuses. `payments.list` needs `sortField: "CREATED_AT"` + `sortOrder`; `cards.list` and `webhooks.subscriptions.list` need `sortOrder`. (`catalog.list` has no such param.)
+- **Validated live (read paths):** `listCatalog`, `searchSubscriptions`, `listPayments`, `searchCustomers`, `searchCatalogObjects`, `listWebhookSubscriptions` all succeed against the sandbox.
+
+## P5 validation status (sandbox, 2026-05-30)
+Harness: `scripts/square-v44-sandbox-check.mjs` (run `node --env-file=.env.local scripts/square-v44-sandbox-check.mjs`; never in CI — needs live creds). **Result: 8/8 pass.**
+- ✅ Reads: listCatalog, searchSubscriptions, listPayments, searchCustomers, listWebhookSubscriptions.
+- ✅ Write round-trips (create → read → clean up): **createPaymentLink** (checkout), **createCustomer**/get/delete, **upsertCatalogObject(DISCOUNT)**/get/delete.
+- ⚠️ The location id initially supplied (`L7XYZ8ABCDEF0`) was **rejected as invalid**; the token's real sandbox location is `LEF5HMAWEEZVQ` ("Default Test Account"). Production location id will differ — must be set in the prod secret manager.
+- **Still required before flipping the flag (need staging, not headless):**
+  - Full **subscription create → cancel** round-trip (needs a customer with a card on file → Web Payments SDK tokenization).
+  - Real **webhook delivery** round-trip (Square → public staging URL); signature verification itself is already covered by `test/e2e/square-webhook.test.js` / `test/unit/squareSignature.test.js` (crypto, SDK-independent).
+  - **Staging DAST** + **SEC sign-off** (§7/§8).
+
 ## Parallel-adapter rollout (de-risks the all-or-nothing client swap)
 The blunt approach — swap `new Client()` → `new SquareClient()` in `src/lib/square.js` and fix all ~90 call sites in one commit — leaves the tree non-compiling until the last edit and has no production kill-switch. Instead, route everything through the adapter and gate the cutover:
 

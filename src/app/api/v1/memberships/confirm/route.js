@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import squareClient from "@/lib/square";
+import { getPayment, getPaymentLink, getOrder, searchSubscriptions, listCards, createSubscription, getCatalogObject } from "@/lib/square";
 import { v4 as uuidv4 } from "uuid";
 import UserService from "@/app/api/v1/users/service";
 import WalletService from "@/app/api/v1/wallet/service";
@@ -30,7 +30,7 @@ export async function GET(request) {
 
     // ── Path A: transactionId present — verify payment then find subscription ──
     if (transactionId) {
-      const { result: paymentResult } = await squareClient.paymentsApi.getPayment(transactionId);
+      const paymentResult = await getPayment(transactionId);
       const payment = paymentResult.payment;
 
       if (payment?.status !== "COMPLETED") {
@@ -50,10 +50,10 @@ export async function GET(request) {
     // (first charge can be deferred). Use checkoutId → payment link → order → customer.
     if (!transactionId && checkoutId) {
       try {
-        const { result: linkResult } = await squareClient.checkoutApi.retrievePaymentLink(checkoutId);
+        const linkResult = await getPaymentLink(checkoutId);
         const orderId = linkResult.paymentLink?.orderId;
         if (orderId) {
-          const { result: orderResult } = await squareClient.ordersApi.retrieveOrder(orderId);
+          const orderResult = await getOrder(orderId);
           const order = orderResult.order;
           if (order?.customerId) customerId = order.customerId;
         }
@@ -63,7 +63,7 @@ export async function GET(request) {
     // ── Find subscription in Square ────────────────────────────────────────────
     if (customerId) {
       try {
-        const { result: subResult } = await squareClient.subscriptionsApi.searchSubscriptions({
+        const subResult = await searchSubscriptions({
           query: { filter: { customerIds: [customerId] } },
         });
         const subs = subResult.subscriptions || [];
@@ -76,7 +76,7 @@ export async function GET(request) {
     // ── Coupon / CUSTOM_AMOUNT path: create subscription using saved card ──────
     if (!subscription && planVariationId && customerId) {
       try {
-        const { result: cardsResult } = await squareClient.cardsApi.listCards(undefined, customerId);
+        const cardsResult = await listCards({ customerId });
         const card = (cardsResult.cards || []).find(c => c.enabled !== false);
         const today = new Date().toISOString().split("T")[0];
         const subBody = {
@@ -87,7 +87,7 @@ export async function GET(request) {
           startDate: today,
         };
         if (card) subBody.cardId = card.id;
-        const { result: subResult } = await squareClient.subscriptionsApi.createSubscription(subBody);
+        const subResult = await createSubscription(subBody);
         subscription = subResult.subscription || null;
         console.log(`✅ Subscription created: ${subscription?.id}`);
       } catch (subErr) {
@@ -115,11 +115,11 @@ export async function GET(request) {
     const varId = subscription?.planVariationId || planVariationId;
     if (varId) {
       try {
-        const { result: varR } = await squareClient.catalogApi.retrieveCatalogObject(varId);
+        const varR = await getCatalogObject(varId);
         const parentId = varR.object?.subscriptionPlanVariationData?.subscriptionPlanId;
         updateData["membership.variationName"] = varR.object?.subscriptionPlanVariationData?.name || "";
         if (parentId) {
-          const { result: planR } = await squareClient.catalogApi.retrieveCatalogObject(parentId);
+          const planR = await getCatalogObject(parentId);
           updateData["membership.planName"] = planR.object?.subscriptionPlanData?.name || "";
         }
       } catch { /* non-fatal */ }

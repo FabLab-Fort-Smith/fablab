@@ -1,4 +1,4 @@
-import squareClient from "@/lib/square";
+import { listWebhookSubscriptions, createWebhookSubscription } from "@/lib/square";
 import { db } from "@/lib/database";
 
 let cachedSignatureKey = null;
@@ -51,7 +51,7 @@ export async function ensureWebhookRegistered() {
     }
 
     // List existing webhook subscriptions and look for a match
-    const { result: listResult } = await squareClient.webhookSubscriptionsApi.listWebhookSubscriptions();
+    const listResult = await listWebhookSubscriptions();
     const existing = listResult.subscriptions?.find(
       (s) => s.notificationUrl === notificationUrl && s.enabled
     );
@@ -64,7 +64,7 @@ export async function ensureWebhookRegistered() {
     }
 
     // Register a new webhook subscription
-    const { result: createResult } = await squareClient.webhookSubscriptionsApi.createWebhookSubscription({
+    const createResult = await createWebhookSubscription({
       idempotencyKey: `fablab-webhook-${Date.now()}`,
       subscription: {
         name: "FabLab Membership Webhooks",

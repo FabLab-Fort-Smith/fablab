@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "../../../../../../auth";
 import { db } from "@/lib/database";
-import squareClient from "@/lib/square";
+import { searchSubscriptions, getCatalogObject, getSubscription, cancelSubscription, createSubscription } from "@/lib/square";
 
 async function requireAdmin() {
     const session = await auth();
@@ -28,7 +28,7 @@ export async function GET(request) {
     // Fetch all subscriptions for this customer from Square
     let subs = [];
     try {
-        const { result } = await squareClient.subscriptionsApi.searchSubscriptions({
+        const result = await searchSubscriptions({
             query: { filter: { customerIds: [customerId] } },
         });
         subs = result.subscriptions || [];
@@ -48,7 +48,7 @@ export async function GET(request) {
             const varId = s.planVariationId;
             if (varId) {
                 if (!catalogCache[varId]) {
-                    const { result: varR } = await squareClient.catalogApi.retrieveCatalogObject(varId);
+                    const varR = await getCatalogObject(varId);
                     catalogCache[varId] = varR.object;
                 }
                 const varObj = catalogCache[varId];
@@ -64,7 +64,7 @@ export async function GET(request) {
                 const planId = varObj?.subscriptionPlanVariationData?.subscriptionPlanId;
                 if (planId) {
                     if (!catalogCache[planId]) {
-                        const { result: planR } = await squareClient.catalogApi.retrieveCatalogObject(planId);
+                        const planR = await getCatalogObject(planId);
                         catalogCache[planId] = planR.object;
                     }
                     planName = catalogCache[planId]?.subscriptionPlanData?.name || null;
@@ -111,7 +111,7 @@ export async function PATCH(request) {
 
     try {
         // 1. Fetch the existing subscription
-        const { result: current } = await squareClient.subscriptionsApi.retrieveSubscription(subscriptionId);
+        const current = await getSubscription(subscriptionId);
         const sub = current.subscription;
 
         if (sub.status !== "PENDING") {
@@ -119,7 +119,7 @@ export async function PATCH(request) {
         }
 
         // 2. Cancel the old subscription
-        await squareClient.subscriptionsApi.cancelSubscription(subscriptionId);
+        await cancelSubscription(subscriptionId);
 
         // 3. Re-create with corrected start date, same plan/customer/card
         const { v4: uuidv4 } = await import("uuid");
@@ -132,7 +132,7 @@ export async function PATCH(request) {
         };
         if (sub.cardId) newSubBody.cardId = sub.cardId;
 
-        const { result: created } = await squareClient.subscriptionsApi.createSubscription(newSubBody);
+        const created = await createSubscription(newSubBody);
         const newSub = created.subscription;
 
         // 4. Update the user's squareSubscriptionId in the DB.

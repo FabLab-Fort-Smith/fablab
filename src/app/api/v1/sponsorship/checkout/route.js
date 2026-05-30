@@ -1,10 +1,8 @@
 
 import { NextResponse } from "next/server";
-import squareClient from "@/lib/square";
+import { createPaymentLink } from "@/lib/square";
 import { db } from "@/lib/database";
 import { v4 as uuidv4 } from "uuid";
-
-const checkoutApi = squareClient.checkoutApi;
 
 export async function POST(request) {
   try {
@@ -74,7 +72,7 @@ export async function POST(request) {
         };
     }
 
-    const { result } = await checkoutApi.createPaymentLink(checkoutBody);
+    const result = await createPaymentLink(checkoutBody);
 
     if (!result.paymentLink) {
       return NextResponse.json(

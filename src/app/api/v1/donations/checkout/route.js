@@ -1,6 +1,6 @@
 
 import { NextResponse } from 'next/server';
-import squareClient from '@/lib/square';
+import { createPaymentLink } from '@/lib/square';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '@/lib/database';
 
@@ -46,7 +46,7 @@ export async function POST(req) {
             redirectUrl: redirectUrl || `${process.env.NEXT_PUBLIC_URL}/donate/success?txnId=${transactionId}`,
         };
 
-        const { result } = await squareClient.checkoutApi.createPaymentLink(checkoutBody);
+        const result = await createPaymentLink(checkoutBody);
 
         if (!result.paymentLink) {
             return NextResponse.json({ error: "Square did not return a payment link" }, { status: 500 });

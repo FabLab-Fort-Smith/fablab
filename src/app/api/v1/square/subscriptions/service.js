@@ -1,4 +1,4 @@
-import { Client, Environment } from "square";
+import { getCustomer, searchSubscriptions } from "@/lib/square";
 import UserService from "../../users/service.js";
 import AuthService from "@/app/api/auth/[...nextauth]/service.js";
 import Constants from "@/lib/constants";
@@ -15,20 +15,11 @@ export default class SubscriptionService {
         throw new Error("Missing customer_id in webhook payload.");
       }
 
-      // Initialize the Square client.
-      const squareClient = new Client({
-        environment:
-          process.env.SQUARE_ENVIRONMENT === "production"
-            ? Environment.Production
-            : Environment.Sandbox,
-        accessToken: process.env.SQUARE_ACCESS_TOKEN,
-      });
-
       let customer;
       try {
         // Retrieve the full customer object from Square.
-        const response = await squareClient.customersApi.retrieveCustomer(customer_id);
-        customer = response.result.customer;
+        const response = await getCustomer(customer_id);
+        customer = response.customer;
       } catch (error) {
         if (error.statusCode === 404) {
           console.warn(
@@ -93,16 +84,8 @@ export default class SubscriptionService {
 
   static syncSubscription = async (squareID, userID = null) => {
     try {
-      const squareClient = new Client({
-        environment:
-          process.env.SQUARE_ENVIRONMENT === "production"
-            ? Environment.Production
-            : Environment.Sandbox,
-        accessToken: process.env.SQUARE_ACCESS_TOKEN,
-      });
-
       // Search for subscriptions for this customer
-      const response = await squareClient.subscriptionsApi.searchSubscriptions({
+      const response = await searchSubscriptions({
         query: {
           filter: {
             customerIds: [squareID],
@@ -110,7 +93,7 @@ export default class SubscriptionService {
         },
       });
 
-      const subscriptions = response.result.subscriptions;
+      const subscriptions = response.subscriptions;
       if (!subscriptions || subscriptions.length === 0) {
         return null;
       }

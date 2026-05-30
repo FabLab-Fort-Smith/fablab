@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "../../../../../../auth";
-import squareClient from "@/lib/square";
+import {
+  getSubscription, searchSubscriptions, cancelSubscription, pauseSubscription, resumeSubscription,
+  getCatalogObject, getCustomer, searchCustomers,
+} from "@/lib/square";
 import { db } from "@/lib/database";
 import UserService from "@/app/api/v1/users/service";
 
@@ -25,7 +28,7 @@ export async function GET(req) {
     if (!subId) return NextResponse.json(null);
 
     try {
-        const { result } = await squareClient.subscriptionsApi.retrieveSubscription(subId);
+        const result = await getSubscription(subId);
         const sub = result.subscription;
         if (!sub) return NextResponse.json(null);
 
@@ -37,14 +40,14 @@ export async function GET(req) {
 
         if (sub.planVariationId) {
             try {
-                const { result: varR } = await squareClient.catalogApi.retrieveCatalogObject(sub.planVariationId);
+                const varR = await getCatalogObject(sub.planVariationId);
                 variationName = varR.object?.subscriptionPlanVariationData?.name || variationName;
                 cadence = varR.object?.subscriptionPlanVariationData?.phases?.[0]?.cadence || null;
                 const priceMoney = varR.object?.subscriptionPlanVariationData?.phases?.[0]?.recurringPriceMoney;
                 if (priceMoney) priceCents = Number(priceMoney.amount);
                 const parentId = varR.object?.subscriptionPlanVariationData?.subscriptionPlanId;
                 if (parentId && !planName) {
-                    const { result: planR } = await squareClient.catalogApi.retrieveCatalogObject(parentId);
+                    const planR = await getCatalogObject(parentId);
                     planName = planR.object?.subscriptionPlanData?.name || "";
                 }
             } catch { /* non-fatal */ }
@@ -94,10 +97,10 @@ export async function POST(req) {
             if (user.membership?.squareCustomerId || user.squareCustomerId) {
                 const knownId = user.membership?.squareCustomerId || user.squareCustomerId;
                 try {
-                    const { result: custR } = await squareClient.customersApi.retrieveCustomer(knownId);
+                    const custR = await getCustomer(knownId);
                     const knownEmail = custR.customer?.emailAddress;
                     if (knownEmail) {
-                        const { result: searchR } = await squareClient.customersApi.searchCustomers({
+                        const searchR = await searchCustomers({
                             query: { filter: { emailAddress: { exact: knownEmail } } },
                         });
                         for (const c of (searchR.customers || [])) customerIds.add(c.id);
@@ -110,7 +113,7 @@ export async function POST(req) {
     if (customerIds.size === 0) return NextResponse.json({ error: "No Square customer ID on record." }, { status: 400 });
 
     try {
-        const { result } = await squareClient.subscriptionsApi.searchSubscriptions({
+        const result = await searchSubscriptions({
             query: { filter: { customerIds: Array.from(customerIds) } },
         });
         const subs = result.subscriptions || [];
@@ -128,11 +131,11 @@ export async function POST(req) {
 
         if (sub.planVariationId) {
             try {
-                const { result: varR } = await squareClient.catalogApi.retrieveCatalogObject(sub.planVariationId);
+                const varR = await getCatalogObject(sub.planVariationId);
                 updateData["membership.variationName"] = varR.object?.subscriptionPlanVariationData?.name || "";
                 const parentId = varR.object?.subscriptionPlanVariationData?.subscriptionPlanId;
                 if (parentId) {
-                    const { result: planR } = await squareClient.catalogApi.retrieveCatalogObject(parentId);
+                    const planR = await getCatalogObject(parentId);
                     updateData["membership.planName"] = planR.object?.subscriptionPlanData?.name || "";
                 }
             } catch { /* non-fatal */ }
@@ -159,7 +162,7 @@ export async function PATCH(req) {
 
     try {
         if (action === "cancel") {
-            await squareClient.subscriptionsApi.cancelSubscription(subId);
+            await cancelSubscription(subId);
             await UserService.updateUser(userID, {
                 "membership.subscriptionStatus": "CANCELED",
                 "membership.status": "suspended",
@@ -169,16 +172,16 @@ export async function PATCH(req) {
         }
 
         if (action === "pause") {
-            const { result } = await squareClient.subscriptionsApi.retrieveSubscription(subId);
+            const result = await getSubscription(subId);
             const chargedThrough = result.subscription?.chargedThroughDate;
-            await squareClient.subscriptionsApi.pauseSubscription(subId, {
+            await pauseSubscription(subId, {
                 pauseEffectiveDate: chargedThrough || new Date().toISOString().split("T")[0],
             });
             return NextResponse.json({ success: true, action: "paused" });
         }
 
         if (action === "resume") {
-            await squareClient.subscriptionsApi.resumeSubscription(subId, {});
+            await resumeSubscription(subId, {});
             await UserService.updateUser(userID, {
                 "membership.subscriptionStatus": "ACTIVE",
                 "membership.status": "active",

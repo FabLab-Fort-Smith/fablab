@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "../../../../../../auth";
-import squareClient from "@/lib/square";
+import { listCatalog, upsertCatalogObject, deleteCatalogObject } from "@/lib/square";
 import { v4 as uuidv4 } from "uuid";
 
 async function requireAdmin() {
@@ -12,7 +12,7 @@ async function requireAdmin() {
 export async function GET() {
     if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     try {
-        const { result } = await squareClient.catalogApi.listCatalog(undefined, "DISCOUNT");
+        const result = await listCatalog("DISCOUNT");
         const discounts = (result.objects || []).map(o => ({
             id: o.id,
             name: o.discountData?.name,
@@ -45,7 +45,7 @@ export async function POST(req) {
     }
 
     try {
-        const { result } = await squareClient.catalogApi.upsertCatalogObject({
+        const result = await upsertCatalogObject({
             idempotencyKey: uuidv4(),
             object: { type: "DISCOUNT", id: "#new", discountData },
         });
@@ -69,7 +69,7 @@ export async function DELETE(req) {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "id required." }, { status: 400 });
     try {
-        await squareClient.catalogApi.deleteCatalogObject(id);
+        await deleteCatalogObject(id);
         return NextResponse.json({ success: true });
     } catch (err) {
         return NextResponse.json({ error: err?.errors?.[0]?.detail || "Failed to delete discount." }, { status: 500 });

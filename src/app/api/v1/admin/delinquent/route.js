@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "../../../../../../auth";
 import { db } from "@/lib/database";
-import squareClient from "@/lib/square";
+import { listPayments, searchSubscriptions } from "@/lib/square";
 import AuthService from "@/app/api/auth/[...nextauth]/service";
 
 async function requireAdmin() {
@@ -44,10 +44,7 @@ export async function GET() {
     try {
         const sixtyDaysAgo = new Date();
         sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-        const { result: pmtResult } = await squareClient.paymentsApi.listPayments(
-            sixtyDaysAgo.toISOString(), undefined, undefined, undefined,
-            undefined, undefined, undefined, undefined, 200
-        );
+        const pmtResult = await listPayments({ beginTime: sixtyDaysAgo.toISOString(), limit: 200 });
         const payments = pmtResult.payments || [];
 
         // For each customer, keep only their most recent payment
@@ -77,7 +74,7 @@ export async function GET() {
         await Promise.all(batch.map(async (member) => {
             try {
                 const customerId = member.membership?.squareCustomerId || member.squareCustomerId || member.squareID;
-                const { result } = await squareClient.subscriptionsApi.searchSubscriptions({
+                const result = await searchSubscriptions({
                     query: { filter: { customerIds: [customerId] } },
                 });
 

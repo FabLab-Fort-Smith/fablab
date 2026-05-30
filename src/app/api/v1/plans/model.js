@@ -1,9 +1,5 @@
 import { db } from "@/lib/database";
-import squareClient from "@/lib/square";
-
-const catalogApi = squareClient.catalogApi;
-const subscriptionsApi = squareClient.subscriptionsApi;
-const ordersApi = squareClient.ordersApi;
+import { listCatalog, searchSubscriptions, getOrder } from "@/lib/square";
 
 export default class PlansModel {
   static async getPlans() {
@@ -19,7 +15,7 @@ export default class PlansModel {
     const legacyIds = new Set(legacyDoc?.ids || []);
     const planMeta = metaDoc?.plans || {};
 
-    const { result } = await catalogApi.listCatalog(undefined, "SUBSCRIPTION_PLAN");
+    const result = await listCatalog("SUBSCRIPTION_PLAN");
     const rawPlans = (result.objects || []).filter(p => !hiddenIds.has(p.id) && !legacyIds.has(p.id));
 
     const plans = rawPlans.map(p => ({
@@ -50,7 +46,7 @@ export default class PlansModel {
         plans.flatMap(p => p.variations.filter(v => v.priceCents == null).map(v => v.id))
       );
       if (relativeVarIds.size) {
-        const { result: subsResult } = await subscriptionsApi.searchSubscriptions({
+        const subsResult = await searchSubscriptions({
           limit: 200,
           query: { filter: { statuses: ["ACTIVE", "PAUSED"] } },
         });
@@ -67,7 +63,7 @@ export default class PlansModel {
         await Promise.allSettled(
           uniqueTemplates.map(async (templateId) => {
             try {
-              const { result: orderResult } = await ordersApi.retrieveOrder(templateId);
+              const orderResult = await getOrder(templateId);
               const amount = orderResult.order?.lineItems?.[0]?.basePriceMoney?.amount;
               if (amount != null) priceMap[templateId] = Number(amount);
             } catch { /* non-fatal */ }

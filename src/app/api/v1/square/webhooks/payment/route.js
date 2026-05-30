@@ -1,7 +1,7 @@
 
 import { NextResponse } from "next/server";
 import UserService from "@/app/api/v1/users/service";
-import squareClient from "@/lib/square";
+import { getSubscription, pauseSubscription } from "@/lib/square";
 import { verifySquareSignature } from "@/lib/squareSignature";
 import { claimWebhookEvent, releaseWebhookEvent } from "@/lib/webhookIdempotency";
 
@@ -151,7 +151,7 @@ export async function POST(request) {
                 if (user?.membership?.squareSubscriptionId && user.membership.squareSubscriptionId !== subscriptionId) {
                     try {
                         const subId = user.membership.squareSubscriptionId;
-                        const { result } = await squareClient.subscriptionsApi.retrieveSubscription(subId);
+                        const result = await getSubscription(subId);
                         const subscription = result.subscription;
 
                         if (subscription.status === 'ACTIVE') {
@@ -165,7 +165,7 @@ export async function POST(request) {
 
                                 console.log(`⏸️ Pausing Subscription ${subId} from ${chargedThroughDate} to ${resumeDate}`);
                                 
-                                await squareClient.subscriptionsApi.pauseSubscription(subId, {
+                                await pauseSubscription(subId, {
                                     pauseEffectiveDate: chargedThroughDate,
                                     resumeEffectiveDate: resumeDate,
                                     pauseReason: "Member Sponsorship Gift"

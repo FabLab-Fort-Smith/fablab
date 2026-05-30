@@ -32,6 +32,7 @@
     "react-qr-code": "^2.0.21",
     "react-square-web-payments-sdk": "^3.3.0",
     "square": "^39.1.1",
+    "square-v44": "npm:square@^44.1.0",
     "tweetnacl": "^1.0.3",
     "uuid": "^11.1.1"
   },
