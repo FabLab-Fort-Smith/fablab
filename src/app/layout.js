@@ -9,6 +9,9 @@ export const viewport = {
     initialScale: 1,
     maximumScale: 1,
     userScalable: false,
+    // PWA runs display:standalone (fullscreen) — opt into the safe-area insets so
+    // top chrome can pad below the status bar/notch instead of being clipped.
+    viewportFit: "cover",
 };
 
 export const metadata = {

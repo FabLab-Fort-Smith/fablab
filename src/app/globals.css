@@ -423,10 +423,16 @@ a:hover { color: var(--green-bright); text-shadow: 0 0 8px var(--green); }
   overflow-y: auto;
   transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 50;
+  /* PWA standalone: keep the menu heading below the status bar/notch
+     (env() = 0 on devices without a safe area, so this is a no-op there). */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 .lab-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .lab-topbar {
-  height: 50px;
+  /* grow by the safe-area inset so the 50px content row sits below the status
+     bar/notch in standalone PWA mode (border-box: padding is inside height). */
+  height: calc(50px + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
   border-bottom: 1px solid var(--bd-1);
   background: rgba(8,13,8,0.92);
   backdrop-filter: blur(6px);
@@ -434,7 +440,8 @@ a:hover { color: var(--green-bright); text-shadow: 0 0 8px var(--green); }
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 0 18px;
+  padding-left: 18px;
+  padding-right: 18px;
   position: sticky;
   top: 0;
   z-index: 40;
@@ -495,7 +502,8 @@ header { z-index: 1100; position: relative; }
   }
   .lab-overlay.open { opacity: 1; pointer-events: auto; }
   .hide-mobile { display: none !important; }
-  .lab-topbar { padding: 0 12px; }
+  /* keep padding-top (safe-area inset) from .lab-topbar — only override sides */
+  .lab-topbar { padding-left: 12px; padding-right: 12px; }
   .term-table { min-width: 640px; }
 }
 
