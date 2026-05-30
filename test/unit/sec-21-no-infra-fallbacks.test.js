@@ -16,6 +16,7 @@ describe("SEC-21 — no hardcoded infra/secret fallbacks", () => {
         ["src/app/api/v1/memberships/pair-key/route.js", [/socket\.crittercodes\.dev/, /WS_SERVER_URL\s*\|\|/]],
         ["src/app/api/discord/interactions/route.js", [/FabLabFS/, /WIFI_PASSWORD\s*\|\|/]],
         ["src/app/api/auth/register/route.js", [/RECAPTCHA_SECRET_KEY\s*\|\|/, /6LeIxAcTAAAA/]],
+        ["src/app/api/v1/holodeck/generate-badge-images/route.js", [/s3\.crittercodes\.dev/, /fablab-bounties/, /S3_ENDPOINT\s*\|\|\s*['"]/, /S3_BUCKET_NAME\s*\|\|\s*['"]/]],
     ])("REGRESSION: %s has no literal fallback", (file, patterns) => {
         const src = read(file);
         for (const re of patterns) expect(src).not.toMatch(re);

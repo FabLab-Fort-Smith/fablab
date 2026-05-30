@@ -7,18 +7,24 @@ import BadgeModel from '../../badges/model';
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-const s3Client = new S3Client({
-    region: process.env.S3_REGION || 'us-east-1',
-    endpoint: process.env.S3_ENDPOINT || 'https://s3.crittercodes.dev',
-    forcePathStyle: true,
-    credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY,
-        secretAccessKey: process.env.S3_SECRET_KEY,
-    },
-});
-
-const BUCKET = process.env.S3_BUCKET_NAME || 'fablab-bounties';
-const PUBLIC_ENDPOINT = 'https://s3.crittercodes.dev';
+// SEC-21: S3 config comes from the environment only — no hardcoded endpoint/
+// bucket fallbacks. Built lazily so a missing config doesn't break module import
+// (POST guards that S3_ENDPOINT/S3_BUCKET_NAME are set before any upload).
+let _s3Client;
+function getS3Client() {
+    if (!_s3Client) {
+        _s3Client = new S3Client({
+            region: process.env.S3_REGION || 'us-east-1',
+            endpoint: process.env.S3_ENDPOINT,
+            forcePathStyle: true,
+            credentials: {
+                accessKeyId: process.env.S3_ACCESS_KEY,
+                secretAccessKey: process.env.S3_SECRET_KEY,
+            },
+        });
+    }
+    return _s3Client;
+}
 
 // Style: phosphor green terminal — pure black background, bright #00FF41 green glow,
 // CRT scanline texture, flat minimal icon, subtle bloom, no other colors.
@@ -97,14 +103,16 @@ async function generateAndUpload(ai, badgeId, prompt) {
     }
 
     const key = `badges/${badgeId}-${Date.now()}.png`;
-    await s3Client.send(new PutObjectCommand({
-        Bucket: BUCKET,
+    const bucket = process.env.S3_BUCKET_NAME;
+    const endpoint = process.env.S3_ENDPOINT.replace(/\/+$/, '');
+    await getS3Client().send(new PutObjectCommand({
+        Bucket: bucket,
         Key: key,
         Body: imageBuffer,
         ContentType: 'image/png',
     }));
 
-    return `${PUBLIC_ENDPOINT}/${BUCKET}/${key}`;
+    return `${endpoint}/${bucket}/${key}`;
 }
 
 export async function POST(req) {
@@ -116,6 +124,11 @@ export async function POST(req) {
 
         if (!process.env.GEMINI_API_KEY) {
             return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
+        }
+
+        // SEC-21: require S3 storage config (no hardcoded fallbacks).
+        if (!process.env.S3_ENDPOINT || !process.env.S3_BUCKET_NAME) {
+            return NextResponse.json({ error: 'S3 storage is not configured' }, { status: 500 });
         }
 
         // Body options:
