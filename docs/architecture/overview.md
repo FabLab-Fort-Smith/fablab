@@ -33,29 +33,29 @@ The platform is a single **Next.js 16** application (the web app + its API) back
 ```mermaid
 flowchart TB
   subgraph Client
-    Browser[Browser / PWA]
-    DiscordUser[Discord client]
-    Door[Door panel / card scanner]
+    Browser["Browser / PWA"]
+    DiscordUser["Discord client"]
+    Door["Door panel / card scanner"]
   end
 
   subgraph App["Next.js 16 app (Vercel)"]
-    Web[App Router pages]
-    API[/api/* route handlers/]
+    Web["App Router pages"]
+    API["/api/* route handlers"]
   end
 
   DB[(MongoDB)]
 
   subgraph VPS["VPS tier (self-hosted)"]
-    Socket[socket-server\ndoor/equipment control]
-    Orch[orchestrator\nCTF mission containers]
+    Socket["socket-server<br/>door/equipment control"]
+    Orch["orchestrator<br/>CTF mission containers"]
   end
 
   subgraph External
-    Square[Square\npayments + webhooks]
-    Google[Google OAuth + reCAPTCHA]
-    Discord[Discord OAuth + bot]
-    S3[AWS-compatible S3\nuploads]
-    Gemini[Google Gemini\nimage generation]
+    Square["Square<br/>payments + webhooks"]
+    Google["Google OAuth + reCAPTCHA"]
+    Discord["Discord OAuth + bot"]
+    S3["AWS-compatible S3<br/>uploads"]
+    Gemini["Google Gemini<br/>image generation"]
   end
 
   Browser --> Web
@@ -174,7 +174,7 @@ The repo embeds an intentionally-vulnerable security game. Its zones — `vps/mi
 
 ## Deployment topology
 
-- **Web app** deploys to **Vercel** (`.vercelignore` excludes the `vps/` tier and ops scripts). Configuration is environment-driven; required secrets are validated at startup and there are **no hardcoded fallbacks** for secrets or infra endpoints.
+- **Web app** deploys to **Vercel**. (`.vercelignore` is currently empty, so nothing is excluded from the deployment by it — see the <a href="../guides/deployment.md">deployment guide</a>.) Configuration is environment-driven; required secrets are validated at startup and there are **no hardcoded fallbacks** for secrets or infra endpoints.
 - **VPS tier** (`vps/`) is deployed separately to the makerspace's server, running the socket-server and orchestrator alongside Docker/Traefik.
 - **CI** (`.github/workflows/ci.yml`) enforces `test` and `lint` on every PR; additional gates (build, SAST, dependency/secret scans) run report-only and flip to enforced as their backing remediations land. See <a href="../audit/05-engineering-process.md">the engineering process</a>.
 

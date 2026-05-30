@@ -26,20 +26,20 @@ This hub indexes the project's documentation. Start with the <a href="architectu
 - <a href="architecture/overview.md">Architecture Overview</a> — system topology, the layered `route → controller → service → model → database` pattern, auth, data, payments, the IoT tier, integrations, and deployment.
 - <a href="templates/DOCUMENT-TEMPLATE.md">Document Template</a> — the house style every doc follows.
 
-### Architecture *(planned)*
-- Data model — MongoDB collections and field shapes.
-- Integrations — Square / Discord / Google / S3 / Gemini detail.
-- Authentication & authorization — the next-auth + session model.
-- Access control (IoT tier) — the `vps/` socket-server + orchestrator.
+### Architecture
+- <a href="architecture/data-model.md">Data model</a> — MongoDB collections and field shapes.
+- <a href="architecture/integrations.md">Integrations</a> — Square / Discord / Google / S3 / Gemini detail.
+- <a href="architecture/auth.md">Authentication & authorization</a> — the next-auth + session model.
+- <a href="architecture/access-control-iot.md">Access control (IoT tier)</a> — the `vps/` socket-server + orchestrator.
 
-### API *(planned)*
-- API conventions + OpenAPI reference for `/api/v1/*`.
+### API
+- <a href="api/README.md">API conventions</a> + <a href="api/openapi.yaml">OpenAPI reference</a> for `/api/v1/*`.
 
-### Guides *(planned)*
-- Local development · Configuration (env reference) · Deployment · Testing.
+### Guides
+- <a href="guides/local-development.md">Local development</a> · <a href="guides/configuration.md">Configuration (env reference)</a> · <a href="guides/deployment.md">Deployment</a> · <a href="guides/testing.md">Testing</a>.
 
-### Features *(planned)*
-- Auth & onboarding · Memberships & payments · Bounties & rewards · Community.
+### Features
+- <a href="features/auth-onboarding.md">Auth & onboarding</a> · <a href="features/memberships-payments.md">Memberships & payments</a> · <a href="features/bounties-rewards.md">Bounties & rewards</a> · <a href="features/community.md">Community</a>.
 
 ### Operations & security
 - <a href="security/INCIDENT-RESPONSE.md">Incident response runbook</a>
@@ -61,9 +61,10 @@ This hub indexes the project's documentation. Start with the <a href="architectu
 
 ## Status
 
-Foundations (this hub, the architecture overview, the template) are shipped. The remaining `*(planned)*` documents — architecture sub-docs, the OpenAPI API reference, guides, and feature docs — are written next (the artifact-level GitHub Wiki reference is shelved pending a subscription decision).
+Foundations (this hub, the architecture overview, the template) plus the architecture sub-docs, the OpenAPI API reference, the guides, and the feature docs are all shipped (the artifact-level GitHub Wiki reference is shelved pending a subscription decision).
 
 ## Changelog
 | Date | Change | Author |
 |------|--------|--------|
 | 2026-05-29 | Documentation hub created; foundations shipped to `docs/` | app dev |
+| 2026-05-29 | Linked architecture, API, guides, and feature docs (removed `(planned)` markers) | app dev |

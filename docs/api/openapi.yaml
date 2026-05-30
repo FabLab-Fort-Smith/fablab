@@ -1,0 +1,2069 @@
+# OpenAPI 3.1 reference for The-Lab HTTP API.
+#
+# Status: current · Last reviewed: 2026-05-29 · Owners: app dev
+# Audience: developers, reviewers integrating with or auditing the API.
+#
+# Accuracy note: methods and auth requirements are derived from the route
+# handlers and their controllers/services under src/app/api/**. Auth is one of:
+#   - public            no session required
+#   - session required  the route calls auth() and rejects anonymous callers
+#   - admin only         the route also requires session.user.role === "admin"
+#   - shared secret      Bearer INTERNAL_API_SECRET (the IoT/device tier)
+#   - signature          HMAC signature verification (Square / Discord webhooks)
+#   - operational guard  guardOperationalEndpoint(): admin-only and blocked in production
+#
+# CTF/game endpoints (tag "ctf") and operational endpoints (tag "internal" /
+# tag "operational") are documented briefly and flagged in their descriptions.
+# "Hack the Lab" game content is intentionally vulnerable — see CLAUDE.md §14.
+openapi: 3.1.0
+info:
+  title: The-Lab API
+  version: "1.0"
+  description: >
+    HTTP API for The-Lab — the membership, community, and physical-access
+    platform for Fab Lab Fort Smith. Most member-facing endpoints live under
+    `/api/v1`. Authentication uses a next-auth v5 JWT session cookie; the single
+    privileged role is `admin`. `/api/*` is NOT behind middleware, so each route
+    authenticates and authorizes itself. See the API conventions doc (README.md)
+    and the architecture overview for the layered route -> controller -> service
+    -> model pattern.
+servers:
+  - url: /
+    description: Same-origin (relative paths)
+
+tags:
+  - name: auth
+    description: Registration, email verification, sign-in, next-auth handlers, and Discord account linking.
+  - name: users
+    description: Member records. Public reads return a safe projection; PII and credentials are never exposed to non-owners.
+  - name: memberships
+    description: Membership plans, checkout, subscription state, and access-key pairing.
+  - name: payments
+    description: Square-backed payments, donations, and sponsorship checkout.
+  - name: square
+    description: Square webhooks and subscription sync.
+  - name: bounties
+    description: Bounty board (tasks with stake/hours/cash rewards) and bounty ideas.
+  - name: transactions
+    description: Stake economy — listing, awarding, and tipping stake.
+  - name: notifications
+    description: Per-user private notifications.
+  - name: badges
+    description: Badge catalog and definitions.
+  - name: portfolio
+    description: Member project showcase.
+  - name: community
+    description: Announcements, activity feed, repairs, bug reports, contact, check-in, leaderboard, analytics.
+  - name: access
+    description: Physical door access and access-card pairing (IoT tier).
+  - name: admin
+    description: Admin-only management endpoints (plans, coupons, delinquency, duplicates, Square ops).
+  - name: internal
+    description: Device-tier endpoints authenticated by a shared Bearer secret (INTERNAL_API_SECRET).
+  - name: operational
+    description: Seed/migration/test endpoints — admin-only and blocked in production (SEC-18).
+  - name: ctf
+    description: Hack the Lab capture-the-flag game. Intentionally vulnerable game content; do not treat as real defects.
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: authjs.session-token
+      description: next-auth v5 JWT session cookie. Resolved server-side via auth().
+    bearerSecret:
+      type: http
+      scheme: bearer
+      description: Shared device-tier secret (INTERNAL_API_SECRET), compared in constant time.
+    squareSignature:
+      type: apiKey
+      in: header
+      name: x-square-hmacsha256-signature
+      description: Square webhook HMAC-SHA256 signature, verified against the notification URL + body.
+    discordSignature:
+      type: apiKey
+      in: header
+      name: x-signature-ed25519
+      description: Discord interaction Ed25519 signature (with x-signature-timestamp).
+
+  schemas:
+    Error:
+      type: object
+      description: Standard error envelope. Client-facing messages are generic; no stack traces or internal hostnames.
+      properties:
+        error:
+          type: string
+          example: Unauthorized
+      required: [error]
+
+    User:
+      type: object
+      description: >
+        Member record in its public-safe projection (see
+        src/app/api/v1/users/access.js). PII (email, phoneNumber), credentials
+        (password), and integration IDs (discordId, googleId, squareID) are
+        excluded for anonymous/non-owner readers. The owner and admins receive
+        additional fields (decrypted email/phone), but never the password hash.
+      properties:
+        _id: { type: string }
+        userID: { type: string, example: usr_a1b2c3 }
+        username: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        image: { type: string, format: uri }
+        bio: { type: string }
+        role: { type: string, enum: [member, staff, admin], example: member }
+        boardPosition: { type: string, nullable: true }
+        isPublic: { type: boolean }
+        socials: { type: object, additionalProperties: true }
+        interests: { type: array, items: { type: string } }
+        hobbies: { type: array, items: { type: string } }
+        creatorType: { type: string }
+        skills: { type: array, items: { type: string } }
+        badges: { type: array, items: { type: string } }
+        capturedFlags: { type: array, items: { type: string } }
+        stake: { type: number }
+        stakeHistory: { type: array, items: { type: object, additionalProperties: true } }
+        membership:
+          type: object
+          description: Public-safe membership sub-fields only.
+          properties:
+            status: { type: string, enum: [active, probation, suspended, banned, founder], example: active }
+            type: { type: string, enum: [community, co-op], example: co-op }
+            isWaived: { type: boolean }
+            subscriptionStatus: { type: string, example: ACTIVE }
+
+    Bounty:
+      type: object
+      properties:
+        bountyID: { type: string }
+        title: { type: string }
+        description: { type: string }
+        creatorID: { type: string, description: Forced to the authenticated user on create. }
+        status: { type: string, enum: [open, assigned, submitted, verified, completed, cancelled], example: open }
+        rewardType: { type: string, enum: [hours, cash, custom] }
+        rewardValue: { type: string }
+        stakeValue: { type: number }
+        isInfinite: { type: boolean }
+        recurrence: { type: string, enum: [none, weekly, monthly], example: none }
+        requirements: { type: array, items: { type: string } }
+        badgeRewardID: { type: string, nullable: true }
+        likes: { type: array, items: { type: string } }
+        comments: { type: array, items: { type: object, additionalProperties: true } }
+        createdAt: { type: string, format: date-time }
+
+    Notification:
+      type: object
+      description: Per-user private notification. Owner is always derived from the session (SEC-14).
+      properties:
+        _id: { type: string }
+        userID: { type: string }
+        type: { type: string, example: success }
+        title: { type: string }
+        message: { type: string }
+        link: { type: string }
+        read: { type: boolean }
+        metadata: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+
+    Plan:
+      type: object
+      description: Membership plan derived from the Square catalog (SUBSCRIPTION_PLAN).
+      properties:
+        id: { type: string }
+        name: { type: string }
+        price: { type: number, description: Dollars (admin list uses priceCents on variations). }
+        currency: { type: string, example: USD }
+        hidden: { type: boolean }
+        legacy: { type: boolean }
+        subscriberCount: { type: integer }
+        description: { type: string }
+        benefits: { type: array, items: { type: string } }
+        variations:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              variationId: { type: string }
+              name: { type: string }
+              cadence: { type: string, example: MONTHLY }
+              priceCents: { type: integer, nullable: true }
+              trialDays: { type: integer }
+
+    Transaction:
+      type: object
+      description: Stake-economy or donation transaction.
+      properties:
+        transactionId: { type: string }
+        type: { type: string, enum: [award, tip, donation], example: tip }
+        amount: { type: number, description: Stake amount, or cents for donations. }
+        currency: { type: string, example: USD }
+        status: { type: string, example: pending }
+        userID: { type: string, nullable: true }
+        senderId: { type: string, nullable: true }
+        receiverId: { type: string, nullable: true }
+        reason: { type: string, nullable: true }
+        metadata: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+
+  responses:
+    Unauthorized:
+      description: Not authenticated (no/invalid session, or missing/invalid shared secret).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Authenticated but not permitted (e.g. non-admin, not the owner).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    BadRequest:
+      description: Missing or invalid parameters.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+paths:
+
+  # ──────────────────────────────── auth ────────────────────────────────
+  /api/auth/{nextauth}:
+    parameters:
+      - name: nextauth
+        in: path
+        required: true
+        schema: { type: string }
+        description: next-auth catch-all (callback, signin, signout, session, csrf, providers).
+    get:
+      tags: [auth]
+      summary: next-auth handler (GET)
+      description: Delegates to next-auth handlers (auth.js). Session, CSRF, providers, OAuth callbacks.
+      security: []
+      responses: { '200': { description: Handler response (varies by sub-route). } }
+    post:
+      tags: [auth]
+      summary: next-auth handler (POST)
+      description: Delegates to next-auth handlers (sign-in, sign-out, callbacks).
+      security: []
+      responses: { '200': { description: Handler response (varies by sub-route). } }
+
+  /api/auth/register:
+    post:
+      tags: [auth]
+      summary: Register a new member (public)
+      description: Public sign-up. Verifies a Google reCAPTCHA token (RECAPTCHA_SECRET_KEY required; fails closed). The plaintext password is never logged.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, captchaToken]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+                firstName: { type: string }
+                lastName: { type: string }
+                captchaToken: { type: string }
+      responses:
+        '201': { description: User registered. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { description: A user with this email already exists. }
+        '500': { description: Captcha unavailable or registration failure. }
+
+  /api/auth/signin:
+    post:
+      tags: [auth]
+      summary: Verify credentials for next-auth (public)
+      description: Used by the Credentials provider. Returns the user payload for next-auth to issue a session, or 401 on bad credentials.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, password]
+              properties:
+                identifier: { type: string, description: Email or username. }
+                password: { type: string, format: password }
+      responses:
+        '200': { description: Credentials valid. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/auth/verify-email:
+    get:
+      tags: [auth]
+      summary: Verify email via token (public)
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Email verified. }
+        '400': { description: Missing or invalid token. }
+
+  /api/auth/resend-verification:
+    post:
+      tags: [auth]
+      summary: Resend the verification email (public)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties: { email: { type: string, format: email } }
+      responses:
+        '200': { description: Verification email sent. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/v1/auth/link-intent:
+    post:
+      tags: [auth]
+      summary: Mark the next OAuth flow as a Discord link (session required)
+      description: Sets a short-lived HttpOnly cookie so the OAuth callback links Discord to the existing user instead of creating a new account.
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Intent cookie set. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/auth/discord/link:
+    get:
+      tags: [auth]
+      summary: Start Discord account-link OAuth (session required)
+      description: Redirects to Discord OAuth with a signed state JWT carrying the userID. Anonymous callers are redirected to sign-in.
+      security: [{ sessionCookie: [] }]
+      responses:
+        '302': { description: Redirect to Discord authorize endpoint (or to sign-in if unauthenticated). }
+
+  /api/v1/auth/discord/callback:
+    get:
+      tags: [auth]
+      summary: Discord account-link OAuth callback (public; state-JWT verified)
+      description: Verifies the signed state JWT, exchanges the code, and writes discordId/discordHandle to the target user. Always redirects to the dashboard.
+      security: []
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+        - { name: error, in: query, schema: { type: string } }
+      responses:
+        '302': { description: Redirect back to the dashboard with a status query param. }
+
+  # ──────────────────────────────── users ───────────────────────────────
+  /api/v1/users:
+    get:
+      tags: [users]
+      summary: List users or look up by query
+      description: >
+        With a query param (email/username/userID/phoneNumber/firstName/lastName)
+        looks up a single user; otherwise lists users. Anonymous/non-admin callers
+        receive only opted-in active members in a public-safe projection; admins
+        get the full directory and all filters.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: email, in: query, schema: { type: string } }
+        - { name: username, in: query, schema: { type: string } }
+        - { name: userID, in: query, schema: { type: string } }
+        - { name: phoneNumber, in: query, schema: { type: string } }
+        - { name: firstName, in: query, schema: { type: string } }
+        - { name: lastName, in: query, schema: { type: string } }
+        - { name: isPublic, in: query, schema: { type: boolean } }
+        - { name: role, in: query, schema: { type: string } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: memberType, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 12 } }
+      responses:
+        '200':
+          description: A user, or a paged list.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties: { user: { $ref: '#/components/schemas/User' } }
+                  - type: object
+                    properties:
+                      users: { type: array, items: { $ref: '#/components/schemas/User' } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [users]
+      summary: Create a user (admin only)
+      description: Public sign-up goes through /api/auth/register; this endpoint is admin-only.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201': { description: User created. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [users]
+      summary: Update a user (session required; non-admins own record only)
+      description: >
+        Non-admins may only update their own record (ownership is forced to the
+        session user) and only whitelisted self-writable fields; role/status/stake
+        and other privileged fields are dropped. Admins may target any user.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: query, in: query, schema: { type: string }, description: Identifier (admins only — ignored for non-admins). }
+        - { name: userID, in: query, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: User updated. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [users]
+      summary: Delete a user (admin only)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: userID, in: query, schema: { type: string } }
+        - { name: query, in: query, schema: { type: string } }
+      responses:
+        '200': { description: User deleted. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/users/change-password:
+    post:
+      tags: [users]
+      summary: Change own password (session required)
+      description: Verifies the current password before updating. Returns 401 if the current password is wrong.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string, format: password }
+                newPassword: { type: string, format: password }
+      responses:
+        '200': { description: Password updated. }
+        '401': { description: Unauthenticated or incorrect current password. }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/users/verify-credentials:
+    post:
+      tags: [users]
+      summary: Verify a member's credentials (session required)
+      description: Confirms ownership of an account (used by the self-merge flow). Returns a safe user object on success.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        '200': { description: Credentials verified. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/users/merge:
+    post:
+      tags: [users]
+      summary: Merge two user accounts (session required; ownership-checked)
+      description: >
+        Admins may merge any pair. A non-admin may only merge a source account
+        INTO their own and must prove ownership of the source via its credentials.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserID, sourceUserID]
+              properties:
+                targetUserID: { type: string }
+                sourceUserID: { type: string }
+                overrides: { type: object, additionalProperties: true }
+                sourceEmail: { type: string }
+                sourcePassword: { type: string, format: password }
+      responses:
+        '200': { description: Accounts merged. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/users/nudge:
+    post:
+      tags: [users]
+      summary: Nudge (remind) a user (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userID]
+              properties:
+                userID: { type: string }
+                preview: { type: boolean }
+      responses:
+        '200': { description: Nudge sent (or preview returned). }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/users/decline-email:
+    post:
+      tags: [users]
+      summary: Send an application-declined email (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userID]
+              properties: { userID: { type: string } }
+      responses:
+        '200': { description: Decline email sent. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ─────────────────────────── memberships ──────────────────────────────
+  /api/v1/memberships:
+    get:
+      tags: [memberships]
+      summary: List membership plans from Square (public)
+      security: []
+      responses:
+        '200': { description: Plans with variations and pricing. }
+        '404': { description: No membership plans found. }
+    put:
+      tags: [memberships]
+      summary: Add/remove the locker add-on
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userID, action]
+              properties:
+                userID: { type: string }
+                action: { type: string, enum: [add, remove] }
+      responses:
+        '200': { description: Locker updated. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [memberships]
+      summary: Cancel a membership (Square subscription)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userID]
+              properties: { userID: { type: string } }
+      responses:
+        '200': { description: Membership cancelled. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/v1/memberships/{planID}/checkout:
+    post:
+      tags: [memberships]
+      summary: Create a Square checkout link for a plan
+      description: Builds a Square payment link for the given plan variation, optionally applying a coupon discount. The buyer email is taken from the session.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: planID, in: path, required: true, schema: { type: string }, description: Square plan variation ID. }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userID, price]
+              properties:
+                userID: { type: string }
+                price: { type: number }
+                currency: { type: string, default: USD }
+                couponCode: { type: string }
+      responses:
+        '200': { description: Checkout URL returned. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/memberships/confirm:
+    get:
+      tags: [memberships]
+      summary: Confirm a Square checkout and activate access (redirect target)
+      description: >
+        Square redirects here after checkout. Verifies the payment / resolves the
+        subscription, activates the member, and redirects to the dashboard. Always
+        responds with a redirect.
+      security: []
+      parameters:
+        - { name: userID, in: query, required: true, schema: { type: string } }
+        - { name: planVariationId, in: query, schema: { type: string } }
+        - { name: transactionId, in: query, schema: { type: string } }
+        - { name: checkoutId, in: query, schema: { type: string } }
+      responses:
+        '302': { description: Redirect to the dashboard with success/error/pending status. }
+
+  /api/v1/memberships/subscription:
+    get:
+      tags: [memberships]
+      summary: Get live subscription details (session required; owner or admin)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: userID, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Subscription details (or null if none). }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [memberships]
+      summary: Sync subscription from Square by customer (session required; owner or admin)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userID]
+              properties: { userID: { type: string } }
+      responses:
+        '200': { description: Subscription synced. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [memberships]
+      summary: Cancel/pause/resume own subscription (session required; owner or admin)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userID, action]
+              properties:
+                userID: { type: string }
+                action: { type: string, enum: [cancel, pause, resume] }
+      responses:
+        '200': { description: Action applied. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/memberships/pair-key:
+    post:
+      tags: [memberships, access]
+      summary: Start access-card pairing for a member (session required; owner or admin)
+      description: >
+        Triggers pairing mode on the door panel via the socket-server. Requires an
+        approved access key (membership.accessKey.issued). Clears the old card code
+        first so the previous card stops working immediately.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userID]
+              properties: { userID: { type: string } }
+      responses:
+        '200': { description: Pairing mode started. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden, or access key not yet approved. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { description: Could not reach the door panel. }
+
+  /api/v1/square/subscriptions:
+    post:
+      tags: [square]
+      summary: Square subscription webhook (legacy handler)
+      description: Receives a Square webhook payload and processes it via the subscription service.
+      security: [{ squareSignature: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '200': { description: Processed. }
+        '500': { description: Processing error. }
+
+  /api/v1/square/subscriptions/sync:
+    post:
+      tags: [square]
+      summary: Sync a single subscription by Square ID
+      description: Server-side/admin utility — syncs a user's subscription from Square given a squareID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [squareID]
+              properties:
+                squareID: { type: string }
+                userID: { type: string }
+      responses:
+        '200': { description: Subscription synced. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/square/webhooks/payment:
+    post:
+      tags: [square]
+      summary: Square payment/subscription webhook
+      description: >
+        Primary Square webhook. Verifies the HMAC signature (constant time, fails
+        closed) and is idempotent (claims the event_id before applying effects).
+        Drives membership activation/renewal, grace periods, sponsorship, and
+        revocation. Returns 200 on duplicate events without re-running side effects.
+      security: [{ squareSignature: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '200': { description: Acknowledged (processed or deduped). }
+        '401': { description: Invalid signature. }
+        '500': { description: Processing failed (idempotency claim released for retry). }
+
+  # ─────────────────────────── payments ─────────────────────────────────
+  /api/v1/payments:
+    post:
+      tags: [payments]
+      summary: Create a one-off Square payment
+      description: Charges a Square payment source token. Square handles card data; PAN/CVV are never stored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, sourceId]
+              properties:
+                amount: { type: integer, description: Amount in cents. }
+                sourceId: { type: string, description: Square payment source token. }
+                customerId: { type: string }
+                currency: { type: string, default: USD }
+      responses:
+        '200': { description: Square payment result. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { description: Payment error. }
+
+  /api/v1/donations:
+    get:
+      tags: [payments]
+      summary: List donations (session required; own unless admin)
+      description: Non-admins see only their own donations; admins may filter by userID.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: userID, in: query, schema: { type: string }, description: Admin filter only. }
+      responses:
+        '200': { description: Donation transactions. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/donations/checkout:
+    post:
+      tags: [payments]
+      summary: Create a donation checkout link (public)
+      description: Creates a pending donation transaction and a Square payment link. Supports one-time and monthly donations.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: { type: number, description: Amount in USD. }
+                frequency: { type: string, enum: [one-time, monthly] }
+                redirectUrl: { type: string }
+                donorInfo: { type: object, properties: { name: { type: string }, email: { type: string } } }
+                userId: { type: string }
+      responses:
+        '200': { description: Checkout URL returned. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/v1/donations/stats:
+    get:
+      tags: [payments]
+      summary: Monthly donation vs. expense stats (public)
+      security: []
+      responses:
+        '200': { description: Donation total, member-expense breakdown, goal, and net. }
+
+  /api/v1/sponsorship/checkout:
+    post:
+      tags: [payments]
+      summary: Create a sponsorship (gift membership) checkout link (public)
+      description: Builds a Square link to sponsor another member's membership, one-time or recurring. The recipient is encoded in the payment note for the webhook.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipientId]
+              properties:
+                recipientId: { type: string }
+                donorId: { type: string }
+                type: { type: string, enum: [one-time, subscription], default: one-time }
+      responses:
+        '200': { description: Checkout URL returned. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ─────────────────────────── bounties ─────────────────────────────────
+  /api/v1/bounties:
+    get:
+      tags: [bounties]
+      summary: List bounties or fetch one (public)
+      security: []
+      parameters:
+        - { name: bountyID, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: creatorID, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 10 } }
+      responses:
+        '200':
+          description: A bounty or a paged list.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties: { bounty: { $ref: '#/components/schemas/Bounty' } }
+                  - type: object
+                    additionalProperties: true
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [bounties]
+      summary: Create a bounty (session required)
+      description: creatorID is forced to the authenticated user.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Bounty' }
+      responses:
+        '201': { description: Bounty created. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [bounties]
+      summary: Act on a bounty (session required)
+      description: >
+        action selects the operation. Ownership/role checks are enforced in the
+        service for actions that mutate state.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: bountyID, in: query, required: true, schema: { type: string } }
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [assign, submit, verify, cancel, edit, clawback, like, comment, share]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                submission: { type: string }
+                claimUserID: { type: string }
+                updateData: { type: object, additionalProperties: true }
+                text: { type: string }
+                recipientID: { type: string }
+      responses:
+        '200': { description: Action applied. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [bounties]
+      summary: Delete a bounty (session required; ownership-checked)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: bountyID, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Bounty deleted. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/bounties/seed:
+    post:
+      tags: [operational]
+      summary: Seed starter bounties (admin only; blocked in production)
+      description: Operational seed endpoint guarded by guardOperationalEndpoint() (SEC-18).
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Seeding complete. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden, or disabled in production. }
+
+  /api/v1/bounty-ideas:
+    get:
+      tags: [bounties]
+      summary: List bounty ideas (admin only)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Bounty ideas. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [bounties]
+      summary: Create a bounty idea (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '201': { description: Idea created. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/bounty-ideas/{ideaID}:
+    parameters:
+      - { name: ideaID, in: path, required: true, schema: { type: string } }
+    put:
+      tags: [bounties]
+      summary: Update a bounty idea (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '200': { description: Idea updated. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [bounties]
+      summary: Delete a bounty idea (admin only)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Idea deleted. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ────────────────────────── transactions ──────────────────────────────
+  /api/v1/transactions:
+    get:
+      tags: [transactions]
+      summary: List transactions (public)
+      security: []
+      parameters:
+        - { name: type, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        '200':
+          description: Paged transactions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transactions: { type: array, items: { $ref: '#/components/schemas/Transaction' } }
+                  total: { type: integer }
+                  page: { type: integer }
+                  totalPages: { type: integer }
+
+  /api/v1/transactions/award:
+    post:
+      tags: [transactions]
+      summary: Award stake to a member (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [receiverId, amount]
+              properties:
+                receiverId: { type: string }
+                amount: { type: number }
+                reason: { type: string }
+      responses:
+        '200': { description: Stake awarded. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { description: Award failed. }
+
+  /api/v1/transactions/tip:
+    post:
+      tags: [transactions]
+      summary: Tip stake to another member (session required)
+      description: Sender is derived from the session. Amount must be positive.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [receiverId, amount]
+              properties:
+                receiverId: { type: string }
+                amount: { type: number }
+      responses:
+        '200': { description: Tip processed. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ────────────────────────── notifications ─────────────────────────────
+  /api/v1/notifications:
+    get:
+      tags: [notifications]
+      summary: List own notifications (session required)
+      description: Owner is derived from the session (SEC-14); callers only see their own.
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: The caller's notifications.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  notifications: { type: array, items: { $ref: '#/components/schemas/Notification' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [notifications]
+      summary: Create a notification (admin only)
+      description: App flows create notifications server-side; this HTTP entry is admin-only and can fan out to email/Discord.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Notification' } } }
+      responses:
+        '201': { description: Notification created. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [notifications]
+      summary: Mark notification(s) read (session required)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [markRead, markAllRead] }
+                notificationID: { type: string, description: Required for markRead. }
+      responses:
+        '200': { description: Updated. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ──────────────────────────── badges ──────────────────────────────────
+  /api/v1/badges:
+    get:
+      tags: [badges]
+      summary: List badges (public)
+      security: []
+      parameters:
+        - { name: type, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Badge catalog. }
+    post:
+      tags: [badges]
+      summary: Create a badge (session required)
+      description: Requires a session. (An admin-role check is noted as TODO in the handler.)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, name]
+              properties:
+                id: { type: string }
+                name: { type: string }
+      responses:
+        '201': { description: Badge created. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/badges/{badgeID}:
+    parameters:
+      - { name: badgeID, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [badges]
+      summary: Get a badge (public)
+      security: []
+      responses:
+        '200': { description: Badge. }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [badges]
+      summary: Update a badge (session required)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '200': { description: Badge updated. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [badges]
+      summary: Delete a badge (session required)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Badge deleted. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/badges/seed:
+    post:
+      tags: [operational]
+      summary: Seed badge definitions (admin only; blocked in production)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Seeding complete. }
+        '403': { description: Forbidden, or disabled in production. }
+
+  # ─────────────────────────── portfolio ────────────────────────────────
+  /api/v1/portfolio:
+    get:
+      tags: [portfolio]
+      summary: List showcase items (public)
+      security: []
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 20 } }
+        - { name: skip, in: query, schema: { type: integer, default: 0 } }
+        - { name: sort, in: query, schema: { type: string, default: latest } }
+        - { name: userID, in: query, schema: { type: string } }
+        - { name: id, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Showcase items. }
+    post:
+      tags: [portfolio]
+      summary: Create a showcase item (public; userID in body)
+      description: Validates required fields (userID, title, imageUrls). Note this route does not call auth() at the edge.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userID, title, imageUrls]
+              properties:
+                userID: { type: string }
+                title: { type: string }
+                description: { type: string }
+                imageUrls: { type: array, items: { type: string } }
+      responses:
+        '201': { description: Item created. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    put:
+      tags: [portfolio]
+      summary: Like / comment / share a showcase item (public; userID in body)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, userID]
+              properties:
+                id: { type: string }
+                userID: { type: string }
+                action: { type: string, enum: [comment, share], description: Omit to toggle like. }
+                text: { type: string }
+                senderID: { type: string }
+                recipientID: { type: string }
+      responses:
+        '200': { description: Updated. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  # ─────────────────────────── community ────────────────────────────────
+  /api/v1/announcements:
+    get:
+      tags: [community]
+      summary: List announcements (public; admins see drafts)
+      security: []
+      responses:
+        '200': { description: Announcements. }
+    post:
+      tags: [community]
+      summary: Create an announcement (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, content]
+              properties:
+                title: { type: string }
+                content: { type: string }
+      responses:
+        '201': { description: Announcement created. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/announcements/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    put:
+      tags: [community]
+      summary: Update an announcement (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '200': { description: Updated. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [community]
+      summary: Delete an announcement (admin only)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Deleted. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/feed:
+    get:
+      tags: [community]
+      summary: Activity feed (public)
+      security: []
+      responses:
+        '200': { description: Feed items. }
+
+  /api/v1/leaderboard:
+    get:
+      tags: [community]
+      summary: Leaderboards — stake, volunteer hours, bounty hunters (public)
+      security: []
+      responses:
+        '200': { description: Top stake, top volunteers, top bounty hunters. }
+
+  /api/v1/analytics:
+    get:
+      tags: [community]
+      summary: Aggregate platform analytics (public)
+      security: []
+      parameters:
+        - { name: timeRange, in: query, schema: { type: string, enum: [all, 30d, 90d, 1y], default: all } }
+      responses:
+        '200': { description: User/bounty/stake/hours aggregates. }
+
+  /api/v1/checkin:
+    get:
+      tags: [community]
+      summary: Get check-in status, or the check-in log (session required; log is admin only)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: mode, in: query, schema: { type: string, enum: [status, log], default: status } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+        - { name: skip, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200': { description: Status (default) or admin log. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden (log mode requires admin). }
+    post:
+      tags: [community]
+      summary: Check in or out (session required)
+      description: Updates check-in state, awards the Lab Regular badge at 5 check-ins, and syncs the Discord role.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties: { action: { type: string, enum: [checkin, checkout] } }
+      responses:
+        '200': { description: Checked in/out. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/repairs:
+    get:
+      tags: [community]
+      summary: List repair requests (public)
+      security: []
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        '200': { description: Paged repair requests. }
+    post:
+      tags: [community]
+      summary: Submit a repair request (public)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, deviceType, issueDescription]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                deviceType: { type: string }
+                issueDescription: { type: string }
+                contactMethod: { type: string }
+                phone: { type: string }
+      responses:
+        '201': { description: Repair request created. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    put:
+      tags: [community]
+      summary: Update a repair request (public; repairID required)
+      security: []
+      parameters:
+        - { name: repairID, in: query, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '200': { description: Updated. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/bugs:
+    get:
+      tags: [community]
+      summary: List bug reports (public)
+      security: []
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses:
+        '200': { description: Bug reports. }
+    post:
+      tags: [community]
+      summary: Submit a bug report (session required)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '201': { description: Bug created. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [community]
+      summary: Update bug status / award stake (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bugID, status]
+              properties:
+                bugID: { type: string }
+                status: { type: string }
+                stakeReward: { type: number }
+      responses:
+        '200': { description: Bug updated. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/contact:
+    post:
+      tags: [community]
+      summary: Submit a contact-form message (public)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, message]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                message: { type: string }
+      responses:
+        '200': { description: Message sent. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/v1/contact-submissions:
+    get:
+      tags: [community]
+      summary: List contact submissions (public)
+      security: []
+      responses:
+        '200': { description: Submissions. }
+    patch:
+      tags: [community]
+      summary: Update a contact submission status (public)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+                status: { type: string }
+      responses:
+        '200': { description: Updated. }
+
+  /api/v1/discord/invite:
+    get:
+      tags: [community]
+      summary: Generate a Discord invite and redirect (public)
+      security: []
+      responses:
+        '302': { description: Redirect to the Discord invite URL. }
+        '404': { description: No suitable channel found. }
+        '500': { description: Failed to create invite. }
+
+  /api/discord/interactions:
+    post:
+      tags: [community]
+      summary: Discord interactions (slash commands) webhook
+      description: >
+        Verifies the Discord Ed25519 signature, then handles slash commands
+        (check-in, profile, badges, wifi, award-stake, etc.). Returns Discord
+        interaction response objects (type 1 ping ack, type 4 message).
+      security: [{ discordSignature: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '200': { description: Interaction response. }
+        '401': { description: Missing or invalid signature. }
+        '500': { description: Server configuration error. }
+
+  /api/v1/upload:
+    post:
+      tags: [community]
+      summary: Upload an image to S3 (session required)
+      description: >
+        Multipart upload. Validates by magic bytes (JPEG/PNG/GIF/WebP; SVG
+        excluded), enforces a 5 MB limit, and stores under a server-generated key.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200': { description: Returns the public URL of the stored object. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { description: File too large (max 5 MB). }
+        '415': { description: Unsupported file type. }
+        '500': { description: Storage not configured or upload failed. }
+
+  /api/image-proxy:
+    get:
+      tags: [community]
+      summary: Proxy an allowlisted remote image (public; SSRF-guarded)
+      description: >
+        Fetches a client-supplied URL only if its host is on the allowlist and
+        passes the SSRF guard; each redirect hop is re-validated. Caps size and time.
+      security: []
+      parameters:
+        - { name: url, in: query, required: true, schema: { type: string, format: uri } }
+      responses:
+        '200': { description: The proxied image bytes. }
+        '400': { description: Missing or disallowed URL. }
+        '413': { description: Image too large. }
+        '415': { description: Unsupported content type. }
+        '502': { description: Upstream fetch failed or too many redirects. }
+
+  # ──────────────────────────── access ──────────────────────────────────
+  /api/v1/access/unlock:
+    post:
+      tags: [access]
+      summary: Unlock the door for the current member (session required)
+      description: >
+        Authenticates the session, checks membership good-standing (active/probation,
+        active subscription or waived, not community-only), then drives the door
+        controller. Decisions are audit-logged.
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Door unlocked. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Access denied (not in good standing / community member). }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { description: Door controller failure. }
+
+  /api/admin/pair-card:
+    post:
+      tags: [access, admin]
+      summary: Start access-card pairing for a member (admin/staff only)
+      description: Only admin or staff may pair cards (SEC-11). Calls the socket-server pairing endpoint.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId: { type: string }
+                deviceId: { type: string, default: access-scanner-01 }
+      responses:
+        '200': { description: Pairing started. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { description: Unauthorized (not admin/staff). }
+        '500': { description: Server configuration error. }
+
+  # ──────────────────────────── internal (device tier) ──────────────────
+  /api/internal/check-access:
+    get:
+      tags: [internal]
+      summary: Card-access decision for the door controller (shared secret)
+      description: >
+        Device-tier endpoint. Authenticated by Bearer INTERNAL_API_SECRET
+        (constant-time compare; fails closed if unset). Returns a grant decision
+        for a scanned card.
+      security: [{ bearerSecret: [] }]
+      parameters:
+        - { name: cardId, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Grant decision (granted true/false). }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { description: Server misconfiguration. }
+
+  /api/internal/register-card:
+    post:
+      tags: [internal]
+      summary: Register a scanned card to a user (shared secret)
+      description: Device-tier endpoint. Authenticated by Bearer INTERNAL_API_SECRET. Stores the card code on the user's access key.
+      security: [{ bearerSecret: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, cardId]
+              properties:
+                userId: { type: string }
+                cardId: { type: string }
+      responses:
+        '200': { description: Card registered. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ──────────────────────────── admin ───────────────────────────────────
+  /api/v1/admin/plans:
+    get:
+      tags: [admin]
+      summary: List plans with subscriber counts (admin only)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: subscribers, in: query, schema: { type: string }, description: Plan ID to list subscribers for instead. }
+      responses:
+        '200':
+          description: Plans (or a subscriber list).
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Plan' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [admin]
+      summary: Create a Square subscription plan (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, variations]
+              properties:
+                name: { type: string }
+                variations:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name: { type: string }
+                      cadence: { type: string }
+                      priceCents: { type: integer }
+                      trialDays: { type: integer }
+      responses:
+        '201': { description: Plan created. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [admin]
+      summary: Edit a plan / variations / metadata (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planId]
+              properties:
+                planId: { type: string }
+                name: { type: string }
+                variations: { type: array, items: { type: object, additionalProperties: true } }
+                newVariations: { type: array, items: { type: object, additionalProperties: true } }
+                restore: { type: boolean }
+                removeVariationId: { type: string }
+                meta: { type: object, additionalProperties: true }
+                markLegacy: { type: boolean }
+                unmarkLegacy: { type: boolean }
+      responses:
+        '200': { description: Plan updated. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [admin]
+      summary: Pause/resume/cancel/migrate a subscription (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, subscriptionId]
+              properties:
+                action: { type: string, enum: [pause, resume, cancel, migrate] }
+                subscriptionId: { type: string }
+                newPlanVariationId: { type: string, description: Required for migrate. }
+      responses:
+        '200': { description: Subscription action applied. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [admin]
+      summary: Archive/delete a plan (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planId]
+              properties:
+                planId: { type: string }
+                cancelSubscriptions: { type: boolean }
+      responses:
+        '200': { description: Plan archived/deleted (or hidden if Square blocks deletion). }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/admin/coupons:
+    get:
+      tags: [admin]
+      summary: List Square discounts/coupons (admin only)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Discounts. }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [admin]
+      summary: Create a discount/coupon (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, discountType]
+              properties:
+                name: { type: string }
+                discountType: { type: string, enum: [FIXED_PERCENTAGE, FIXED_AMOUNT] }
+                percentage: { type: string }
+                amountCents: { type: integer }
+                currency: { type: string, default: USD }
+      responses:
+        '201': { description: Discount created. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      tags: [admin]
+      summary: Delete a discount/coupon (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties: { id: { type: string } }
+      responses:
+        '200': { description: Deleted. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/admin/delinquent:
+    get:
+      tags: [admin]
+      summary: List delinquent (payment-failing) members (admin only)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Delinquent members with Square subscription detail. }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/admin/duplicates:
+    get:
+      tags: [admin]
+      summary: List duplicate-account groups (admin only)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Groups of users sharing an identity signal. }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/admin/member-plans:
+    get:
+      tags: [admin]
+      summary: List a member's Square subscriptions (admin only)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: userID, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Enriched subscriptions for the member. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { description: Square fetch failed. }
+    patch:
+      tags: [admin]
+      summary: Fix a PENDING subscription's start date (admin only)
+      description: Cancels the pending subscription and recreates it with the corrected start date.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subscriptionId, startDate]
+              properties:
+                subscriptionId: { type: string }
+                startDate: { type: string, description: "YYYY-MM-DD" }
+                userID: { type: string }
+      responses:
+        '200': { description: Subscription replaced. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '502': { description: Square API error. }
+
+  /api/v1/admin/square/sync:
+    post:
+      tags: [admin]
+      summary: Sync all members' subscriptions from Square (admin only)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Counts of synced/granted/revoked plus per-user errors. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/admin/square/transactions:
+    get:
+      tags: [admin]
+      summary: List recent Square payments with linked users (admin only)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: beginTime, in: query, schema: { type: string, format: date-time } }
+        - { name: endTime, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200': { description: Enriched payments. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [admin]
+      summary: Link a Square customer to a member and sync/create subscription (admin only)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userID, squareCustomerId]
+              properties:
+                userID: { type: string }
+                squareCustomerId: { type: string }
+                grantAccess: { type: boolean }
+                planVariationId: { type: string }
+                startDate: { type: string }
+      responses:
+        '200': { description: Linked. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ──────────────────────────── operational ─────────────────────────────
+  /api/seed:
+    get:
+      tags: [operational]
+      summary: Seed demo showcase + bounty data (admin only; blocked in production)
+      description: "Operational seed endpoint guarded by guardOperationalEndpoint({ productionDisabled: true }) (SEC-18)."
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Seeding complete. }
+        '400': { description: No users found. }
+        '403': { description: Forbidden, or disabled in production. }
+
+  /api/test-toggle:
+    post:
+      tags: [operational]
+      summary: Toggle a hardware device for testing (admin only; blocked in production)
+      description: "Hardware test endpoint guarded by guardOperationalEndpoint({ productionDisabled: true }) (SEC-18)."
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deviceId]
+              properties: { deviceId: { type: string } }
+      responses:
+        '200': { description: Toggled. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { description: Forbidden, or disabled in production. }
+
+  /api/admin/migrate-memberships:
+    post:
+      tags: [operational]
+      summary: Backfill membership.type for all users (admin only)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Migration complete. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/migrations/disable-notifications:
+    get:
+      tags: [operational]
+      summary: Set notificationPreferences=false for all users (admin only)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Migration complete. }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/migrations/merge-interests:
+    get:
+      tags: [operational]
+      summary: Merge skills/hobbies into interests for all users (admin only)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Migration complete. }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/migrations/seed-bounty-ideas:
+    get:
+      tags: [operational]
+      summary: Reseed the bounty-ideas collection (admin only)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Seeding complete. }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ──────────────────────────────── ctf ─────────────────────────────────
+  # "Hack the Lab" game content — intentionally vulnerable. See CLAUDE.md §14.
+  /api/v1/terminal/state:
+    get:
+      tags: [ctf]
+      summary: "[CTF] Get terminal-game state for the user (session required)"
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Captured flags and progress. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/terminal/submit-flag:
+    post:
+      tags: [ctf]
+      summary: "[CTF] Submit a terminal-game flag (userID in body)"
+      description: Game content. Validates the flag and records it on the user (userID supplied in the body).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [flag, userID]
+              properties:
+                flag: { type: string }
+                userID: { type: string }
+      responses:
+        '200': { description: Flag captured. }
+        '400': { description: Missing/invalid flag, or already captured. }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/holodeck/completions:
+    get:
+      tags: [ctf]
+      summary: "[CTF] Holodeck mission completions/progress (session required)"
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Completed missions and progress. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/holodeck/submit:
+    post:
+      tags: [ctf]
+      summary: "[CTF] Submit a holodeck mission flag (session required)"
+      description: Game content. userID is derived from the session.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [missionID, flag]
+              properties:
+                missionID: { type: string }
+                flag: { type: string }
+      responses:
+        '200': { description: Correct/incorrect result. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/holodeck/ghost:
+    post:
+      tags: [ctf]
+      summary: "[CTF] Holodeck AI ghost hint (session required)"
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '200': { description: Hint text. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { description: Ghost offline. }
+
+  /api/v1/holodeck/generate-badge-images:
+    post:
+      tags: [ctf]
+      summary: "[CTF] Generate badge images via Gemini (session required)"
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Generated images. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: No badges in DB. }
+        '500': { description: GEMINI_API_KEY not configured. }
+
+  /api/v1/holodeck/seed-badges:
+    post:
+      tags: [ctf]
+      summary: "[CTF] Seed holodeck badges (session required)"
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Seeding complete. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/arcade/jackpot:
+    get:
+      tags: [ctf]
+      summary: "[CTF] Current arcade jackpot (public)"
+      security: []
+      responses:
+        '200': { description: Jackpot state. }
+
+  /api/v1/arcade/leaderboard:
+    get:
+      tags: [ctf]
+      summary: "[CTF] Arcade leaderboard (public)"
+      security: []
+      responses:
+        '200': { description: Leaderboard. }
+
+  /api/v1/arcade/start:
+    post:
+      tags: [ctf]
+      summary: "[CTF] Start an arcade game or mission (userID in body)"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userID]
+              properties:
+                userID: { type: string }
+                game: { type: string }
+      responses:
+        '200': { description: Game/mission started. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/v1/arcade/submit:
+    post:
+      tags: [ctf]
+      summary: "[CTF] Submit an arcade score (sessionID in body)"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sessionID, score]
+              properties:
+                sessionID: { type: string }
+                score: { type: number }
+      responses:
+        '200': { description: Score recorded. }
+        '400': { $ref: '#/components/responses/BadRequest' }
