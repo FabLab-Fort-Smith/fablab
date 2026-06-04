@@ -36,6 +36,10 @@ Migrate using a **parallel-run then cutover** strategy:
 
 ## Consequences
 
+- **Production safety (non-negotiable):** until the gated DNS cutover, Vercel stays production
+  and the migration must not touch it — separate repo (`fablab`), separate DB (copy, not prod),
+  Square sandbox, separate S3/SMTP, no DNS change, non-prod hostnames only. The explicit
+  do-not-break-Vercel checklist lives in `docs/runbooks/migrate-from-vercel.md` (Guardrails).
 - **Positive:** low-risk, reversible cutover; Vercel remains a rollback during the window.
 - **Negative / accepted:**
   - **Data migration** of MongoDB (Vercel-era store → self-hosted) must be planned: export,

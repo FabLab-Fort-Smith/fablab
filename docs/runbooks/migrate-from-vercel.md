@@ -4,6 +4,32 @@
 > `@rules/topic-migration.md`, `@rules/workflow-data-lifecycle.md`, ADR 0006.
 > **STATUS: draft — rehearse on staging first. Payment-handling app: be conservative.**
 
+## Guardrails — do NOT break the live Vercel pipeline
+
+Until the deliberate, **gated DNS cutover**, **Vercel stays production**. The migration must run
+fully in parallel and must not be able to affect it. Enforce all of these:
+
+1. **Leave `The-Lab` + its Vercel project alone.** Don't change Vercel settings, env vars,
+   domains, or builds. Consolidation **copies code into the `fablab` repo** (`git subtree`, a
+   read of `The-Lab`); `The-Lab` keeps deploying to Vercel unchanged until decommission.
+2. **Deploy-source isolation.** Coolify deploys from **`fablab`**, not `The-Lab`, so Vercel's
+   repo-triggered deploys are unaffected. App-only changes (e.g. `output: 'standalone'`) go in
+   the **`fablab` copy only** — never commit them to `The-Lab` (could alter Vercel's build).
+3. **Separate database.** Self-hosted MongoDB is a **distinct DB seeded from a copy/restore** of
+   prod — **never point the new stack at the production database**; no dual-writes to prod data.
+4. **Square in sandbox.** New stack uses **Square sandbox** keys until cutover; do not reuse the
+   production payment keys/webhook (no real charges; no interference with the prod webhook).
+5. **Don't share mutable external state.** Use a **separate S3 bucket/prefix** and a
+   test/limited SMTP sender for staging so the parallel stack can't write to / email from prod.
+6. **No DNS changes until cutover.** `fablabfortsmith.org` keeps pointing at Vercel; Cloudflare
+   records for the VPS use **non-production hostnames** (e.g. `staging.`/`pr-*.preview.`) only.
+   Lower TTL **just before** the planned cutover, not now.
+7. **Vercel = rollback.** Keep Vercel live through a defined post-cutover window; rollback =
+   revert DNS to Vercel (and Square keys). **Decommission only after stable** (ADR 0006).
+
+> If any step here would touch Vercel, production DNS, the prod DB, or real payments — **stop**;
+> it's a gated action (`@rules/workflow-gated-actions.md`).
+
 ## When to use
 - Moving the live The-Lab app off Vercel onto the self-hosted Coolify stack.
 
