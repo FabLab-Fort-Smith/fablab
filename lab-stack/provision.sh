@@ -10,9 +10,12 @@
 # Reads non-secret + secret config from ../.env (git-ignored) if present.
 set -euo pipefail
 IFS=$'\n\t'
-cd "$(dirname "$0")"   # -> lab-stack/
+cd "$(dirname "$0")" || exit 1   # -> lab-stack/
 
-load_env() { if [ -f ../.env ]; then set -a; . ../.env; set +a; fi; }
+load_env() {
+  # shellcheck source=/dev/null
+  if [ -f ../.env ]; then set -a; . ../.env; set +a; fi
+}
 
 preflight() {
   echo "== preflight =="
@@ -30,10 +33,7 @@ preflight() {
 
 converge() {
   echo "== converge (Ansible: harden + docker + coolify + backups) =="
-  cd ansible
-  ansible-galaxy collection install -r requirements.yml
-  ansible-playbook playbook.yml
-  cd ..
+  ( cd ansible && ansible-galaxy collection install -r requirements.yml && ansible-playbook playbook.yml )
 }
 
 dns() { echo "== cloudflare dns =="; load_env; bash cloudflare/dns.sh; }

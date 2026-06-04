@@ -43,22 +43,22 @@
 # the (possibly stale) group_vars lists if the fetch fails. (@rules/std-zero-trust.md origin lock)
 - name: Fetch Cloudflare IPv4 ranges
   ansible.builtin.uri: { url: https://www.cloudflare.com/ips-v4, return_content: true }
-  register: cf_v4
+  register: harden_cf_v4
   failed_when: false
   when: restrict_web_to_cloudflare | default(true)
 
 - name: Fetch Cloudflare IPv6 ranges
   ansible.builtin.uri: { url: https://www.cloudflare.com/ips-v6, return_content: true }
-  register: cf_v6
+  register: harden_cf_v6
   failed_when: false
   when: restrict_web_to_cloudflare | default(true)
 
 - name: Resolve effective Cloudflare ranges (fetched, else group_vars fallback)
   ansible.builtin.set_fact:
-    cf_ranges: >-
-      {{ (((cf_v4.content | default('')).splitlines() + (cf_v6.content | default('')).splitlines())
+    harden_cf_ranges: >-
+      {{ (((harden_cf_v4.content | default('')).splitlines() + (harden_cf_v6.content | default('')).splitlines())
           | map('trim') | select('match', '.+/.+') | list)
-         if (cf_v4.content | default('') | length > 0)
+         if (harden_cf_v4.content | default('') | length > 0)
          else ((cloudflare_ipv4_ranges | default([])) + (cloudflare_ipv6_ranges | default([]))) }}
   when: restrict_web_to_cloudflare | default(true)
 
@@ -68,7 +68,7 @@
     src: "{{ item.0 }}"
     port: "{{ item.1 }}"
     proto: tcp
-  loop: "{{ cf_ranges | product(['80', '443']) | list }}"
+  loop: "{{ harden_cf_ranges | product(['80', '443']) | list }}"
   when: restrict_web_to_cloudflare | default(true)
 
 - name: Allow HTTP/HTTPS from anywhere (ONLY if origin lockdown disabled — discouraged)
