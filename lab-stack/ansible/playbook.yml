@@ -28,6 +28,8 @@
     - name: Reminder — manual follow-ups
       ansible.builtin.debug:
         msg:
-          - "Coolify dashboard: finish setup at https://{{ coolify_fqdn }} (admin + MFA), behind Cloudflare Access/allow-list."
-          - "Add the MongoDB service on Coolify's PRIVATE network; wire app base directory lab-site/the-lab."
-          - "Configure forge webhooks (HMAC) + Cloudflare DNS/origin lock. See ../coolify and ../cloudflare."
+          - "Coolify: finish setup at https://{{ coolify_fqdn }} (admin + MFA),"
+          - "behind Cloudflare Access/allow-list."
+          - "Add MongoDB on Coolify's PRIVATE network; app base dir lab-site/the-lab."
+          - "Configure forge webhooks (HMAC) + Cloudflare DNS/origin lock."
+          - "See ../coolify and ../cloudflare."

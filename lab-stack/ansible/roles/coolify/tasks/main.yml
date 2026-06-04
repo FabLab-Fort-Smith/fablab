@@ -16,7 +16,10 @@
     url: https://cdn.coollabs.io/coolify/install.sh
     dest: /opt/coolify-install.sh
     mode: "0755"
-    checksum: "{{ ('sha256:' + coolify_installer_sha256) if (coolify_installer_sha256 | default('')) | length > 0 else omit }}"
+    checksum: >-
+      {{ ('sha256:' + coolify_installer_sha256)
+         if (coolify_installer_sha256 | default('') | length > 0)
+         else omit }}
   when: not coolify_dir.stat.exists
 
 - name: Run the reviewed Coolify installer

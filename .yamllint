@@ -15,3 +15,6 @@ rules:
   truthy:
     check-keys: false       # allow GitHub Actions `on:` and Ansible bare booleans
   document-start: disable    # cloud-init (#cloud-config) and vars files don't start with ---
+  octal-values:             # required by ansible-lint's yaml rule
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
