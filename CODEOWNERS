@@ -1,0 +1,19 @@
+# Code ownership (monorepo — @rules/templates/monorepo.md).
+# Replace the placeholder owners with real GitHub/GitLab handles or teams once the repo is hosted.
+
+# Default owner for everything
+*                       @FabLab-Fort-Smith/maintainers
+
+# The deploy platform (infra / security-sensitive — security-focused review)
+/lab-stack/             @FabLab-Fort-Smith/platform
+
+# The websites
+/lab-site/              @FabLab-Fort-Smith/web
+
+# The migrated app keeps its own ownership under the-lab/ (consolidated from The-Lab)
+/lab-site/the-lab/      @FabLab-Fort-Smith/web
+
+# Decisions, security, and CI config require maintainer review
+/docs/architecture/adr/ @FabLab-Fort-Smith/maintainers
+/docs/security/         @FabLab-Fort-Smith/maintainers
+/CLAUDE.md              @FabLab-Fort-Smith/maintainers

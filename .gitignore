@@ -1,0 +1,36 @@
+# --- Secrets & local config (never commit — @rules/workflow-secrets.md) ---
+.env
+.env.*
+!.env.example
+*.local
+secrets/
+*.pem
+*.key
+*.crt
+*_rsa
+*_ed25519
+
+# --- IaC / platform state ---
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+!*.tfvars.example
+ansible/*.retry
+.vault-pass*
+
+# --- Build output ---
+dist/
+build/
+out/
+public/build/
+.cache/
+.astro/
+.next/
+.svelte-kit/
+node_modules/
+
+# --- Logs & tmp ---
+*.log
+tmp/
+.DS_Store
