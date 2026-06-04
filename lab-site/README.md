@@ -71,4 +71,8 @@ and personal/payment data is classified and protected (master §5). See `CLAUDE.
 
 ## Status
 
-🟡 Structure/decisions defined. `the-lab/` is empty until the consolidation step runs.
+🟢 `the-lab/` **consolidated** from `FabLab-Fort-Smith/The-Lab` via `git subtree` (history
+preserved). `The-Lab` remains the live Vercel source and is **unchanged** — Coolify will deploy
+this monorepo copy in parallel until the gated cutover (migration guardrails in
+`docs/runbooks/migrate-from-vercel.md`). Next: wire it for Coolify (base dir `lab-site/the-lab`,
+`output: 'standalone'`) — in this copy only, never in `The-Lab`.
