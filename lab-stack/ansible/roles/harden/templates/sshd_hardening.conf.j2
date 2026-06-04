@@ -6,4 +6,8 @@ ChallengeResponseAuthentication no
 PubkeyAuthentication yes
 X11Forwarding no
 MaxAuthTries 3
-AllowUsers {{ deploy_user | default('deploy') }}
+{% if ssh_allow_users | default([]) | length > 0 %}
+# Restrict logins to these users (set ssh_allow_users in group_vars). Empty = no restriction
+# (still key-only, no root, no password) — the safe default so existing sudo users aren't locked out.
+AllowUsers {{ ssh_allow_users | join(' ') }}
+{% endif %}

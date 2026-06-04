@@ -56,51 +56,59 @@ these into Coolify env at the app step). The app **fails to boot** if any requir
 
 ---
 
+## Fast path (scripted)
+Most of this is automated. Once the box exists and `ansible/inventory.ini` + `group_vars/all.yml`
+are filled (steps 1, 4) and `../.env` has the Cloudflare/Coolify values:
+```bash
+cd lab-stack
+make provision          # preflight -> Ansible converge -> Cloudflare DNS -> Coolify check
+# (or run stages: bash provision.sh preflight|converge|dns|coolify)
+```
+The only non-scriptable bits left are one-time UI: Coolify admin+MFA, the GitHub App install, and
+the Cloudflare Access policy. The detailed steps below explain each stage.
+
 ## 1. Order the VPS
 1. RackNerd → order the 8 GB KVM VPS, OS = **Ubuntu 24.04**. Note the **public IP**.
 2. (Optional) set reverse DNS / hostname `fablab-prod`.
 
 ## 2. First-boot hardening
-RackNerd/SolusVM usually can't inject cloud-init, so use the manual script.
+**If the box already has sudo users (`critter`, `b007ab1e`) with your SSH keys — SKIP this step.**
+Just point Ansible at one of them (`ansible_user=b007ab1e` in `inventory.ini`); the `harden` role
+applies SSH/firewall hardening **without** locking those users out (it adds no `AllowUsers`
+restriction unless you set `ssh_allow_users`).
 
-**Option A — manual (typical for RackNerd):** SSH in as root (creds from the panel), then:
+Otherwise, bootstrap a deploy user (RackNerd/SolusVM usually can't inject cloud-init):
 ```bash
-# copy the script up (from your laptop, in the repo):
-scp lab-stack/cloud-init/manual-bootstrap.sh root@<vps-ip>:/root/
-# on the VPS:
-DEPLOY_PUBKEY="$(cat ~/.ssh/fablab_deploy.pub)" bash /root/manual-bootstrap.sh   # paste your pubkey
+scp lab-stack/cloud-init/manual-bootstrap.sh root@<vps-ip>:/root/   # from the repo
+ssh root@<vps-ip> 'DEPLOY_PUBKEY="ssh-ed25519 AAAA... you@host" bash /root/manual-bootstrap.sh'
 ```
-**Option B — cloud-init (if your panel supports user-data):** paste `lab-stack/cloud-init/user-data.yaml`
-(replace the SSH key placeholder) as the instance user-data.
+(Or paste `lab-stack/cloud-init/user-data.yaml` as user-data if your panel supports it.)
 
 **Verify (from your laptop):**
 ```bash
-ssh -i ~/.ssh/fablab_deploy deploy@<vps-ip> 'echo ok'   # works
-ssh root@<vps-ip>                                        # MUST be refused
+ssh -i ~/.ssh/fablab_deploy b007ab1e@<vps-ip> 'echo ok'   # existing user works (or deploy@)
+ssh root@<vps-ip>                                          # MUST be refused after converge
 ```
 
-## 3. DNS (Cloudflare) — staging/preview only (NOT the apex)
-In the Cloudflare dashboard for `fablabfortsmith.org`, add **proxied** (orange-cloud) records → VPS IP:
-
-| Name | Type | Value | Proxy |
-|---|---|---|---|
-| `deploy` | A | `<vps-ip>` | proxied (also behind Access) |
-| `staging` | A | `<vps-ip>` | proxied |
-| `*.preview` | A | `<vps-ip>` | proxied (PR previews) |
-
-- **Leave the apex `@` / `www` pointing at Vercel.** (Apex cutover is a later, gated step.)
-- SSL/TLS mode → **Full (strict)**. Enable **Always Use HTTPS** + **HSTS**.
-- Create the scoped **Cloudflare API token** (Zone › DNS › Edit) — you'll give it to Coolify for
-  wildcard ACME.
+## 3. DNS (Cloudflare) — staging/preview only (NOT the apex) — **scripted**
+Create the scoped **Cloudflare API token** (Zone › DNS › Edit), put it + the IP in `../.env`
+(`CLOUDFLARE_API_TOKEN`, `LAB_PRIMARY_DOMAIN`, `LAB_VPS_HOST`), then:
+```bash
+cd lab-stack && make dns        # upserts deploy/staging/*.preview → VPS IP, idempotent
+```
+This creates **proxied** `deploy` + `staging`, and a **DNS-only** `*.preview` wildcard (a *proxied*
+wildcard needs Cloudflare Enterprise — see the note in `cloudflare/dns.sh`). It **leaves the apex
+`@`/`www` on Vercel**. Then in the dashboard set SSL/TLS → **Full (strict)**, **Always Use HTTPS**,
+**HSTS**. (Same token is reused by Coolify for `*.preview` ACME DNS-01.)
 
 ## 4. Converge the host with Ansible
 From the repo on your laptop:
 ```bash
 cd lab-stack/ansible
-cp inventory.example.ini inventory.ini      # set: <vps-ip>, ansible_user=deploy, key path
+cp inventory.example.ini inventory.ini      # set <vps-ip>, ansible_user=b007ab1e (or critter), key path
 cp group_vars/all.example.yml group_vars/all.yml
-#   edit all.yml: primary_domain already fablabfortsmith.org; PASTE the FULL current
-#   Cloudflare IP ranges from https://www.cloudflare.com/ips (v4 + v6).
+#   all.yml: domains are pre-filled; leave ssh_allow_users EMPTY (don't lock out existing users);
+#   Cloudflare IP ranges are AUTO-FETCHED at converge — no manual paste needed.
 cd ..            # back to lab-stack/
 make deps        # installs Galaxy collections
 make ping        # SSH reachability check

@@ -3,7 +3,13 @@
 # ansible-vault for anything sensitive that must be in Ansible.
 
 # --- Identity / access ---
-deploy_user: deploy
+# The box already has sudo users (critter, b007ab1e) with your SSH keys — connect Ansible as one
+# of them (set ansible_user in inventory.ini). deploy_user just owns the docker group + backup files.
+deploy_user: b007ab1e
+
+# Restrict SSH logins to these users. LEAVE EMPTY to avoid locking out existing sudo users
+# (SSH stays key-only, no root, no password regardless). To lock down later: [b007ab1e, critter].
+ssh_allow_users: []
 
 # --- Domains (ADR 0002) ---
 primary_domain: "fablabfortsmith.org"
@@ -11,7 +17,8 @@ coolify_fqdn: "deploy.fablabfortsmith.org"     # Coolify dashboard host
 preview_wildcard: "*.preview.fablabfortsmith.org"
 
 # --- Firewall: lock web ports to Cloudflare only (zero-trust origin — std-zero-trust) ---
-# Refresh from https://www.cloudflare.com/ips (IPv4 + IPv6). Truncated sample shown.
+# Ranges are AUTO-FETCHED from cloudflare.com/ips at converge time; the lists below are only a
+# FALLBACK used if that fetch fails. No manual paste needed in the normal case.
 restrict_web_to_cloudflare: true
 cloudflare_ipv4_ranges:
   - "173.245.48.0/20"
