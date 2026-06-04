@@ -1,0 +1,121 @@
+# SSDLC merge-blocking gates (@rules/workflow-cicd.md). Affected-only app build/test;
+# security scans (secret/SAST/SCA/IaC) run repo-wide. Fail closed: a skipped/errored
+# security stage is a failure, not a pass.
+#
+# SUPPLY-CHAIN TODO (@rules/std-supplychain.md): pin all actions by commit SHA, not tag.
+# Tags are used here for first-draft readability; Dependabot (.github/dependabot.yml) tracks
+# updates — convert to SHA pins before this repo goes live.
+name: CI
+
+"on":               # quoted to avoid the YAML 1.1 truthy quirk; GitHub reads it as the trigger key
+  push:
+    branches: [main, dev]
+  pull_request:
+
+# Least privilege by default; jobs widen only if they must.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      app: ${{ steps.f.outputs.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: f
+        name: Detect whether the app is present yet (lab-site/the-lab)
+        run: |
+          if [ -f lab-site/the-lab/package.json ]; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "app=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::lab-site/the-lab not consolidated yet — app jobs will be skipped."
+          fi
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # full history so gitleaks scans all commits
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Uses .gitleaks.toml if present (comes with the app on consolidation).
+
+  iac:
+    name: IaC lint (lab-stack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install linters
+        run: pipx install yamllint && pipx install ansible-lint
+      - name: yamllint
+        run: yamllint lab-stack
+      - name: ansible-lint
+        run: ansible-lint lab-stack/ansible
+      - name: shellcheck (any shell scripts)
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          # Render is not needed: lint plain .sh files; .j2 templates are checked at deploy.
+          found=$(find lab-stack -name '*.sh' -not -name '*.j2' || true)
+          if [ -n "$found" ]; then echo "$found" | xargs shellcheck; else echo "no plain .sh files yet"; fi
+
+  app:
+    name: App build/test (lab-site/the-lab)
+    needs: detect
+    if: needs.detect.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: lab-site/the-lab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: lab-site/the-lab/package-lock.json
+      - name: Install (clean, from lockfile)
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Test (coverage gate enforced in jest.config — master §4)
+        run: npm run test:ci
+      - name: Build
+        run: npm run build
+      - name: SCA (dependency audit — block on high/critical)
+        run: npm audit --audit-level=high
+
+  sast:
+    name: SAST (semgrep)
+    needs: detect
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install semgrep
+        run: pipx install semgrep
+      - name: Run semgrep (repo config if present, else curated rulesets)
+        run: |
+          if [ -f lab-site/the-lab/.semgrep.yml ]; then
+            semgrep --error --config lab-site/the-lab/.semgrep.yml --config p/owasp-top-ten .
+          else
+            semgrep --error --config p/owasp-top-ten --config p/secrets .
+          fi

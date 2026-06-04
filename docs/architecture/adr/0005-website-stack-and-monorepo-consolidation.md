@@ -53,6 +53,10 @@ this `fablab` platform repo.
     them non-conflicting (the more specific wins, master §6).
   - **Subdirectory build context:** the app moves from repo-root to `lab-site/the-lab/`, so set
     Coolify's **base directory** and update Dockerfile/CI working-dir/lockfile paths.
+  - **GitHub Actions only run from the repo root `.github/workflows/`** — The-Lab's existing
+    workflows under `lab-site/the-lab/.github/` will **not** auto-run; merge them into the root
+    `.github/workflows/ci.yml` (path-scoped, `working-directory: lab-site/the-lab`) at
+    consolidation. The root CI already guards app jobs on the app's presence.
 
 ## Alternatives considered
 
