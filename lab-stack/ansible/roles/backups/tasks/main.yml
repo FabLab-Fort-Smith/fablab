@@ -1,0 +1,31 @@
+---
+# MongoDB backups (ADR 0007: the DB is on the VPS = our responsibility).
+# Encrypted dump + off-box copy + a restore script. An untested backup is not a backup —
+# schedule a restore drill (docs/runbooks/backup-restore.md, @rules/workflow-data-lifecycle.md).
+#
+# STATUS: drafted — the off-box target (restic/S3) and the Mongo connection are wired via the
+# secret store, not committed. Validate end-to-end (dump + restore) before relying on it.
+
+- name: Ensure backup dir exists (root-only)
+  ansible.builtin.file:
+    path: "{{ backup_local_dir | default('/var/backups/fablab') }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install backup script
+  ansible.builtin.template:
+    src: backup-mongo.sh.j2
+    dest: /usr/local/sbin/fablab-backup-mongo
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Schedule daily encrypted backup
+  ansible.builtin.cron:
+    name: fablab-mongo-backup
+    user: root
+    minute: "0"
+    hour: "{{ backup_schedule_hour | default(3) }}"
+    job: "/usr/local/sbin/fablab-backup-mongo >> /var/log/fablab-backup.log 2>&1"

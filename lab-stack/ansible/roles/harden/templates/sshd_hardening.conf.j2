@@ -1,0 +1,9 @@
+# Managed by Ansible (lab-stack/ansible/roles/harden). Do not edit by hand.
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+PubkeyAuthentication yes
+X11Forwarding no
+MaxAuthTries 3
+AllowUsers {{ deploy_user | default('deploy') }}

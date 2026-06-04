@@ -1,0 +1,33 @@
+---
+# Converge the VPS to its desired state. Idempotent; safe to re-run (ADR 0004).
+# Usage (from lab-stack/): `make converge`  (or `ansible-playbook ansible/playbook.yml`)
+#
+# Order matters: harden the host first, then Docker, then Coolify, then backups.
+- name: Converge fablab VPS (harden + docker + coolify + backups)
+  hosts: lab_vps
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Assert required vars are set (fail closed — no silent defaults)
+      ansible.builtin.assert:
+        that:
+          - primary_domain is defined and primary_domain | length > 0
+          - coolify_fqdn is defined and coolify_fqdn | length > 0
+        fail_msg: "Set primary_domain and coolify_fqdn in group_vars/all.yml before converging."
+
+  roles:
+    - role: harden      # CIS-aligned: ssh, ufw (+ Cloudflare lock), fail2ban, auto-updates, sysctl
+    - role: docker      # Docker Engine from the official repo, non-root deploy access
+    - role: coolify      # install Coolify (reviewed installer); dashboard secured manually after
+      when: coolify_install | default(true)
+    - role: backups     # encrypted MongoDB dumps + off-box copy + restore script
+      when: backups_enabled | default(true)
+
+  post_tasks:
+    - name: Reminder — manual follow-ups
+      ansible.builtin.debug:
+        msg:
+          - "Coolify dashboard: finish setup at https://{{ coolify_fqdn }} (admin + MFA), behind Cloudflare Access/allow-list."
+          - "Add the MongoDB service on Coolify's PRIVATE network; wire app base directory lab-site/the-lab."
+          - "Configure forge webhooks (HMAC) + Cloudflare DNS/origin lock. See ../coolify and ../cloudflare."

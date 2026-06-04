@@ -1,0 +1,36 @@
+# Copy to group_vars/all.yml (git-ignored) and adjust. NO SECRETS here — secrets live in the
+# secret store / Coolify and are injected at runtime (@rules/workflow-secrets.md). Use
+# ansible-vault for anything sensitive that must be in Ansible.
+
+# --- Identity / access ---
+deploy_user: deploy
+
+# --- Domains (ADR 0002) ---
+primary_domain: "example.org"          # e.g. fablabfortsmith.org
+coolify_fqdn: "deploy.example.org"     # Coolify dashboard host
+preview_wildcard: "*.preview.example.org"
+
+# --- Firewall: lock web ports to Cloudflare only (zero-trust origin — std-zero-trust) ---
+# Refresh from https://www.cloudflare.com/ips (IPv4 + IPv6). Truncated sample shown.
+restrict_web_to_cloudflare: true
+cloudflare_ipv4_ranges:
+  - "173.245.48.0/20"
+  - "103.21.244.0/22"
+  - "104.16.0.0/13"
+  - "104.24.0.0/14"
+  - "172.64.0.0/13"
+  - "131.0.72.0/22"
+  # ... add the full current list before applying.
+cloudflare_ipv6_ranges:
+  - "2400:cb00::/32"
+  - "2606:4700::/32"
+  # ... add the full current list.
+
+# --- Coolify ---
+coolify_install: true
+
+# --- Backups (ADR 0007: MongoDB on the VPS = our responsibility) ---
+backups_enabled: true
+backup_local_dir: "/var/backups/fablab"
+backup_schedule_hour: 3                 # daily mongodump at 03:00 (monotonic-safe cron)
+# Off-box target (S3/restic) configured via the secret store; see roles/backups.
