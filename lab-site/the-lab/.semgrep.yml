@@ -1,0 +1,44 @@
+# Project security rules (crypto-lint + log-leak-scan starters) — CLAUDE.md §7, 06 §1/§6.
+# Run via the `sast` job in .github/workflows/ci.yml (report-only until SEC-23/24 land, then blocking).
+rules:
+  - id: no-createcipher-legacy
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      crypto.createCipher/createDecipher are insecure (key derived from a passphrase, no IV).
+      Use createCipheriv/createDecipheriv with AES-256-GCM and a random IV (06 §1).
+    pattern-either:
+      - pattern: crypto.createCipher(...)
+      - pattern: crypto.createDecipher(...)
+
+  - id: no-unauthenticated-cipher-mode
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      Unauthenticated/weak cipher mode (CBC/ECB). Use AES-256-GCM (authenticated) with a random IV (06 §1).
+    patterns:
+      - pattern: crypto.createCipheriv("$ALGO", ...)
+      - metavariable-regex:
+          metavariable: $ALGO
+          regex: (?i).*(cbc|ecb).*
+
+  - id: no-hardcoded-secret-fallback
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >
+      Hardcoded fallback for a secret/key/token/connection string. Required secrets must come
+      from the environment with no literal default; fail fast if unset (06 §4).
+    patterns:
+      - pattern: process.env.$X || "$LIT"
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?i).*(secret|key|token|password|passwd|signature|uri|dsn|credential).*
+
+  - id: no-sensitive-logging
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >
+      Possible sensitive data in logs (token/password/secret/PII). Never log secrets, tokens,
+      passwords, decrypted PII, or full profile/request objects (06 §6).
+    patterns:
+      - pattern-regex: console\.(log|info|debug|warn|error)\s*\([^)]*\b(token|verificationToken|password|secret|decryptEmail|decryptPhone|profile|userData)\b

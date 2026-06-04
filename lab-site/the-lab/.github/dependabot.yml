@@ -1,0 +1,23 @@
+version: 2
+# Automated dependency + GitHub Actions updates. CLAUDE.md §9/§12, 06 §7.
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - "audit"
+      - "priority: high"
+    groups:
+      production-dependencies:
+        dependency-type: production
+      dev-dependencies:
+        dependency-type: development
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - "audit"

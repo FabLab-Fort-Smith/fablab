@@ -1,0 +1,922 @@
+Handle,Title,Body (HTML),Vendor,Product Category,Type,Tags,Published,Option1 Name,Option1 Value,Option1 Linked To,Option2 Name,Option2 Value,Option2 Linked To,Option3 Name,Option3 Value,Option3 Linked To,Variant SKU,Variant Grams,Variant Inventory Tracker,Variant Inventory Qty,Variant Inventory Policy,Variant Fulfillment Service,Variant Price,Variant Compare At Price,Variant Requires Shipping,Variant Taxable,Variant Barcode,Image Src,Image Position,Image Alt Text,Gift Card,SEO Title,SEO Description,Google Shopping / Google Product Category,Google Shopping / Gender,Google Shopping / Age Group,Google Shopping / MPN,Google Shopping / Condition,Google Shopping / Custom Product,Google Shopping / Custom Label 0,Google Shopping / Custom Label 1,Google Shopping / Custom Label 2,Google Shopping / Custom Label 3,Google Shopping / Custom Label 4,Description (product.metafields.custom.description),Gemstone (product.metafields.custom.gemstone),Jewelry (product.metafields.custom.jewelry),year (product.metafields.custom.year),Google: Custom Product (product.metafields.mm-google-shopping.custom_product),Authenticity (product.metafields.shopify.authenticity),Complementary products (product.metafields.shopify--discovery--product_recommendation.complementary_products),Related products (product.metafields.shopify--discovery--product_recommendation.related_products),Related products settings (product.metafields.shopify--discovery--product_recommendation.related_products_display),Search product boosts (product.metafields.shopify--discovery--product_search_boost.queries),Variant Image,Variant Weight Unit,Variant Tax Code,Cost per item,Included / United States,Price / United States,Compare At Price / United States,Included / International,Price / International,Compare At Price / International,Status
+untitled-jul14_20-48,Untitled Jul14_20:48,,Engel Fine Design,,"","",false,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,0.00,,true,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,oz,,,true,,,true,,,draft
+untitled-jul14_20-32,Dichroic Sunset Tourmaline,"",Engel Fine Design,Arts & Entertainment > Hobbies & Creative Arts > Collectibles > Rocks & Fossils > Gemstones,"",Gemstone,true,Title,Default Title,,,,,,,,OD24-Tanz-Tourm-T8Q5,0.0,shopify,1,deny,manual,250.00,,true,true,ODGEM-T8Q5,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/VideoCapture-20240714-203017.jpg?v=1721052851,1,"",false,,,218,,,,,,,,,,,,,,,,genuine,,,,,,oz,,150.00,true,,,true,,,active
+brazilian-bi-colored-tourmaline,Brazilian Bi-Colored Tourmaline,"",Engel Fine Design,Arts & Entertainment > Hobbies & Creative Arts > Collectibles > Rocks & Fossils > Gemstones,"",Gemstone,true,Title,Default Title,,,,,,,,OD24-BRAZI-TOURM-LS7T,0.0,shopify,1,deny,manual,200.00,350.00,true,true,ODGEM-LS7T,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/VideoCapture-20240714-195607.jpg?v=1721005085,1,"",false,,,218,,,,,,,,,,,,,,,,genuine,,,,,,oz,,125.00,true,,,true,,,active
+mozambique-rhodolite-garnet,Mozambique Rhodolite Garnet,"",Oscillation Devices,Arts & Entertainment > Hobbies & Creative Arts > Collectibles > Rocks & Fossils > Gemstones,Gemstone,Rhodolite,true,Title,Default Title,,,,,,,,OD24-MOZAM-RHODO-M37S,0.0,shopify,1,deny,manual,150.00,,true,true,ODGEM-M37S,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/VideoCapture-20240711-191751.jpg?v=1720743984,1,"",false,,,218,,,,,,,,,,,,,,,,genuine,,,,,,oz,,50.00,true,,,true,,,active
+tourmaline-hybrid-explorer,Tourmaline Hybrid Explorer,"",Engel Fine Design,Apparel & Accessories > Jewelry,Pendant,"handmade, hybrid",true,Title,Default Title,,,,,,,,"",0.0,shopify,1,deny,manual,420.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_f755298e-3c23-4771-ba69-970e8101247a.jpg?v=1714403008,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,oz,,,true,,,true,,,active
+untitled-apr25_22-48,[ef3D] S1 Classico Ring,"",Engel Fine Design,Apparel & Accessories > Jewelry,ring,"2024, Casted",true,Title,Default Title,,,,,,,,"",0.0,shopify,1,deny,manual,210.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_30edb47e-d144-45b8-9eaa-53ef44e06ed9.jpg?v=1714335778,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+ef3d-luminor-mini-v1,[ef3D] S1 Luminor Mini Pendant v1,"",Engel Fine Design,Apparel & Accessories > Jewelry,Pendant,"2024, CAD, Casted, Series 1",true,Gemstones,Garnet,,,,,,,,"",0.0,shopify,1,deny,manual,150.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240502_110704.jpg?v=1714666060,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,50.00,true,,,true,,,active
+ef3d-s1-navigator-talisman,[ef3D] S1 Navigator Pendant,"",Engel Fine Design,Apparel & Accessories > Jewelry,Pendant,"2024, CAD, Casted, Series 1",true,Title,Default Title,,,,,,,,"",0.0,shopify,1,deny,manual,160.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240425_221127.jpg?v=1714102743,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,44.05,true,,,true,,,active
+ef3d-series-1-art-deco-mini-penant-v2,[ef3D] S1 Luminor Mini Pendant v2,"",Engel Fine Design,Apparel & Accessories > Jewelry,Pendant,"2024, CAD, Casted, Series 1",true,Gemstones,Amethyst,,,,,,,,"",0.0,shopify,1,deny,manual,110.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_a4aea0d5-297b-4155-b250-ea0714779995.jpg?v=1714100138,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,28.30,true,,,true,,,active
+ef3d-series-1-art-deco-mini-penant-v2,,,,,,,,,Aquamarine,,,,,,,,"",0.0,shopify,1,deny,manual,110.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_cf141262-6a6a-488a-b09e-fb29c8510d34.jpg?v=1714100771,2,"",,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_a4aea0d5-297b-4155-b250-ea0714779995.jpg?v=1714100138,lb,,28.30,,,,,,,
+untitled-apr25_18-40,[ef3D] S1 Vertex Pendant,"",Engel Fine Design,Apparel & Accessories > Jewelry,Pendant,"2024, CAD, Casted, Series 1",true,Gemstone,Amethyst,,,,,,,,"",0.0,,0,deny,manual,200.00,,true,true,"",https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_9059b4c6-0d67-440e-9f7f-261e681f90c0.jpg?v=1714098978,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,51.76,true,,,true,,,active
+untitled-apr25_18-40,,,,,,,,,Garnet,,,,,,,,"",0.0,,0,deny,manual,200.00,,true,true,"",https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_5f2a8ae3-dc51-426d-a141-995ef9c1640d.heic?v=1714098977,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,lb,,51.76,,,,,,,
+untitled-apr25_18-40,,,,,,,,,Citrine,,,,,,,,"",0.0,,0,deny,manual,200.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,51.76,,,,,,,
+untitled-apr25_18-40,,,,,,,,,Peridot,,,,,,,,"",0.0,shopify,1,deny,manual,200.00,,true,true,,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_9059b4c6-0d67-440e-9f7f-261e681f90c0.jpg?v=1714098978,lb,,51.76,,,,,,,
+untitled-apr25_18-40,,,,,,,,,Topaz,,,,,,,,"",0.0,,0,deny,manual,200.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,51.76,,,,,,,
+eclipse-pendant,Eclipse Pendant,"",Engel Fine Design,Apparel & Accessories > Jewelry,Pendant,"2023, fabricated, handmade, jewelry, pendant",true,Title,Default Title,,,,,,,,"",0.0,shopify,1,deny,manual,260.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_a4846854-b2a8-4848-bd6c-92fd8cce6880.jpg?v=1714073269,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,20.00,true,,,true,,,active
+cleaning-inspection-package,Cleaning & Inspection Package,"<ul>
+<li> Clean Jewelry</li>
+<li>Repair Inspection</li>
+</ul>",[efd] Repair Shop,,repair,repair package,false,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,0.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,draft
+copy-of-ring-sizing-package,Spa Day Package,"<ul>
+<li>Check and Tighten Stones</li>
+<li>Clean &amp; Polish</li>
+<li>Rhodium Plating (Optional)</li>
+<li>Additional Repair Inspection</li>
+</ul>",[efd] Repair Shop,,repair,repair package,false,Package,Clean & Polish,,,,,,,,"",0.0,,0,deny,manual,30.00,,false,true,"",,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,draft
+copy-of-ring-sizing-package,,,,,,,,,Clean Polish & Rhodium (White Gold Jewelry),,,,,,,,"",0.0,,0,deny,manual,40.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+ring-sizing-package,Ring Sizing Package,"<ul>
+<li>Size Ring Up or Down</li>
+<li>Check and Tighten Stones</li>
+<li>Clean &amp; Polish</li>
+<li>Additional Repair Inspection</li>
+</ul>",[efd] Repair Shop,,repair,repair package,false,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,0.00,,false,true,"",,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,draft
+1-65ct-montana-sapphire-solitaire-wg-engagement-ring,1.65ct Montana Sapphire Solitaire WG Engagement Ring,"","Critter, the Designer",Apparel & Accessories > Jewelry,ring,"2023, bridal, fabricated",true,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,3000.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_bf277e6c-0a43-497e-8e95-2d281207f17c.heic?v=1710392980,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+1-65ct-montana-sapphire-solitaire-wg-engagement-ring,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_63d23ce8-e800-489b-acec-2602ab5e3e4d.heic?v=1710392978,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+1-65ct-montana-sapphire-solitaire-wg-engagement-ring,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_ab94d58f-c9e6-4670-80e9-ff217928c077.heic?v=1710392979,3,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+hessonite-garnet-wg-floral-pendant,Hessonite Garnet WG Floral Pendant,"","Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2023, CAD, Casted, jewelry, pendant",true,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,2000.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_9956b953-6dca-4449-8885-16701862b4d8.jpg?v=1710392772,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+hessonite-garnet-wg-floral-pendant,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_0dd6688d-9845-4445-9e40-10e256341795.heic?v=1710392770,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+hessonite-garnet-wg-floral-pendant,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_65809dff-4453-4738-bd4e-86d6e69c93ca.heic?v=1710392771,3,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+hessonite-garnet-wg-floral-pendant,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_162a370a-e2a8-45d2-9eb1-44e135028758.jpg?v=1710392769,4,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+1-15ct-tanzanite-yg-engagement-ring,1.15ct Tanzanite YG Engagement Ring,"<p data-mce-fragment=""1"">This 1.15ct Tanzanite YG Engagement Ring is a one-of-a-kind beauty. Handcrafted with care, this custom made ring features a stunning 1.15ct natural tanzanite trillion set in 14k yellow gold. Two .03ct VS diamonds add sparkle and elegance to this unique piece. </p>","Critter, the Designer",Apparel & Accessories > Jewelry,ring,"2023, bridal, fabricated",true,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,1200.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_211e25d9-b87b-4bbc-9b8c-1ad045d6a091.jpg?v=1710443867,1,"",false,,,,,,,,,,,,,,"This 1.15ct Tanzanite YG Engagement Ring is a one-of-a-kind beauty. Handcrafted with care, this custom made ring features a stunning 1.15ct natural tanzanite trillion set in 14k yellow gold. Two .03ct VS diamonds add sparkle and elegance to this unique piece.",,tanzanite-engagement-ring,,,,,,,,,lb,,,true,,,true,,,active
+1-15ct-tanzanite-yg-engagement-ring,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_6cdca3be-e605-4f99-ae4c-4912cabc8957.jpg?v=1710443867,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+1ct-emerald-cut-lab-diamond-wg-engagement-ring,1ct Emerald-cut Lab Diamond WG Engagement Ring,"","Critter, the Designer",Apparel & Accessories > Jewelry,ring,"14k white gold, 2023, bridal, fabricated",true,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,1200.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_670a513d-1776-44a2-a83a-c2c68018d98b.jpg?v=1710392254,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+1ct-emerald-cut-lab-diamond-wg-engagement-ring,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_efb1b063-fcdd-46cd-a86f-5f30a9c6ade7.jpg?v=1710392253,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+1ct-emerald-cut-lab-diamond-wg-engagement-ring,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_a854cd55-91cc-467e-a398-fef038e315f2.jpg?v=1710392252,3,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+blossom-ring,[ef3D] S1 Blossom Ring,"","Critter, the Designer",Apparel & Accessories > Jewelry,ring,"2024, Casted, POD, ring, s1",true,Title,Default Title,,,,,,,,"",0.0,,-2,deny,manual,125.00,,true,true,"",https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240501_143514.jpg?v=1714666089,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+art-deco-earrings,[ef3D] S1 Deco Droplet Earrings,"","Critter, the Designer",Apparel & Accessories > Jewelry,Earrings,"2024, CAD, Casted",true,Gemstones,Amethyst,,,,,,,,EFD24-STER-EARR-1,0.0,shopify,0,deny,manual,100.00,,true,true,"",https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240502_111037.jpg?v=1714666312,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+art-deco-earrings,,,,,,,,,Rhodolite Garnet,,,,,,,,EFD24-STER-EARR-2,0.0,shopify,1,deny,manual,100.00,,true,true,"",https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240502_110952.jpg?v=1714666311,2,"",,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240502_110952.jpg?v=1714666311,lb,,,,,,,,,
+art-deco-earrings,,,,,,,,,Mozambique Garnet,,,,,,,,EFD24-STER-EARR-3,0.0,shopify,0,deny,manual,100.00,,true,true,"",https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240502_110916.jpg?v=1714666313,3,"",,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+art-deco-earrings,,,,,,,,,Hessonite Garnet,,,,,,,,EFD24-STER-EARR-4,0.0,shopify,1,deny,manual,100.00,,true,true,"",https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240502_110852.jpg?v=1714666310,4,"",,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240502_110839.jpg?v=1714666312,lb,,,,,,,,,
+art-deco-earrings,,,,,,,,,Citrine,,,,,,,,EFD24-STER-EARR-5,0.0,shopify,0,deny,manual,100.00,,true,true,"",https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240502_110839.jpg?v=1714666312,5,"",,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+art-deco-earrings,,,,,,,,,Peridot,,,,,,,,EFD24-STER-EARR-6,0.0,shopify,0,deny,manual,100.00,,true,true,"",https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240502_111644.jpg?v=1714666638,6,"",,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240502_110916.jpg?v=1714666313,lb,,,,,,,,,
+art-deco-earrings,,,,,,,,,Sky Blue Topaz,,,,,,,,EFD24-STER-EARR-7,0.0,shopify,1,deny,manual,100.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240502_111037.jpg?v=1714666312,lb,,,,,,,,,
+art-deco-earrings,,,,,,,,,Tanzanite,,,,,,,,EFD24-STER-EARR-8,0.0,shopify,1,deny,manual,100.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240502_111644.jpg?v=1714666638,lb,,,,,,,,,
+art-deco-earrings,,,,,,,,,Iolite,,,,,,,,EFD24-STER-EARR-9,0.0,shopify,0,deny,manual,100.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+art-deco-earrings,,,,,,,,,Welo Opal,,,,,,,,EFD24-STER-EARR-10,0.0,shopify,1,deny,manual,100.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PSX-20240502_110852.jpg?v=1714666310,lb,,,,,,,,,
+v-day-waffle,V-Day Waffle!,"",Engel Fine Design,,"","",true,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,1.00,,false,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/64f48fce-d2f7-471a-9ad9-9076a5843c20.webp?v=1707943013,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+v-day-waffle,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20240214-142053.jpg?v=1707943014,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+untitled-feb6_17-31,Untitled Feb6_17:31,,Engel Fine Design,,"","",false,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,0.00,,true,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,draft
+garnet-designer,Garnet & Yellow Sapphire Pendant,<p><span><br><br></span></p>,"Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2023, designer, fabricated, handmade, jewelry, pendant",true,Title,Default Title,,,,,,,,"",0.0,shopify,1,deny,manual,700.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_301ad2df-4b96-400a-93dc-7ffd052dee8a.jpg?v=1713796499,1,"",false,,,,,,,,,,,,,,"This Garnet and Yellow Sapphire Pendant is a stunning piece made from sterling silver featuring a 6mm rhodolite garnet center stone and 17 1.5mm yellow sapphire accent stones. It comes with a 20"" chain, display case, and polishing cloth for convenient storage and maintenance. Elevate your style with this designer pendant.",,garnet-yellow-sapphire-pendant,'2023,,,,,,,,lb,,,true,,,true,,,active
+garnet-designer,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_57924841-e0ae-4f16-a8b9-358d0ea06356.heic?v=1713796499,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+sapphire-designer,Sapphire Designer,"<p><span>jewMaterials:</span></p>
+<p><span>- Sterling silver</span></p>
+<p><span>- 3mm Teal Sapphire</span></p>
+<p><span>- 17× 1.5mm Yellow Sapphire</span></p>
+<p> </p>
+<p><span>Whats Included:</span></p>
+<p><span>- Pendant</span></p>
+<p><span>- 20"" sterling silver chain</span></p>
+<p><span>- Display</span></p>
+<p><span>- Collector membership</span></p>
+<p><span>- Polishing cloth</span></p>
+<p><span><br>Add a touch of elegance with our Sapphire Designer pendant. Made of sterling silver, it features a 3mm Teal sapphire center and 17 1.5mm yellow sapphire accents. Includes a 20"" sterling silver chain, display, collector membership, and polishing cloth. Upgrade your style today. <br></span></p>","Critter, the Designer",Apparel & Accessories > Jewelry,ring,"2023, designer, handmade, jewelry, pendant",true,Title,Default Title,,,,,,,,"",0.0,shopify,1,deny,manual,700.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_c699c29d-4f1a-4f07-a50b-dab83bfe8683.heic?v=1702701059,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+player-membership,Player Membership,"<div>
+<p>Become an Trader member and benefit from repair shop access for all your jewelry, +1 additional points for the monthly giveaway, and 1 free clean and polish every 6 months. Don't forget about 20% all purchases at [efd] throughout the duration of your membership!</p>
+</div>
+<ul>
+<li>Repair Shop access for all jewelry</li>
+<li>Early access to new [efd] Collectibles</li>
+<li>20% off online and at pop-up events</li>
+<li>+1 point in Monthly Giveaway</li>
+<li>Free clean and polish for 1 item every 6 months</li>
+</ul>
+<!--/data/user/0/com.samsung.android.app.notes/files/clipdata/clipdata_bodytext_230726_132538_238.sdocx-->",Engel Fine Design,,"",Membership,false,Title,Default Title,,,,,,,,[efd]23-Coll-Memb,0.0,,0,deny,manual,75.00,,false,true,,,,,false,[efd] Trader Membership,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,draft
+untitled-nov29_13-21,Untitled Nov29_13:21,,Engel Fine Design,,"","",false,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,0.00,,true,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,draft
+hessonite-garnet,Hessonite Garnet,"",Oscillation Devices,,Gemstone,Gemstone,true,Title,Default Title,,,,,,,,"",0.0,shopify,1,deny,manual,150.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20231118-081632.jpg?v=1700317118,1,"",false,,,,,,,,,,,,,,,garnet,,,,,,,,,,lb,,,true,,,true,,,active
+chrome-tourmaline,Chrome Tourmaline,"",Oscillation Devices,Arts & Entertainment > Hobbies & Creative Arts > Collectibles > Rocks & Fossils > Gemstones,Gemstone,"",true,Title,Default Title,,,,,,,,OD24-Tanz-Tourm-TTN7,0.0,shopify,1,deny,manual,250.00,300.00,true,true,ODGEM-TTN7,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/VideoCapture-20240715-072219.jpg?v=1721053674,1,"",false,,,218,,,,,,,,,,,,,,,,genuine,,,,,,lb,,,true,,,true,,,active
+umba-sapphire,Umba Sapphire,"",Engel Fine Design,,Gemstone,"",true,Title,Default Title,,,,,,,,"",0.0,shopify,1,deny,manual,300.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20231118-081638.jpg?v=1700317049,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+rhodolite-ring,Rhodolite Designer,"","Critter, the Designer",Apparel & Accessories > Jewelry,ring,"2023, designer, handmade, jewelry, ring",false,Title,Default Title,,,,,,,,"",0.0,shopify,1,deny,manual,700.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20231118-081336.jpg?v=1700316891,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,draft
+tanzanite-bike,Tanzanite Bike,"","Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2023, Collaboration, efd x jazwraps, handmade, jewelry, pendant, trader",false,Title,Default Title,,,,,,,,"",0.0,shopify,1,deny,manual,90.00,150.00,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20231118-080516.jpg?v=1700316791,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,draft
+untitled-nov18_08-11,Filigree Trader,"","Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2023, handmade, jewelry, pendant, trader",false,Title,Default Title,,,,,,,,"",0.0,shopify,1,deny,manual,30.00,50.00,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20231118-080448.jpg?v=1700316761,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,draft
+flintwick-cat-pendant,Flintwick Pendant,"",Engel Fine Design,Apparel & Accessories > Jewelry,Pendant,"2023, [efd] x flintwick, Collaboration, handmade, jewelry, pendant, trader",false,Title,Default Title,,,,,,,,"",0.0,shopify,1,deny,manual,30.00,50.00,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20231118-080434.jpg?v=1700316689,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,draft
+dead-bolt-pendant,Dead Bolt Pendant,"","Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2023, gd, handmade, jewelry, pendant, trader",false,Title,Default Title,,,,,,,,"",0.0,shopify,1,deny,manual,48.00,80.00,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20231118-080329.jpg?v=1700316657,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,draft
+textured-band,Silver Bands,"","Critter, the Designer",Apparel & Accessories > Jewelry,ring,"2023, handmade, jewelry, ring",false,Title,Hammered,,,,,,,,"",0.0,shopify,1,deny,manual,30.00,50.00,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20231118-080208.jpg?v=1700316605,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,draft
+textured-band,,,,,,,,,Diamond Point,,,,,,,,"",0.0,shopify,1,deny,manual,30.00,50.00,true,true,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+textured-band,,,,,,,,,Satin,,,,,,,,"",0.0,shopify,1,deny,manual,30.00,50.00,true,true,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+dead-bolt-ring,Dead Bolt Ring,"","Critter, the Designer",Apparel & Accessories > Jewelry,ring,"2023, gd, handmade, jewelry, ring, trader",false,Variant,v1,,,,,,,,"",0.0,shopify,2,deny,manual,39.00,65.00,true,true,"",https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20231118-075831.jpg?v=1700316571,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,draft
+dead-bolt-ring,,,,,,,,,v2,,,,,,,,"",0.0,shopify,0,deny,manual,39.00,65.00,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+3160-clean-and-polish,3160 - Members Free Clean and Polish,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,0.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,archived
+3162-cpr,3162 - Members $10 CPR,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,10.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,4.00,true,,,true,,,archived
+2162-cpr,2162 - Retail CPR,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,40.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,4.00,true,,,true,,,archived
+2160-clean-and-polish,2160 - Retail Clean and Polish,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-5,deny,manual,30.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,archived
+aquamarine-hybrid-explorer,Aquamarine Hybrid,"","Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2023, fabricated, wire wrap",true,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,300.00,,true,true,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20231012-091603.jpg?v=1710390802,1,"",false,,,,,,,,,,,,,,,,,'23,,,,,,,,lb,,,true,,,true,,,active
+untitled-sep1_09-55,Untitled Sep1_09:55,,Engel Fine Design,,"","",false,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,0.00,,true,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,draft
+0-35ct-pink-tourmaline,0.35ct Pink Tourmaline,"",Oscillation Devices,,Gemstone,"Gemstone, michael, Tourmaline",false,Title,Default Title,,,,,,,,efd23--Tourm-AGEM19,0.0,shopify,1,deny,manual,50.00,,true,true,efd23--Tourm-AGEM19,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,draft
+1-85ct-red-zircon,1.85ct Red Zircon,"",Oscillation Devices,,Gemstone,"Gemstone, michael",true,Title,Default Title,,,,,,,,efd23--Zirco-AGEM18,0.0,shopify,1,deny,manual,200.00,,true,true,efd23--Zirco-AGEM18,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,active
+tanzanian-rhodolite-garnet,Tanzanian Rhodolite Garnet,"",Engel Fine Design,,Gemstone,"Gemstone, michael",true,Title,Default Title,,,,,,,,efd23-Tanz-Garne-AGEM17,0.0,shopify,1,deny,manual,40.00,,true,true,efd23-Tanz-Garne-AGEM17,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,active
+2-64ct-wg-icon-engagement-ring,2.64ct Montanna Sapphire WG Engagement Ring,"","Critter, the Designer",Apparel & Accessories > Jewelry,ring,"2023, bridal, fabricated, jewelry, ring",true,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,2500.00,,true,true,"",https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230823_094139.jpg?v=1710388594,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+1163-cpr-w-repair,1163 - CPR w/ Repair,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-1,deny,manual,10.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,3.00,true,,,true,,,archived
+1162-cpr,1162 - WS CPR,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-2,deny,manual,20.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,4.00,true,,,true,,,archived
+1161-c-p-w-repair,1161 - C&P w/ Repair,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,15.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1160-clean-and-polish,1160 - WS Clean and Polish,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-24,deny,manual,15.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,archived
+1154-solder-jump-ring,1154 - Solder Jump Ring,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-32,deny,manual,15.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.60,true,,,true,,,archived
+1153-redrill-pearl,1153 - Redrill Pearl,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-6,deny,manual,2.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,archived
+1151-add-jump-ring,1151 - Add Jump Ring,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-1,deny,manual,18.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,3.00,true,,,true,,,archived
+1150-break-in-chain,1150 - Break in Chain,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-12,deny,manual,15.00,,false,false,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.60,true,,,true,,,archived
+1143-remove-stone,1143 - Remove Stone,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,10.00,,false,false,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,archived
+1142-set-stone-1ct,1142 - Set Stone 1ct+,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-6,deny,manual,40.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,archived
+1141-set-stone-0-5-0-99ct,1141 - Set Stone 0.5-0.99ct,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,20.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1140-set-stone-up-to-0-49ct,1140 - Set Stone up to 0.49ct,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-9,deny,manual,10.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1139-straighten-prongs-20,1139 - Straighten Prongs (20+),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,25.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1138-straighten-prongs-0-20,1138 - Straighten Prongs (0-20),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-1,deny,manual,15.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1137-c-t-20-w-repair,1137 - C&T (20+) w/ Repair,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,15.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,archived
+136-c-t-20-w-repair,C&T (20+) w/ Repair,"",[efd] Repair Shop,,repair,"prongs, repair task, retail repair",false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,20.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,archived
+1136-c-t-20,1136 - C&T (20+),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,20.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,archived
+1135-c-t-0-20-w-repair,1135 - C&T (0-20 w/ Repair),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-1,deny,manual,5.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1134-c-t-0-20,1134 - C&T (0-20),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-1,deny,manual,10.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1132-ss-rebuild-prong,1132 - SS - Rebuild Prong,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,15.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1133-14k-rebuild-prong,1133 - 14k - Rebuild Prong,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-1,deny,manual,20.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1131-14k-additional-tips,1131 - 14k - additional Tips,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-10,deny,manual,7.50,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.60,true,,,true,,,archived
+1130-14k-tips-first-10x,1130 - 14k - Tips (first 10x),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-24,deny,manual,15.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1121-reshape-ring,1121 - Reshape Ring,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,25.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1120-14k-sizing-beads,1120 - 14k - Sizing Beads,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,40.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1119-14k-solder-break,1119 - 14k - Solder Break,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-2,deny,manual,25.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1118-14k-solder-together-each,1118 - 14k -  Solder Together (each),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,28.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1117-14k-half-shank-3-5mm,1117 - 14k - Half-Shank (3-5mm),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,150.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1116-14k-half-shank-up-to-3mm-sz-7,1116 - 14k - Half-Shank (up to 3mm & sz 7),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,100.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1115-14k-aditional-size-3-5mm,1115 - 14k Aditional Size (3-5mm),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,20.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1114-14k-larger-3-5mm,1114 - 14k Larger (3-5mm),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,45.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1113-14k-addtional-size-up-to-3mm,1113 - 14k - Addtional Size (up to 3mm),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-1,deny,manual,15.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1112-14k-larger-up-to-3mm,1112 - 14k - Larger (up to 3mm),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-4,deny,manual,35.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1111-14k-smaller,1111 - 14k - Smaller,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-6,deny,manual,20.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1110-ss-sizing-beads,1110 - SS - Sizing Beads,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,25.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1109-ss-solder-break,1109 - SS - Solder Break,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,18.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1108-ss-solder-together-each,1108 - SS - Solder Together (each),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,20.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1107-ss-half-shank-3-5mm,1107 - SS - Half-Shank (3-5mm),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,75.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1106-ss-half-shank-up-to-3mm-sz-7,1106 - SS - Half-Shank (up to 3mm & sz 7),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,50.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1105-ss-additional-size-3-5mm,1105 - SS - Additional Size (3-5mm),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-1,deny,manual,13.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+1104-ss-larger-3-5mm,1104 - SS - Larger (3-5mm),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-1,deny,manual,25.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+copy-of-103-ss-additional-size-up-to-3mm,1103 - SS - Additional Size (up to 3mm),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-1,deny,manual,10.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,true,,,true,,,archived
+1102-ss-larger-up-to-3mm,1102 - SS - Larger (up to 3mm),"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,-3,deny,manual,20.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,true,,,true,,,archived
+1101-ss-smaller,1101 - SS - Smaller,"",[efd] Repair Shop,,"",repair task,false,Title,Default Title,,,,,,,,,0.0,,0,deny,manual,15.00,,false,true,,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.60,true,,,true,,,archived
+repair-3023-sldrjumpring,Solder Jump Ring,"",[efd] Repair Shop,Uncategorized,repair,"misc, repair task, retail repair",true,Title,Default Title,,,,,,,,repair-3023-sldrjumpring,0.0,,-78,deny,manual,30.00,,false,true,"",,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.60,true,,,true,,,active
+homepage-video,Homepage Video,"",Engel Fine Design,,"","",true,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,0.00,,false,true,"",,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+163-redrill-pearl,Redrill Pearl,"",[efd] Repair Shop,,repair,"misc, repair task, retail repair",true,Title,Default Title,,,,,,,,repair-3024-redrillpearl,0.0,,-50,deny,manual,5.00,,false,true,"",,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,active
+162-restring,Restring per Inch,"",[efd] Repair Shop,,repair,"misc, repair task, retail repair",true,Title,Default Title,,,,,,,,repair-3026-restringinch,0.0,,-4,deny,manual,3.00,,false,true,"",,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,active
+1630-cpr-w-repair,CPR w/ Repair,"",[efd] Repair Shop,,repair,"misc, repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,-1,deny,manual,20.00,,false,true,'22084025,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,3.00,true,,,true,,,archived
+162-cpr,"Clean, Polish, & Rhodium","",[efd] Repair Shop,,repair,"misc, repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,40.00,,false,true,'21920185,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,4.00,true,,,true,,,archived
+161-c-p-w-repair,C&P w/ Repair,"",[efd] Repair Shop,,repair,"misc, repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,-14,deny,manual,15.00,,false,true,'21068217,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,archived
+160-clean-and-polish,Clean and Polish,"",[efd] Repair Shop,,repair,"misc, repair task, retail repair",true,Options,Clean and Polish only,,,,,,,,repair-3027-clnpolishonly,0.0,,-7,deny,manual,30.00,,false,true,"",,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.25,true,,,true,,,active
+160-clean-and-polish,,,,,,,,,Clean Polish and Rhodium only,,,,,,,,repair-3028-clnpolishrhodonly,0.0,,-1,deny,manual,40.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.25,,,,,,,
+160-clean-and-polish,,,,,,,,,Clean and Polish w/ Repair,,,,,,,,repair-3029-clnpolishrepair,0.0,,-7,deny,manual,15.00,,false,true,'19659193,,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.25,,,,,,,
+160-clean-and-polish,,,,,,,,,Clean Polish and Rhodium w/ Repair,,,,,,,,repair-3030-clnpolishrhodrepair,0.0,,0,deny,manual,20.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.25,,,,,,,
+151-add-jump-ring,Add Jump Ring,"",[efd] Repair Shop,,repair,"misc, repair task, retail repair",true,Title,Default Title,,,,,,,,repair-3031-addjumpring,0.0,,-10,deny,manual,35.00,,false,true,'19036601,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,3.00,true,,,true,,,active
+144-break-in-chain,Break in Chain,"",[efd] Repair Shop,,repair,"Chains, repair task, retail repair",true,Title,Default Title,,,,,,,,repair-3032-breakinchain,0.0,,-20,deny,manual,30.00,,false,true,'17168825,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.60,true,,,true,,,active
+143-remove-and-reset,Remove Stone,"",[efd] Repair Shop,,repair,"repair task, retail repair, settings",true,Title,Default Title,,,,,,,,repair-3033-removestone,0.0,,-2,deny,manual,10.00,,false,false,'17004985,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,active
+142-set-stone-1ct,Set Stone 1ct+,"",[efd] Repair Shop,,repair,"repair task, retail repair, settings",true,Title,Default Title,,,,,,,,repair-2016-setstone1ct,0.0,,-18,deny,manual,80.00,,false,true,'16546233,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,active
+141-set-stone-0-5-0-99ct,Set Stone 0.5-0.99ct,"",[efd] Repair Shop,,repair,"repair task, retail repair, settings",true,Title,Default Title,,,,,,,,repair-2017-setstone99ct,0.0,,-6,deny,manual,40.00,,false,true,'15989177,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+140-set-stone-up-to-0-49ct,Set Stone up to 0.49ct,"",[efd] Repair Shop,,repair,"repair task, retail repair, settings",true,Title,Default Title,,,,,,,,repair-2018-setstone49ct,0.0,,-73,deny,manual,20.00,,false,true,'15825337,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+139-straighten-prongs-20,Straighten Prongs (20+),"",[efd] Repair Shop,,repair,"Prongs, repair task, retail repair",true,Title,Default Title,,,,,,,,repair-1012-strprng20p,0.0,,0,deny,manual,50.00,,false,true,'15432121,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+137-c-t-20-w-repair,Straighten Prongs (0-20),"",[efd] Repair Shop,,repair,"Prongs, repair task, retail repair",true,Title,Default Title,,,,,,,,repair-1013-strprng020,0.0,,0,deny,manual,30.00,,false,true,'13597113,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,active
+136-c-t-c-t-20,Check and Tighten Stones (20+),"",[efd] Repair Shop,,repair,"prongs, repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,40.00,,false,true,'12253625,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,archived
+135-c-t-0-20-w-repair,C&T (0-20 w/ Repair),"",[efd] Repair Shop,,repair,"prongs, repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,-3,deny,manual,10.00,,false,true,'11729337,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.00,true,,,true,,,archived
+134-c-t-0-20,Check and Tighten Stones,"",[efd] Repair Shop,,repair,"prongs, repair task, retail repair",true,# of gemstones,0-20,,,,,,,,repair-2019-chktighten20,0.0,,-2,deny,manual,20.00,,false,true,'11598265,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+134-c-t-0-20,,,,,,,,,20+,,,,,,,,repair-2020-chktighten20p,0.0,,-1,deny,manual,40.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+134-c-t-0-20,,,,,,,,,0-20 /w Repair,,,,,,,,repair-2022-chktighten20p-wrepair,0.0,,-1,deny,manual,10.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+134-c-t-0-20,,,,,,,,,20+ /w Repair,,,,,,,,repair-2023-sldrjumpring,0.0,,0,deny,manual,20.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+133-14k-rebuild-prong,133 - 14k - Rebuild Prong,"",[efd] Repair Shop,,repair,"repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,30.00,,false,true,'10844601,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+132-ss-rebuild-prong,Rebuild Prong,"",[efd] Repair Shop,,repair,"prongs, repair task, retail repair",true,Metal Type,Sterling Silver,,,,,,,,repair-1111-rbprong-ss,0.0,,0,deny,manual,30.00,,false,true,'10058169,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+132-ss-rebuild-prong,,,,,,,,,14k Yellow Gold,,,,,,,,repair-1211-rbprong-14yg,0.0,,0,deny,manual,40.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+132-ss-rebuild-prong,,,,,,,,,14kWhite Gold,,,,,,,,repair-1311-rbprong-14wg,0.0,,0,deny,manual,40.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+132-ss-rebuild-prong,,,,,,,,,18k Yellow Gold,,,,,,,,repair-1411-rbprong-18yg,0.0,,0,deny,manual,45.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+132-ss-rebuild-prong,,,,,,,,,18k White Gold,,,,,,,,repair-1511-rbprong-18wg,0.0,,0,deny,manual,45.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+131-14k-additional-tips,Additional Tips,"",[efd] Repair Shop,,repair,"Prongs, repair task, retail repair",true,Title,Default Title,,,,,,,,repair-1014-addtips,0.0,,0,deny,manual,15.00,,false,true,'09501113,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.60,true,,,true,,,active
+130-14k-tips-firdt-10x,Tips (first 10x),"",[efd] Repair Shop,,repair,"Prongs, repair task, retail repair",true,Title,Default Title,,,,,,,,repair-1015-tips10x,0.0,,-23,deny,manual,30.00,,true,true,'08878521,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+121-reshape-ring,Reshape Ring,"",[efd] Repair Shop,,repair,"misc, repair task, retail repair",true,Title,Default Title,,,,,,,,repair-007-reshape,0.0,,-2,deny,manual,50.00,,false,true,'08288697,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+120-14k-sizing-beads,120 - 14k - Sizing Beads,"",[efd] Repair Shop,,repair,"repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,60.00,,false,true,'08059321,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+119-14k-solder-break,119 - 14k - Solder Break,"",[efd] Repair Shop,,repair,"repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,37.50,,false,true,'07338425,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+118-14k-solder-together-each,118 - 14k -  Solder Together (each),"",[efd] Repair Shop,,repair,"repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,42.00,,false,true,'06388153,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+117-14k-half-shank-3-5mm,117 - 14k - Half-Shank (3-5mm),"",[efd] Repair Shop,,repair,"repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,225.00,,false,true,'05011897,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+116-14k-half-shank-up-to-3mm-sz-7,116 - 14k - Half-Shank (up to 3mm & sz 7),"",[efd] Repair Shop,,repair,"repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,150.00,,false,true,'04913593,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+115-14k-aditional-size-3-5mm,Additional Size (3-5mm),"",[efd] Repair Shop,,repair,"repair task, retail repair, sizing",false,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,300.00,,false,true,'04487609,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+114-14k-larger-3-5mm,114 - 14k Larger (3-5mm),"",[efd] Repair Shop,,repair,"repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,-1,deny,manual,90.00,,false,true,'02980281,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+113-14k-addtional-size-up-to-3mm,113 - 14k - Addtional Size (up to 3mm),"",[efd] Repair Shop,,repair,"repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,30.00,,false,true,'02128313,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+112-14k-larger-up-to-3mm,112 - 14k - Larger (up to 3mm),"",[efd] Repair Shop,,repair,"repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,70.00,,false,true,'01866169,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+111-14k-smaller,111 - 14k - Smaller,"",[efd] Repair Shop,,repair,"repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,-5,deny,manual,40.00,,false,true,'01112505,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+110-ss-sizing-beads,Sizing Beads,"",[efd] Repair Shop,,repair,"repair task, retail repair, sizing",true,Metal Type,Sterling Silver,,,,,,,,repair-108-sizingbd-ss,0.0,,0,deny,manual,60.00,,false,true,'95574713,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/8.png?v=1710986279,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+110-ss-sizing-beads,,,,,,,,,14k Yellow Gold,,,,,,,,repair-208-sizingbd-14yg,0.0,,-3,deny,manual,80.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+110-ss-sizing-beads,,,,,,,,,14k White Gold,,,,,,,,repair-308-sizingbd-14wg,0.0,,0,deny,manual,80.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+110-ss-sizing-beads,,,,,,,,,18k Yellow Gold,,,,,,,,repair-408-sizingbd-18yg,0.0,,0,deny,manual,100.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+110-ss-sizing-beads,,,,,,,,,18k White Gold,,,,,,,,repair-508-sizingbd-18wg,0.0,,0,deny,manual,100.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+109-ss-solder-break,Solder Break in Shank,"",[efd] Repair Shop,,repair,"misc, repair task, retail repair",true,Metal Type,Sterling Silver,,,,,,,,repair-109-sldbrshk-ss,0.0,,0,deny,manual,35.00,,true,true,'95115961,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+109-ss-solder-break,,,,,,,,,14k Yellow Gold,,,,,,,,repair-209-sldbrshk-14yg,0.0,,-1,deny,manual,50.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+109-ss-solder-break,,,,,,,,,14k White Gold,,,,,,,,repair-309-sldbrshk-14wg,0.0,,-2,deny,manual,50.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+109-ss-solder-break,,,,,,,,,18k Yellow Gold,,,,,,,,repair-409-sldbrshk-18yg,0.0,,0,deny,manual,55.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+109-ss-solder-break,,,,,,,,,18k White Gold,,,,,,,,repair-509-sldbrshk-18wg,0.0,,0,deny,manual,55.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+108-ss-solder-together-each,Solder Rings Together (each),"",[efd] Repair Shop,,repair,"misc, repair task, retail repair",true,Metal Type,Sterling Silver,,,,,,,,repair-110-sldrgsto-ss,0.0,,0,deny,manual,40.00,,true,true,'91642553,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+108-ss-solder-together-each,,,,,,,,,14k Yellow Gold,,,,,,,,repair-210-sldrgsto-14yg,0.0,,0,deny,manual,55.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+108-ss-solder-together-each,,,,,,,,,14k White Gold,,,,,,,,repair-310-sldrgsto-14wg,0.0,,-1,deny,manual,55.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+108-ss-solder-together-each,,,,,,,,,18k Yellow Gold,,,,,,,,repair-410-sldrgsto-18yg,0.0,,0,deny,manual,60.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+108-ss-solder-together-each,,,,,,,,,18k White Gold,,,,,,,,repair-510-sldrgsto-18wg,0.0,,0,deny,manual,60.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+107-ss-half-shank-3-5mm,Half-Shank (3mm-5mm),"",[efd] Repair Shop,,repair,"repair task, retail repair, sizing",true,Metal Type,Sterling Silver,,,,,,,,repair-106-halfshk35mm-ss,0.0,,0,deny,manual,150.00,,false,true,'91249337,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/7.png?v=1710986239,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+107-ss-half-shank-3-5mm,,,,,,,,,14k Yellow Gold,,,,,,,,repair-206-halfshk35mm-14yg,0.0,,0,deny,manual,300.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+107-ss-half-shank-3-5mm,,,,,,,,,14k White Gold,,,,,,,,repair-306-halfshk35mm-14wg,0.0,,0,deny,manual,300.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+107-ss-half-shank-3-5mm,,,,,,,,,18k Yellow Gold,,,,,,,,repair-406-halfshk35mm-18yg,0.0,,0,deny,manual,350.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+107-ss-half-shank-3-5mm,,,,,,,,,18k White Gold,,,,,,,,repair-506-halfshk35mm-18wg,0.0,,0,deny,manual,350.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+106-ss-half-shank-up-to-3mm-sz-7,Half-Shank (up to 3mm & size 7),"",[efd] Repair Shop,,repair,"repair task, retail repair, sizing",true,Metal Type,Sterling Silver,,,,,,,,repair-105-halfshk3mm7-ss,0.0,,0,deny,manual,100.00,,true,true,'58153657,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/6.png?v=1710986304,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,10.00,true,,,true,,,active
+106-ss-half-shank-up-to-3mm-sz-7,,,,,,,,,14k Yellow Gold,,,,,,,,repair-205-halfshk3mm7-14yg,0.0,,0,deny,manual,200.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,10.00,,,,,,,
+106-ss-half-shank-up-to-3mm-sz-7,,,,,,,,,14k White Gold,,,,,,,,repair-305-halfshk3mm7-14wg,0.0,,0,deny,manual,200.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,10.00,,,,,,,
+106-ss-half-shank-up-to-3mm-sz-7,,,,,,,,,18k Yellow Gold,,,,,,,,repair-405-halfshk3mm7-18yg,0.0,,0,deny,manual,250.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,10.00,,,,,,,
+106-ss-half-shank-up-to-3mm-sz-7,,,,,,,,,18k White Gold,,,,,,,,repair-505-halfshk3mm7-18wg,0.0,,0,deny,manual,250.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,10.00,,,,,,,
+105-ss-additional-size-3-5mm,Additional Size (3-5mm),"",[efd] Repair Shop,,repair,"repair task, retail repair, sizing",true,Metal Type,Sterling Silver,,,,,,,,repair-104-adsize35mm-ss,0.0,,0,deny,manual,25.00,,false,true,'41245369,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/5.png?v=1710986167,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,2.00,true,,,true,,,active
+105-ss-additional-size-3-5mm,,,,,,,,,14k Yellow Gold,,,,,,,,repair-204-adsize35mm-14yg,0.0,,0,deny,manual,40.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,11.00,,,,,,,
+105-ss-additional-size-3-5mm,,,,,,,,,14k White Gold,,,,,,,,repair-304-adsize35mm-14wg,0.0,,0,deny,manual,40.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+105-ss-additional-size-3-5mm,,,,,,,,,18k Yellow Gold,,,,,,,,repair-404-adsize35mm-18yg,0.0,,0,deny,manual,45.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+105-ss-additional-size-3-5mm,,,,,,,,,18k White Gold,,,,,,,,repair-504-adsize35mm-18wg,0.0,,0,deny,manual,45.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+104-ss-larger-3-5mm,Size up (3mm-5mm Band),"",[efd] Repair Shop,,repair,"repair task, retail repair, sizing",true,Sizes,1 Size up,,Metal Type,Sterling Silver,,,,,repair-103-szup35mm-ss-1sz,0.0,,0,deny,manual,50.00,,false,true,'40983225,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/3.png?v=1710986143,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+104-ss-larger-3-5mm,,,,,,,,,1 Size up,,,14k Yellow Gold,,,,,repair-203-szup35mm-14yg-sz,0.0,,-2,deny,manual,90.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+104-ss-larger-3-5mm,,,,,,,,,1 Size up,,,14k White Gold,,,,,repair-303-szup35mm-14wg-1sz,0.0,,0,deny,manual,90.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+104-ss-larger-3-5mm,,,,,,,,,1 Size up,,,18k Yellow Gold,,,,,repair-403-szup35mm-18yg-1sz,0.0,,0,deny,manual,110.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+104-ss-larger-3-5mm,,,,,,,,,1 Size up,,,18k White Gold,,,,,repair-503-szup35mm-18wg-1sz,0.0,,0,deny,manual,110.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+104-ss-larger-3-5mm,,,,,,,,,2 Sizes up,,,Sterling Silver,,,,,repair-103-szup35mm-ss-2sz,0.0,,0,deny,manual,75.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+104-ss-larger-3-5mm,,,,,,,,,2 Sizes up,,,14k Yellow Gold,,,,,repair-203-szup35mm-14yg-2sz,0.0,,0,deny,manual,130.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+104-ss-larger-3-5mm,,,,,,,,,2 Sizes up,,,14k White Gold,,,,,repair-303-szup35mm-14wg-2sz,0.0,,0,deny,manual,130.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+104-ss-larger-3-5mm,,,,,,,,,2 Sizes up,,,18k Yellow Gold,,,,,repair-403-szup35mm-18yg-2sz,0.0,,0,deny,manual,155.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+104-ss-larger-3-5mm,,,,,,,,,2 Sizes up,,,18k White Gold,,,,,repair-503-szup35mm-18wg-2sz,0.0,,0,deny,manual,155.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+104-ss-larger-3-5mm,,,,,,,,,3 Sizes up,,,Sterling Silver,,,,,repair-103-szup35mm-ss-3sz,0.0,,0,deny,manual,100.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+104-ss-larger-3-5mm,,,,,,,,,3 Sizes up,,,14k Yellow Gold,,,,,repair-203-szup35mm-14yg-3sz,0.0,,0,deny,manual,170.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+104-ss-larger-3-5mm,,,,,,,,,3 Sizes up,,,14k White Gold,,,,,repair-303-szup35mm-14wg-3sz,0.0,,0,deny,manual,170.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+104-ss-larger-3-5mm,,,,,,,,,3 Sizes up,,,18k Yellow Gold,,,,,repair-403-szup35mm-18yg-3sz,0.0,,0,deny,manual,190.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+104-ss-larger-3-5mm,,,,,,,,,3 Sizes up,,,18k White Gold,,,,,repair-503-szup35mm-18wg-3sz,0.0,,0,deny,manual,190.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,,,,,,,
+103-ss-additional-size-up-to-3mm,Additional Size (up to 3mm) - Sterling Silver,"",[efd] Repair Shop,,repair,"repair task, retail repair",false,Title,Default Title,,,,,,,,"",0.0,,0,deny,manual,20.00,,false,true,'38525625,,,,false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,true,,,true,,,archived
+102-ss-larger-up-to-3mm,Size Up (up to 3mm Band),"",[efd] Repair Shop,,repair,"repair task, retail repair, sizing",true,Sizes,1 Size Up,,Metal Type,Sterling Silver,,,,,repair-102-szup3mm-ss-1sz,0.0,,-1,deny,manual,40.00,,true,true,'38165177,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/2.png?v=1710986132,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,true,,,true,,,active
+102-ss-larger-up-to-3mm,,,,,,,,,1 Size Up,,,14k Yellow Gold,,,,,repair-202-szup3mm-14yg-1sz,0.0,,-4,deny,manual,70.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,,,,,,,
+102-ss-larger-up-to-3mm,,,,,,,,,1 Size Up,,,14k White Gold,,,,,repair-302-szup3mm-14wg-1sz,0.0,,-8,deny,manual,70.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,,,,,,,
+102-ss-larger-up-to-3mm,,,,,,,,,1 Size Up,,,18k Yellow Gold,,,,,repair-402-szup3mm-18yg-1sz,0.0,,0,deny,manual,80.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,,,,,,,
+102-ss-larger-up-to-3mm,,,,,,,,,1 Size Up,,,18k White Gold,,,,,repair-502-szup3mm-18wg-1sz,0.0,,0,deny,manual,80.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,,,,,,,
+102-ss-larger-up-to-3mm,,,,,,,,,2 Sizes Up,,,Sterling Silver,,,,,repair-102-szup3mm-ss-2sz,0.0,,0,deny,manual,60.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,,,,,,,
+102-ss-larger-up-to-3mm,,,,,,,,,2 Sizes Up,,,14k Yellow Gold,,,,,repair-202-szup3mm-14yg-2sz,0.0,,-3,deny,manual,100.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,,,,,,,
+102-ss-larger-up-to-3mm,,,,,,,,,2 Sizes Up,,,14k White Gold,,,,,repair-302-szup3mm-14wg-2sz,0.0,,0,deny,manual,100.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,,,,,,,
+102-ss-larger-up-to-3mm,,,,,,,,,2 Sizes Up,,,18k Yellow Gold,,,,,repair-402-szup3mm-18yg-2sz,0.0,,0,deny,manual,115.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,,,,,,,
+102-ss-larger-up-to-3mm,,,,,,,,,2 Sizes Up,,,18k White Gold,,,,,repair-502-szup3mm-18wg-2sz,0.0,,0,deny,manual,115.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,,,,,,,
+102-ss-larger-up-to-3mm,,,,,,,,,3 Sizes Up,,,Sterling Silver,,,,,repair-102-szup3mm-ss-3sz,0.0,,0,deny,manual,80.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,,,,,,,
+102-ss-larger-up-to-3mm,,,,,,,,,3 Sizes Up,,,14k Yellow Gold,,,,,repair-202-szup3mm-14yg-3sz,0.0,,-1,deny,manual,130.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,,,,,,,
+102-ss-larger-up-to-3mm,,,,,,,,,3 Sizes Up,,,14k White Gold,,,,,repair-302-szup3mm-14wg-3sz,0.0,,-3,deny,manual,130.00,,true,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,,,,,,,
+102-ss-larger-up-to-3mm,,,,,,,,,3 Sizes Up,,,18k Yellow Gold,,,,,repair-402-szup3mm-18yg-3sz,0.0,,0,deny,manual,150.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,,,,,,,
+102-ss-larger-up-to-3mm,,,,,,,,,3 Sizes Up,,,18k White Gold,,,,,repair-502-szup3mm-18wg-3sz,0.0,,0,deny,manual,150.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,1.00,,,,,,,
+101-ss-smaller,Size Down,"",[efd] Repair Shop,,repair,"repair task, retail repair, sizing",true,Material,Sterling Silver,,,,,,,,repair-101-szdn-ss,0.0,,-2,deny,manual,30.00,,false,true,REPAIR-SZ-DWN,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/1.png?v=1710986112,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.01,true,,,true,,,active
+101-ss-smaller,,,,,,,,,14k Yellow Gold,,,,,,,,repair-201-szdn-14yg,0.0,,-15,deny,manual,40.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.01,,,,,,,
+101-ss-smaller,,,,,,,,,14k White Gold,,,,,,,,repair-301-szdn-14wg,0.0,,-8,deny,manual,40.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.01,,,,,,,
+101-ss-smaller,,,,,,,,,18k Yellow Gold,,,,,,,,repair-401-szdn-18yg,0.0,,0,deny,manual,45.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.01,,,,,,,
+101-ss-smaller,,,,,,,,,18k White Gold,,,,,,,,repair-501-szdn-18wg,0.0,,0,deny,manual,45.00,,false,true,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,lb,,0.01,,,,,,,
+tanzanian-rhodolit-garnet,Tanzanian Rhodolite Garnet,"<table data-mce-fragment=""1"">
+<tbody data-mce-fragment=""1"">
+<tr data-mce-fragment=""1"">
+<td data-mce-fragment=""1"">Detail</td>
+<td data-mce-fragment=""1"">Description</td>
+</tr>
+<tr data-mce-fragment=""1"">
+<td data-mce-fragment=""1"">Name</td>
+<td data-mce-fragment=""1"">Tanzanian Rhodolite Garnet</td>
+</tr>
+<tr data-mce-fragment=""1"">
+<td data-mce-fragment=""1"">Mineral</td>
+<td data-mce-fragment=""1"">Garnet</td>
+</tr>
+<tr data-mce-fragment=""1"">
+<td data-mce-fragment=""1"">Subspecies</td>
+<td data-mce-fragment=""1"">Rhodolite</td>
+</tr>
+<tr data-mce-fragment=""1"">
+<td data-mce-fragment=""1"">Locale</td>
+<td data-mce-fragment=""1"">Tanzania</td>
+</tr>
+<tr data-mce-fragment=""1"">
+<td data-mce-fragment=""1"">Cts</td>
+<td data-mce-fragment=""1"">0.5ct</td>
+</tr>
+<tr data-mce-fragment=""1"">
+<td data-mce-fragment=""1"">Dimensions</td>
+<td data-mce-fragment=""1"">4mm</td>
+</tr>
+<tr data-mce-fragment=""1"">
+<td data-mce-fragment=""1"">Color</td>
+<td data-mce-fragment=""1"">Pink/Purple</td>
+</tr>
+<tr data-mce-fragment=""1"">
+<td data-mce-fragment=""1"">Cut</td>
+<td data-mce-fragment=""1"">Round</td>
+</tr>
+<tr data-mce-fragment=""1"">
+<td data-mce-fragment=""1"">Treatment</td>
+<td data-mce-fragment=""1"">Untreated</td>
+</tr>
+</tbody>
+</table>
+<p data-mce-fragment=""1""> </p>",Oscillation Devices,,Gemstone,".50cts, 4mm, garnet, Gemstone, michael, pink, Rhodolite, round, Tanzania",true,Title,Default Title,,,,,,,,efd23-Tanz-Garne-AGEM6,0.0,shopify,0,deny,manual,100.00,,true,false,efd23-Tanz-Garne-AGEM6,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_164355.jpg?v=1710443339,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+tanzanian-rhodolit-garnet,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/RhodoRound.jpg?v=1710443354,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+rhodolite-saver,Rhodolite Saver,<p>Upcycled sterling silver band featuring a 4mm bezel set rhodolite garnet.</p>,"Critter, the Designer",Apparel & Accessories > Jewelry,ring,"bezel, jewelry, Rhodolite, ring, saver, sterling silver, upcycled",true,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,50.00,,true,true,'46069433,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/VideoCapture_20230605-112611.jpg?v=1710388049,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+rhodolite-saver,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/VideoCapture_20230605-112556.jpg?v=1710388060,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+tanzanite-mini-trader,Tanzanite Mini Trader,<p>Tanzanite wrapped in sterling silver wire.</p>,"Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2023, Free Flow, handmade, jewelry, mini, sterling silver, tanzinite, trader, wire wrap",false,Title,Default Title,,,,,,,,"",0.0,shopify,1,deny,manual,120.00,,true,true,'60638649,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230529_202823.jpg?v=1691705856,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,archived
+etched-spessartine-wire-trader,Etched Spessartine Wire Trader,<p>Brazilian Etched Spessartine Garnet wrapped in sterling silver.</p>,"Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2023, jewelry, pendant, wire wrap",true,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,120.00,,true,true,'57116601,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230529_162801.jpg?v=1710387749,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+fire-opal-mini-trader,Fire Opal Mini Trader,<p>Fire opal wrapped in sterling silver.</p>,Engel Fine Design,Apparel & Accessories > Jewelry,Pendant,"2023, jewelry, pendant, wire wrap",true,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,120.00,,true,true,'55084985,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230529_162715.jpg?v=1710387774,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+hessonite-garnet-wire-wrap,Hessonite Wire-Wrap,<p><span><br></span></p>,"Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2023, jewelry, pendant, sterling silver, wire wrap",true,Title,Default Title,,,,,,,,efd23-we01-hesso,0.0,shopify,0,deny,manual,144.00,240.00,true,true,'70653881,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230526_173644.jpg?v=1710387838,1,"",false,,,,,,,,,,,,,,,,hessonite-wire-wrap,,,,,,,,,lb,,,true,,,true,,,active
+tanzanite-wire-wrap,Tanzanite Wire Trader,<p>Tanzanite wrapped in sterling silver.</p>,"Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2023, Free Flow, jewelry, sterling silver, tanzinite, trader, wire wrap",true,Title,Default Title,,,,,,,,efd23-ww03-tanzi,0.0,shopify,0,deny,manual,120.00,,true,true,'73332153,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230523_125048.jpg?v=1710388190,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+sunset-tourmaline-wire-wrap,Sunset Tourmaline Wire Trader,<p>Sunset Tourmaline wrapped In sterling silver</p>,"Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2023, auction, handmade, jewelry, pendant, sterling silver, wire wrap",true,Title,Default Title,,,,,,,,efd23-ww02-tourm,0.0,shopify,0,deny,manual,72.00,120.00,true,true,'34601401,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/IMG-20240428_143914_354.jpg?v=1714356343,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+sunset-tourmaline-wire-wrap,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_163338.jpg?v=1714356343,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+1-70ct-hessonite-garnet,Tanzanian Sunset Tourmaline,"<table>
+<tbody>
+<tr>
+<td>Detail</td>
+<td>Description</td>
+</tr>
+<tr>
+<td>Name</td>
+<td>1.70 Sunset Tourmaline</td>
+</tr>
+<tr>
+<td>Mineral</td>
+<td>Tourmaline</td>
+</tr>
+<tr>
+<td>Subspecies</td>
+<td><br></td>
+</tr>
+<tr>
+<td>Locale</td>
+<td>Tanzania</td>
+</tr>
+<tr>
+<td>Cts</td>
+<td>1.70ct</td>
+</tr>
+<tr>
+<td>Dimensions</td>
+<td></td>
+</tr>
+<tr>
+<td>Color</td>
+<td>Orange</td>
+</tr>
+<tr>
+<td>Cut</td>
+<td></td>
+</tr>
+<tr>
+<td>Treatment</td>
+<td>Untreated</td>
+</tr>
+</tbody>
+</table>
+<p> </p>",Oscillation Devices,Arts & Entertainment > Hobbies & Creative Arts > Collectibles > Rocks & Fossils > Gemstones,Gemstone,"Gemstone, michael, Tanzania, Tourmaline",true,Title,Default Title,,,,,,,,OD24-Tanz-Tourm-PF6E,0.0,shopify,1,deny,manual,200.00,,true,true,ODGEM-PF6E,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_9d82f665-9146-46a1-b3d1-e838dfa23a4d.jpg?v=1721046431,1,"",false,,,218,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+1-70ct-hessonite-garnet,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_164019.jpg?v=1721046430,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+1-70ct-hessonite-garnet,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_164015.jpg?v=1721046430,3,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+merelani-mint-garnet,Merelani mint Garnet,"<table>
+<tbody>
+<tr>
+<td>Detail</td>
+<td>Description</td>
+</tr>
+<tr>
+<td>Name</td>
+<td>1.4ct Merlani Mint Garnet<br>
+</td>
+</tr>
+<tr>
+<td>Mineral</td>
+<td>Garnet<br>
+</td>
+</tr>
+<tr>
+<td>Subspecies</td>
+<td>Merlani<br>
+</td>
+</tr>
+<tr>
+<td>Locale</td>
+<td>Sri Lanka<br>
+</td>
+</tr>
+<tr>
+<td>Cts</td>
+<td>1.40ct<br>
+</td>
+</tr>
+<tr>
+<td>Dimensions</td>
+<td></td>
+</tr>
+<tr>
+<td>Color</td>
+<td>Mint<br>
+</td>
+</tr>
+<tr>
+<td>Cut</td>
+<td>Hex</td>
+</tr>
+<tr>
+<td>Treatment</td>
+<td>Untreated</td>
+</tr>
+</tbody>
+</table>
+<p> </p>",Oscillation Devices,,Gemstone,"garnet, Gemstone, Merlani, michael, Tanzania",true,Title,Default Title,,,,,,,,efd23-Mere-Garne-AGEM13,0.0,shopify,1,deny,manual,250.00,,true,true,efd23-Mere-Garne-AGEM13,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_163911.jpg?v=1710442829,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+merelani-mint-garnet,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_163916.jpg?v=1710442877,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+aquamarine-gem-carving,Aquamarine Gem Carving,"<table>
+<tbody>
+<tr>
+<td>Detail</td>
+<td>Description</td>
+</tr>
+<tr>
+<td>Name</td>
+<td>Aquamarine Gem Carving</td>
+</tr>
+<tr>
+<td>Mineral</td>
+<td>Aquamarine<br>
+</td>
+</tr>
+<tr>
+<td>Subspecies</td>
+<td></td>
+</tr>
+<tr>
+<td>Locale</td>
+<td>Brazil</td>
+</tr>
+<tr>
+<td>Cts</td>
+<td>3.50ct<br>
+</td>
+</tr>
+<tr>
+<td>Dimensions</td>
+<td></td>
+</tr>
+<tr>
+<td>Color</td>
+<td>Blue<br>
+</td>
+</tr>
+<tr>
+<td>Cut</td>
+<td>Carving<br>
+</td>
+</tr>
+<tr>
+<td>Treatment</td>
+<td>Untreated</td>
+</tr>
+</tbody>
+</table>
+<p> </p>",Oscillation Devices,,Gemstone,"Aquamarine, Brazil, carving, Gemstone, michael",true,Title,Default Title,,,,,,,,efd23-Braz-Beryl-AGEM14,0.0,shopify,1,deny,manual,200.00,,true,true,efd23-Braz-Beryl-AGEM14,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_163638.jpg?v=1710442441,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+aquamarine-gem-carving,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_163636.jpg?v=1710442916,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+rhodolite-gem-carving,Rhodolite Garnet Gem Carving,"<table>
+<tbody>
+<tr>
+<td>Detail</td>
+<td>Description</td>
+</tr>
+<tr>
+<td>Name</td>
+<td>Rhodolite Garnet Gem Carving</td>
+</tr>
+<tr>
+<td>Mineral</td>
+<td>Garnet<br>
+</td>
+</tr>
+<tr>
+<td>Subspecies</td>
+<td>Rhodolite</td>
+</tr>
+<tr>
+<td>Locale</td>
+<td>Tanzania</td>
+</tr>
+<tr>
+<td>Cts</td>
+<td>3.90ct<br>
+</td>
+</tr>
+<tr>
+<td>Dimensions</td>
+<td></td>
+</tr>
+<tr>
+<td>Color</td>
+<td>Purple<br>
+</td>
+</tr>
+<tr>
+<td>Cut</td>
+<td>Carving<br>
+</td>
+</tr>
+<tr>
+<td>Treatment</td>
+<td>Untreated</td>
+</tr>
+</tbody>
+</table>
+<p> </p>",Oscillation Devices,,Gemstone,"carving, garnet, Gemstone, michael, Rhodolite, Tanzania",true,Title,Default Title,,,,,,,,efd23-Tanz-Garne-GEM3,0.0,shopify,1,deny,manual,200.00,,true,true,efd23-Tanz-Garne-GEM3,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_163350.jpg?v=1710443256,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+rhodolite-gem-carving,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_163352.jpg?v=1710443271,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+2-65ct-pyrope-garnet,Pyrope Garnet,"<table>
+<tbody>
+<tr>
+<td>Detail</td>
+<td>Description</td>
+</tr>
+<tr>
+<td>Name</td>
+<td>2.50ct Pyrope Garnet</td>
+</tr>
+<tr>
+<td>Mineral</td>
+<td>Garnet</td>
+</tr>
+<tr>
+<td>Subspecies</td>
+<td>Pyrope<br>
+</td>
+</tr>
+<tr>
+<td>Locale</td>
+<td>Tanzania </td>
+</tr>
+<tr>
+<td>Cts</td>
+<td>2.50ct</td>
+</tr>
+<tr>
+<td>Dimensions</td>
+<td></td>
+</tr>
+<tr>
+<td>Color</td>
+<td>Red<br>
+</td>
+</tr>
+<tr>
+<td>Cut</td>
+<td>Fantasy Shield<br>
+</td>
+</tr>
+<tr>
+<td>Treatment</td>
+<td>Untreated</td>
+</tr>
+</tbody>
+</table>
+<p> </p>",Oscillation Devices,,Gemstone,"garnet, Gemstone, Madagascar, michael, Tanzania",true,Title,Default Title,,,,,,,,efd23-Tanz-Garne-AGEM12,0.0,shopify,1,deny,manual,120.00,,true,true,efd23-Tanz-Garne-AGEM12,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_164511.jpg?v=1710443151,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,70.00,true,,,true,,,active
+2-65ct-pyrope-garnet,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/PyropeShield.jpg?v=1710443179,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+bi-colored-tourmaline,Brazillian Bi-Colored Tourmaline,"<table>
+<tbody>
+<tr>
+<td>Detail</td>
+<td>Description</td>
+</tr>
+<tr>
+<td>Name</td>
+<td>1.90ct Brazilian Bi-Colored Tourmaline</td>
+</tr>
+<tr>
+<td>Mineral</td>
+<td>Tourmaline<br>
+</td>
+</tr>
+<tr>
+<td>Subspecies</td>
+<td></td>
+</tr>
+<tr>
+<td>Locale</td>
+<td>Brazil</td>
+</tr>
+<tr>
+<td>Cts</td>
+<td>1.90ct</td>
+</tr>
+<tr>
+<td>Dimensions</td>
+<td></td>
+</tr>
+<tr>
+<td>Color</td>
+<td>Bi-color Pink/Green<br>
+</td>
+</tr>
+<tr>
+<td>Cut</td>
+<td><br></td>
+</tr>
+<tr>
+<td>Treatment</td>
+<td>Untreated</td>
+</tr>
+</tbody>
+</table>
+<p> </p>",Oscillation Devices,,Gemstone,"Brazil, Gemstone, michael, Tourmaline",true,Title,Default Title,,,,,,,,efd23-Braz-Tourm-AGEM11,0.0,shopify,1,deny,manual,100.00,,true,true,efd23-Braz-Tourm-AGEM11,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_164855.jpg?v=1710442575,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+bi-colored-tourmaline,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_164851.jpg?v=1710442992,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+petala,Vere Petala,"<p>Size: 7 (can be sized)</p>
+<p>Featuring:</p>
+<p>-Sterling Silver shamk</p>
+<p>-14k YG head</p>
+<p>-6mm Rhodolite Garnet</p>","Critter, the Designer",Apparel & Accessories > Jewelry,ring,"14k yellow gold, 2023, fabricated, jewelry, ring, sterling silver",true,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,180.00,,true,true,'25676217,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/20230408_192509.jpg?v=1710387699,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,50.00,true,,,true,,,active
+petala,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/20230408_192545.jpg?v=1710387717,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+amethyst-flare,Flare Pendants,"<p>Flare pendant are a beautiful example of fine craftsmanship and attention to detail. The first edition pendant features a 6mm deep purple amethyst gemstone at its center, with two 3mm amethyst gemstones on either side, creating a balanced and elegant design. The pendants are made from sterling silver and measures 1 1/5"" x 3/5"". Hand-carved and cast in sterling silver, this pendant is a true work of art.</p>
+<p>Flare penants act as a versatile accessory that can be worn for any occasion, whether it's a night out on the town or a casual brunch with friends. It is a unique and one-of-a-kind piece, as it the first edition run of this wax carving. Jacob Critter Engel handcrafted this pendant in 2021, using only the highest quality materials. Flare pendants are a timeless piece of jewelry that will be treasured for years to come, and would make a thoughtful and unique gift for someone special.</p>","Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2021, casted, jewelry, pendant",true,Title,Default Title,,,,,,,,efd21-fpfe-amet,0.0,shopify,0,deny,manual,100.00,150.00,true,true,'88281273,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154534.jpg?v=1710387797,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+winza-sapphire,Winza Sapphire,"<p>This beautiful 0.54 carat Purple Winza Sapphire displays a deep, rich purple hue that is both regal and sophisticated. The gemstone has been expertly cut in a shield cut by Michael Sdz Morabito, a highly skilled gem cutter who is known for his precision and attention to detail. This unique gemstone is sure to add a touch of elegance to any jewelry design.</p>
+<p> </p>
+<p>Gemstone Weight: 0.54 carats</p>
+<p>Color: Purple</p>
+<p>Origin: Winza, Tanzania</p>
+<p>Species: Sapphire</p>
+<p>Cut By: Michael Sdz Morabito</p>
+<p>Cut: Shield Cut</p>
+<p> </p>
+<p>Disclaimer:</p>
+<p>When you purchase this gemstone, you are taking the first step towards starting a custom order. This can serve as confirmation of a previously discussed custom order, or as a way to reserve the gemstone that you love and don't want to miss out on. If you do not plan to have the gemstone set with us at [efd], it can be shipped to you upon request. We appreciate your business and look forward to working with you to create a one-of-a-kind piece of jewelry.</p>",Oscillation Devices,,Gemstone,"Gemstone, michael, purple, sheild, Tanzania, winza",true,Title,Default Title,,,,,,,,efd23-Winz-Corru-AGEM10,0.0,shopify,1,deny,manual,360.00,,false,true,efd23-Winz-Corru-AGEM10,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/PSX_20230303_123246.jpg?v=1710443434,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,180.00,true,,,true,,,active
+amethyst-mini,Mini Pendies,"<p>[efd] Mini pendants are made with 925 sterling silver wire and bezel, 14/20 gold filled wire, and 14k solid gold beads.</p>
+<p>Find your fit with a variety of gemstones. Don't see the gemstone you are looking for? Contact us and we will find the right gemstone for you.</p>
+<p>Each pendant comes with a 20"" 1mm rounded box chain.</p>","Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2023, handmade, hybrid, jewelry, pendant",true,Color,Rhodolite,,,,,,,,efd23-mpse-rhod,0.0,shopify,0,deny,manual,72.00,120.00,true,true,'24698553,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154429.jpg?v=1710387881,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154429.jpg?v=1710387881,lb,,35.00,true,,,true,,,active
+amethyst-mini,,,,,,,,,Tanzanite,,,,,,,,efd23-mpse-tanz,0.0,shopify,0,deny,manual,72.00,120.00,true,true,'24731321,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154455.jpg?v=1710387894,2,"",,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154509.jpg?v=1710387909,lb,,35.00,,,,,,,
+amethyst-mini,,,,,,,,,Peridot,,,,,,,,efd23-mpse-peri,0.0,shopify,0,deny,manual,72.00,120.00,true,true,'24764089,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154509.jpg?v=1710387909,3,"",,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154440.jpg?v=1710387922,lb,,35.00,,,,,,,
+amethyst-mini,,,,,,,,,Tanzanite and Rhodolite,,,,,,,,efd23-mpse-tzrh,0.0,shopify,1,deny,manual,72.00,120.00,true,true,'24796857,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154440.jpg?v=1710387922,4,"",,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154455.jpg?v=1710387894,lb,,35.00,,,,,,,
+rhodolite-garnet,Rhodolite Garnet,"<table>
+<tbody>
+<tr>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Mineral</td>
+<td>Garnet</td>
+</tr>
+<tr>
+<td>Subspecies</td>
+<td>Rhodolite</td>
+</tr>
+<tr>
+<td>Locale</td>
+<td>Tanzania </td>
+</tr>
+<tr>
+<td>Cts</td>
+<td>1.90ct</td>
+</tr>
+<tr>
+<td>Dimensions</td>
+<td></td>
+</tr>
+<tr>
+<td>Color</td>
+<td>Purple</td>
+</tr>
+<tr>
+<td>Cut</td>
+<td>Fantasy Shield</td>
+</tr>
+<tr>
+<td>Treatment</td>
+<td>Untreated</td>
+</tr>
+</tbody>
+</table>
+<p> </p>",Oscillation Devices,,Gemstone,"garnet, Gemstone, michael, Rhodolite, Tanzania",true,Title,Default Title,,,,,,,,efd23-Tanz-Garne-GEM4,0.0,shopify,1,deny,manual,200.00,,false,true,efd23-Tanz-Garne-GEM4,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_164231.jpg?v=1710443219,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+rhodolite-garnet,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_164233.jpg?v=1710443233,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+tibia-civitatem,Tibia Civitatem,"<p><span>Materials:</span></p>
+<p><span>- Sterling silver</span></p>
+<p><span>- 14k Yellow Gold</span></p>
+<p><span>- 1ct Fantasy cut Indicolite </span></p>
+<p><span> </span></p>
+<p><span>Whats Included:</span></p>
+<p><span>- 1ct fantasy cut Indicolite center stone</span></p>
+<p><span>- 20"" 1mm rounded box chain</span></p>
+<p><span>- Display</span></p>
+<p><span>- Collector membership</span></p>
+<p><span>- Polishing cloth</span></p>
+<p><span>Add a touch of elegance to your outfit with Tibia Civitatem from the Radix Collection. Made of sterling silver and accented with 14k Yellow Gold, this pendant features 1ct fantasy cut Indicolite center stone for a unique look. Comes with 20"" 1mm rounded box chain, display, collector membership and polishing cloth. Perfect for any occasion.<br></span></p>","Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"1/1, 14k yellow gold, 2022, fabricated, jewelry, pendant, sterling silver",true,Title,Default Title,,,,,,,,efd22-rc#4-indi,0.0,shopify,0,deny,manual,420.00,700.00,true,true,'71362489,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154821.jpg?v=1710388218,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+congo-tourmaline-1,Congo Tourmaline,"<table>
+<tbody>
+<tr>
+<td>Detail</td>
+<td>Description</td>
+</tr>
+<tr>
+<td>Name</td>
+<td><span>1.80ct Congo Tourmaline</span></td>
+</tr>
+<tr>
+<td>Mineral</td>
+<td>Tourmaline</td>
+</tr>
+<tr>
+<td>Subspecies</td>
+<td></td>
+</tr>
+<tr>
+<td>Locale</td>
+<td>Republic of Congo</td>
+</tr>
+<tr>
+<td>Cts</td>
+<td>1.75ct</td>
+</tr>
+<tr>
+<td>Dimensions</td>
+<td></td>
+</tr>
+<tr>
+<td>Color</td>
+<td>Yellow</td>
+</tr>
+<tr>
+<td>Cut</td>
+<td>Fantasy </td>
+</tr>
+<tr>
+<td>Treatment</td>
+<td>Untreated</td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p> </p>",Oscillation Devices,,Gemstone,"Congo, Gemstone, michael, Tourmaline",true,Title,Default Title,,,,,,,,efd23-Cong-Tourm-AGEM15,0.0,shopify,1,deny,manual,300.00,,false,true,efd23-Cong-Tourm-AGEM15,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_164134.jpg?v=1710442622,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,,true,,,true,,,active
+congo-tourmaline-1,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_164135.jpg?v=1710443025,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+congo-tourmaline,Dichroic Congo Tourmaline,"<table>
+<tbody>
+<tr>
+<td>Detail</td>
+<td>Description</td>
+</tr>
+<tr>
+<td>Name</td>
+<td><span>1.75ct Dichroic Congo Tourmaline</span></td>
+</tr>
+<tr>
+<td>Mineral</td>
+<td>Tourmaline<br>
+</td>
+</tr>
+<tr>
+<td>Subspecies</td>
+<td><br></td>
+</tr>
+<tr>
+<td>Locale</td>
+<td>Republic of Congo</td>
+</tr>
+<tr>
+<td>Cts</td>
+<td>1.75ct</td>
+</tr>
+<tr>
+<td>Dimensions</td>
+<td></td>
+</tr>
+<tr>
+<td>Color</td>
+<td>Dichroic</td>
+</tr>
+<tr>
+<td>Cut</td>
+<td>Radiant Emerald<br>
+</td>
+</tr>
+<tr>
+<td>Treatment</td>
+<td>Untreated</td>
+</tr>
+</tbody>
+</table>",Oscillation Devices,,Gemstone,"Congo, Dichroic, Gemstone, michael, Tourmaline",true,Title,Default Title,,,,,,,,efd23-Cong-Tourm-AGEM1,0.0,shopify,0,deny,manual,300.00,,true,true,efd23-Cong-Tourm-AGEM1,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_163815.jpg?v=1710442653,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,g,,180.00,true,,,true,,,active
+congo-tourmaline,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/DichroTourm.jpg?v=1710443113,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+fantasy-cut-indicolite,Brazilian Indicolite Tourmaline,"<table>
+<tbody>
+<tr>
+<td>Detail</td>
+<td>Description</td>
+</tr>
+<tr>
+<td>Name</td>
+<td>Blue Brazilian Indicolite</td>
+</tr>
+<tr>
+<td>Mineral</td>
+<td>Tourmaline<br>
+</td>
+</tr>
+<tr>
+<td>Subspecies</td>
+<td>Indicolite<br>
+</td>
+</tr>
+<tr>
+<td>Locale</td>
+<td>Brazil</td>
+</tr>
+<tr>
+<td>Cts</td>
+<td>1.75ct</td>
+</tr>
+<tr>
+<td>Dimensions</td>
+<td></td>
+</tr>
+<tr>
+<td>Color</td>
+<td>Dark Blue<br>
+</td>
+</tr>
+<tr>
+<td>Cut</td>
+<td>Fantasy <br>
+</td>
+</tr>
+<tr>
+<td>Treatment</td>
+<td>Untreated</td>
+</tr>
+</tbody>
+</table>
+<p> </p>",Oscillation Devices,,Gemstone,"Brazil, Gemstone, Indocolite, michael, Tourmaline",true,Title,Default Title,,,,,,,,efd23-Cong-Tourm-AGEM5,0.0,shopify,1,deny,manual,200.00,,false,true,efd23-Cong-Tourm-AGEM5,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_164728_a4a377d4-73d7-4796-a8d2-a34c70680903.jpg?v=1710442485,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,175.00,true,,,true,,,active
+fantasy-cut-indicolite,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_164728.jpg?v=1710442949,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+paprok-wirewrap,Paprok Tourmaline Wire Trader,"<div class=""flex-1 overflow-hidden"">
+<div class=""react-scroll-to-bottom--css-wxknk-79elbk h-full dark:bg-gray-800"">
+<div class=""react-scroll-to-bottom--css-wxknk-1n7m0yu"">
+<div class=""flex flex-col items-center text-sm dark:bg-gray-800"">
+<div class=""w-full border-b border-black/10 dark:border-gray-900/50 text-gray-800 dark:text-gray-100 group bg-gray-50 dark:bg-[#444654]"">
+<div class=""text-base gap-4 md:gap-6 m-auto md:max-w-2xl lg:max-w-2xl xl:max-w-3xl p-4 md:py-6 flex lg:px-0"">
+<div class=""relative flex w-[calc(100%-50px)] flex-col gap-1 md:gap-3 lg:w-[calc(100%-115px)]"">
+<div class=""flex flex-grow flex-col gap-3"">
+<div class=""min-h-[20px] flex flex-col items-start gap-4 whitespace-pre-wrap"">
+<div class=""markdown prose w-full break-words dark:prose-invert light"">
+<p>Introducing our stunning Paprok Tourmaline wrapped in a combination of sterling silver and 14/20 gold-filled wire. This exquisite piece is meticulously handcrafted with attention to detail and the utmost care. The Paprok Tourmaline is known for its beautiful range of colors and unique properties that make it a favorite of many gemstone enthusiasts.</p>
+<p>Whether you're looking for a special gift for a loved one or a unique piece to add to your collection, this Paprok Tourmaline pendant is sure to impress. Don't miss out on this one-of-a-kind piece and take advantage of our promotion today. </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>","Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2021, jewelry, pendant, wire wrap",true,Title,Default Title,,,,,,,,efd21-ww01-papr,0.0,shopify,0,deny,manual,140.00,,true,true,kTfgp82yr1,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/VideoCapture_20211008-102857_3.jpg?v=1710387946,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,60.00,true,,,true,,,active
+13-point-bolt,13 Point Bolt,"<p>Crafted to perfection, our 13 Point Bolts are the perfect addition to your jewelry collection. Hand carved in wax and then cast in sterling silver, these unique bolts boast 13 points and can be customized with the gemstone of your choice. Perfect for a special gift or a personal accessory, these bolts are sure to make a statement.</p>
+<p>With our special code 'FREECHAIN', you can get a 1.8mm half-round sterling silver box chain for free. Order now to get your own 13 Point Bolt – but remember, each item is made to order, so your order will spend 3-5 days in production before being shipped.</p>","Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,Casted,true,Title,Default Title,,,,,,,,"",0.0,shopify,0,deny,manual,115.00,,true,true,'41387961,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/20211011_184426_2.jpg?v=1672983004,1,"",false,,,,,,,,,,,,,,,,,'21,,,,,,,,lb,,,true,,,true,,,active
+13-point-bolt,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/20211011_184551_2.jpg?v=1672983004,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+13-point-bolt,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/20211011_184848_2.jpg?v=1672983003,3,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+13-point-bolt,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/20211011_185111_2.jpg?v=1672983003,4,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+13-point-bolt,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/20211011_185928_2.jpg?v=1672983003,5,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+13-point-bolt,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/20211011_190238_2.jpg?v=1672983003,6,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+striker-pendant,Striker Pendant,"<p>Introducing our unique Striker Sterling Silver Pendant, available with your choice of gemstone. The intricate striker design was originally carved in wax, then cast in sterling silver using traditional techniques. The result is a beautiful and highly detailed piece that is sure to turn heads.</p>
+<p>Whether you're looking for a special gift for a loved one or a unique piece to add to your collection, this Striker Sterling Silver Pendant is sure to impress. Each piece is made by hand with attention to detail and the utmost care, ensuring that you receive a truly one-of-a-kind piece.</p>","Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"2021, Casted, jewelry, pendant",true,Gemstone,Amethyst,,,,,,,,efd21-spfe-amet,0.0,shopify,0,deny,manual,80.00,120.00,true,true,c7UDEQYcr4,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154521.jpg?v=1710388103,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154552.jpg?v=1710388158,lb,,35.00,true,,,true,,,active
+striker-pendant,,,,,,,,,Peridot,,,,,,,,efd21-spfe-peri,0.0,shopify,0,deny,manual,80.00,120.00,true,true,eReSX1ZfNQ,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154605.jpg?v=1710388113,2,"",,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154605.jpg?v=1710388113,lb,,35.00,,,,,,,
+striker-pendant,,,,,,,,,Topaz,,,,,,,,efd21-spfe-topa,0.0,shopify,0,deny,manual,80.00,120.00,true,true,18a938f5,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154552.jpg?v=1710388158,3,"",,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154521.jpg?v=1710388103,lb,,35.00,,,,,,,
+primum-aurum,Primum Aurum,"<p><span>Introducing Primum Aurum - my first solid gold creation! This stunning ring was hand fabricated in November 2022 and is available in size 7 (can be sized). Primum Aurum features a 14k yellow gold cathedral band, 14k yellow and white gold custom head, and a breathtaking 1.24ct Sea Foam Green Montana Sapphire cut by Michael Morabito. Make a statement with this unique and beautiful ring!</span></p>
+<p>Size: 7 (can be sized)</p>
+<p>Featuring:</p>
+<p>-14k YG Cathedral Band</p>
+<p>-14k YG &amp; WG Custom Head</p>
+<p>-1.24ct Sea Foam Green Montana Sapphire cut by Michael Morabito</p>","Critter, the Designer",Apparel & Accessories > Jewelry,ring,"14k white gold, 14k yellow gold, 2022, bridal, fabricated, handmade, jewelry, ring",true,Title,Default Title,,,,,,,,efd22-rc#4-saph,0.0,shopify,1,deny,manual,1500.00,2000.00,true,true,H21UhTGM0q,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/20230408_192012.jpg?v=1710388012,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,lb,,488.00,true,,,true,,,active
+primum-aurum,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_155014.jpg?v=1710388025,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+half-round-box-chain,Rounded Box Chain,<p>A box chain made with half-round sterling silver wire with a lobster clasp.</p>,Engel Fine Design,,Gemstone,"box chain, chain",true,Size,"16""",,,,,,,,"",6.18,,0,continue,manual,32.00,,true,true,'34422969,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/20221108_153452.jpg?v=1668216342,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,g,,,true,,,true,,,active
+half-round-box-chain,,,,,,,,,"18""",,,,,,,,"",6.93,,0,deny,manual,36.00,,true,true,'34455737,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/20221108_153456.jpg?v=1668216343,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,g,,,,,,,,,
+half-round-box-chain,,,,,,,,,"20""",,,,,,,,"",7.68,,0,deny,manual,40.00,,true,true,'34488505,,,,,,,,,,,,,,,,,,,,,,,,,,,,,g,,,,,,,,,
+half-round-box-chain,,,,,,,,,"24""",,,,,,,,"",11.44,,0,deny,manual,48.00,,true,true,'34554041,,,,,,,,,,,,,,,,,,,,,,,,,,,,,g,,,,,,,,,
+patientia,Patientia,"<p>Patiantia is named for tha patience its owner has expressed with me through the years, offering me time to grow, in the many directions needed to bring this piece to life.</p>
+<p>5mm Swiss Blue Topaz set in 14k yellow gold and 925 sterling silver on a 22"" sterling silver half-round box-chain. </p>
+<p> </p>","Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"fabricated, jewelry, pendant, sterling silver",true,Title,Default Title,,,,,,,,074m8UgbL1,10.4,shopify,0,deny,manual,175.00,,true,true,'43413433,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/VideoCapture_20221107-155802.jpg?v=1710387966,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,g,,30.00,true,,,true,,,active
+apis,Incrementum,"<p>Introducing Incrumentum – a magnificent pendant crafted through five years of devotion to jewelry making. It boasts of a 925 sterling silver frame, settings, and filigree, 10k yellow gold ornate beads, 14k gold-filled wire honeycomb, a 1ct Mexican fire opal, a 3mm tourmaline, two 2mm tourmalines, two 2mm citrines, two 2mm hessonite garnets, and a genuine G/H SI2-SI3 diamond. The combination of materials creates a breathtaking piece that's sure to make a statement.</p>
+<p> </p>
+<p>Features:</p>
+<p> </p>
+<p>925 sterling silver frame, settings, and filigree</p>
+<p>10k yellow gold ornate beads</p>
+<p>14/20 gold-filled wire honeycomb</p>
+<p>1x 1ct Mexican Fire Opal</p>
+<p>1x 3mm Tourmaline</p>
+<p>2x 2mm Tourmaline</p>
+<p>2x 2mm Citrine</p>
+<p>2x 2mm Hessonite Garnet</p>
+<p>.03ct Genuine G/H SI2-SI3 Diamond</p>
+<p> </p>",Engel Fine Design,Apparel & Accessories > Jewelry,Pendant,"14k gold, diamond, fabricated, hybrid, sterling silver, wire wrap",true,Title,Default Title,,,,,,,,efd22-rc#2-incr,13.5,shopify,0,deny,manual,700.00,,true,true,gaqwXTki9R,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154930.jpg?v=1710387858,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,g,,100.00,true,,,true,,,active
+stan,Praxi,"<p>Praxi was named for the practice it will take to keep from making the same mistakes. </p>
+<p>This pendant was hand-fabricated with:</p>
+<p>~12g sterling silver</p>
+<p>~.5g scrap  yellow gold (10k+)</p>
+<p>Featuring:</p>
+<p>1x - 5mmx8mm Tourmaline (slightly scratched when set into pendant, see disclaimer**)</p>
+<p>2x 3mm Tanzanite</p>
+<p>2x Citrine</p>
+<p>**Disclaimer: This pendant has been discounted do to small, visible scratches on the centerstone. </p>","Critter, the Designer",Apparel & Accessories > Jewelry,Pendant,"14k yellow gold, artisan, citrine, fabricated, jewelry, pendant, Radix, sterling silver, tanzinite, Tourmaline",true,Title,Default Title,,,,,,,,7KlCOzd6S9,13.5,shopify,0,deny,manual,300.00,450.00,true,true,'51238841,https://cdn.shopify.com/s/files/1/0589/6214/9561/products/20221008_154548.jpg?v=1710387989,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,g,,70.00,true,,,true,,,active
+solitude,Solitudo,"<p><span>Materials:</span></p>
+<p><span>- Sterling silver</span></p>
+<p><span>- 14k yellow Gold</span></p>
+<p><span>- Rhodolite Garnet</span></p>
+<p><span>- Tsavorite garnet</span></p>
+<p><span> </span></p>
+<p><span>Whats Included:</span></p>
+<p><span>- Pendant</span></p>
+<p><span>- 20"" 1mm rounded box chain</span></p>
+<p><span>- Display</span></p>
+<p><span>- Collector membership</span></p>
+<p><span>- Polishing cloth</span></p>
+<p> </p>
+<p><span>Sophisticated and elegant, the Solitudo pendant is crafted from sterling silver with 14k yellow Gold accents. Its 1ct Fantasy cut Rhodolite Garnet centerstone and 10 1mm Tsavorite garnet accent stones radiate luxury and come with a 20"" 1mm rounded box chain. Display, collector membership, and polishing cloth included.<br><br></span></p>",Engel Fine Design,Apparel & Accessories > Jewelry,"","1/1, 14k yellow gold, 2022, fabricated, handmade, jewelry, pendant",true,Title,Default Title,,,,,,,,efd22-rc#1-rhod,382.7185621875,shopify,1,deny,manual,700.00,,true,true,CAUHflUpXm,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/rn-image_picker_lib_temp_8d5e23fa-6ed1-44f9-b9b3-6405d2620995.jpg?v=1713909672,1,"",false,,,,,,,,,,,,,,,,,,,,,,,,,oz,,200.00,true,,,true,,,active
+solitude,,,,,,,,,,,,,,,,,,,,,,,,,,,,https://cdn.shopify.com/s/files/1/0589/6214/9561/files/20230521_154916.jpg?v=1713909670,2,"",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,

@@ -1,0 +1,22 @@
+{
+  "name": "hackthelab-orchestrator",
+  "version": "1.0.0",
+  "description": "Orchestrator for Hack the Lab v2",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "fastify": "^5.8.5",
+    "dockerode": "^4.0.0",
+    "dotenv": "^16.3.1",
+    "uuid": "^11.1.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  }
+}

@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      # SSL Configuration (Uncomment in Production)
+      # - "--entrypoints.websecure.address=:443"
+      # - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      # - "--certificatesresolvers.myresolver.acme.email=your-email@example.com"
+      # - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "127.0.0.1:8080:8080" # Traefik Dashboard (Localhost only)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # - ./letsencrypt:/letsencrypt # Uncomment for SSL persistence
+
+  orchestrator:
+    build: ./orchestrator
+    container_name: orchestrator
+    restart: always
+    environment:
+      - PORT=3000
+      - ORCHESTRATOR_SECRET=${ORCHESTRATOR_SECRET:?ORCHESTRATOR_SECRET must be set (no default)}
+      - DOMAIN=term.crittercodes.dev
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # Needs access to spawn containers
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.orchestrator.rule=Host(`api.term.crittercodes.dev`)"
+      - "traefik.http.services.orchestrator.loadbalancer.server.port=3000"
