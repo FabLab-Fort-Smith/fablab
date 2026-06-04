@@ -25,3 +25,12 @@ converge-check: ## Dry-run the playbook (no changes) — review the diff first
 
 converge: ## GATED: apply host config (harden + docker + coolify + backups) to the VPS
 	cd $(ANSIBLE_DIR) && ansible-playbook playbook.yml
+
+dns: ## GATED: create/update Cloudflare DNS for the VPS (deploy/staging/preview; apex untouched)
+	bash cloudflare/dns.sh
+
+coolify: ## Validate the Coolify API + print the remaining (UI) setup steps
+	bash coolify/bootstrap.sh
+
+provision: ## GATED: run the whole pipeline — preflight -> converge -> dns -> coolify
+	bash provision.sh all
