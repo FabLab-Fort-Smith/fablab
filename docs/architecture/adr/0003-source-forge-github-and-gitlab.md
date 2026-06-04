@@ -38,10 +38,11 @@ deploys from the **primary** for each repo. The primary/mirror assignment is an 
     (`@rules/workflow-git.md`) must be configured on **both** (or at least the primary) so the
     mirror can't become a bypass path.
 
-## Open questions (to resolve at bootstrap)
+## Resolved / open
 
-- [ ] Which forge is **primary** vs. **mirror** (globally, or per repo)?
-- [ ] Mirroring mechanism: GitHub Actions/GitLab pull-mirror/push-mirror, or a CI step?
+- [x] **Primary = GitHub** (`FabLab-Fort-Smith`); GitLab is the **mirror**. Coolify deploys from
+      GitHub via the GitHub App (richest preview/commit-status integration).
+- [ ] Mirroring mechanism: GitHub→GitLab push-mirror vs. GitLab pull-mirror vs. a CI step.
 - [ ] Self-hosted GitLab, or gitlab.com?
 
 ## Alternatives considered

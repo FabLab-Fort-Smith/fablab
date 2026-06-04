@@ -1,0 +1,20 @@
+---
+# yamllint config tuned for Ansible/IaC (@rules/workflow-cicd.md). Relaxes the pedantic
+# defaults that fight Ansible style; keeps real structural checks.
+extends: default
+
+rules:
+  line-length:
+    max: 120
+    level: warning          # long lines warn, don't fail the gate
+  braces:
+    max-spaces-inside: 1    # allow `{ key: value }` inline maps
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: disable
+  truthy:
+    check-keys: false       # allow GitHub Actions `on:` and Ansible bare booleans
+  document-start: disable    # cloud-init (#cloud-config) and vars files don't start with ---
+  octal-values:             # required by ansible-lint's yaml rule
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true

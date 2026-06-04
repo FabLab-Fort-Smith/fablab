@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Managed by Ansible (lab-stack/ansible/roles/backups). MongoDB dump → encrypt → off-box.
+# Secrets (MONGODB_URI, BACKUP_AGE_RECIPIENT / restic creds) come from the environment /
+# secret store at runtime — NEVER hardcode them here (@rules/workflow-secrets.md).
+set -euo pipefail
+IFS=$'\n\t'
+
+BACKUP_DIR="{{ backup_local_dir | default('/var/backups/fablab') }}"
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"          # UTC, monotonic-safe naming (@rules/topic-numeric-correctness.md)
+OUT="${BACKUP_DIR}/mongo-${STAMP}.archive.gz"
+
+: "${MONGODB_URI:?MONGODB_URI must be set (from the secret store)}"
+
+umask 077
+mkdir -p "${BACKUP_DIR}"
+
+# 1) Dump (compressed archive). Adjust to the container exec form if Mongo runs in Coolify.
+mongodump --uri="${MONGODB_URI}" --archive="${OUT}" --gzip
+
+# 2) Encrypt at rest before it leaves the box (age/gpg). Example with age:
+#    age -r "${BACKUP_AGE_RECIPIENT}" -o "${OUT}.age" "${OUT}" && shred -u "${OUT}"
+# 3) Copy OFF-BOX (restic/rclone/S3) so a VPS loss doesn't lose backups. TODO: wire target.
+#    restic backup "${OUT}.age"   # repo + password from the secret store
+
+# 4) Local retention (keep 7 days); off-box retention handled by the off-box tool.
+find "${BACKUP_DIR}" -name 'mongo-*.archive.gz*' -mtime +7 -delete
+
+echo "backup complete: ${OUT} (remember: encrypt + ship off-box + restore-drill)"

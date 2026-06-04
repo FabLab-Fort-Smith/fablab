@@ -1,0 +1,57 @@
+#cloud-config
+# First-boot hardening for the RackNerd VPS (ADR 0004). Paste into the provider's
+# user-data field, OR run once on a fresh Ubuntu LTS box. Idempotent host convergence
+# afterwards is Ansible's job (../ansible). Secrets/keys are NOT committed — replace the
+# SSH public key placeholder with your real key before use (@rules/workflow-secrets.md).
+
+# Create a non-root sudo "deploy" user; root + password SSH login are disabled below.
+users:
+  - name: deploy
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    ssh_authorized_keys:
+      - "ssh-ed25519 AAAA__REPLACE_WITH_YOUR_PUBLIC_KEY__ deploy@fablab"
+
+# Keep the system patched on first boot.
+package_update: true
+package_upgrade: true
+packages:
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - curl
+  - ca-certificates
+  - gnupg
+
+# Lock down SSH: no root login, keys only, no password auth.
+ssh_pwauth: false
+disable_root: true
+
+write_files:
+  # Drop-in hardening (a single, auditable file rather than editing sshd_config in place).
+  - path: /etc/ssh/sshd_config.d/10-fablab-hardening.conf
+    permissions: "0644"
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      ChallengeResponseAuthentication no
+      PubkeyAuthentication yes
+      X11Forwarding no
+      MaxAuthTries 3
+      AllowUsers deploy
+
+runcmd:
+  # Default-deny firewall; allow SSH now, web later (locked to Cloudflare in Ansible).
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22/tcp
+  - ufw --force enable
+  - systemctl enable --now fail2ban
+  - systemctl restart ssh || systemctl restart sshd
+  # Enable automatic security updates.
+  - dpkg-reconfigure -f noninteractive unattended-upgrades
+
+# After this boots: set the host IP in ../../.env and run `make converge` (../ansible).
+final_message: "fablab base image ready. Next: Ansible converge (Docker + Coolify + firewall + backups)."

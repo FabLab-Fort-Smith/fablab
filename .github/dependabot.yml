@@ -1,0 +1,20 @@
+# Dependency + GitHub Actions update automation (@rules/std-supplychain.md,
+# @rules/workflow-vuln-mgmt.md). Keeps deps patched and helps move actions to SHA pins.
+version: 2
+updates:
+  # GitHub Actions used by CI (helps convert tag pins → SHA pins over time).
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # The app's npm dependencies (active once consolidated into lab-site/the-lab).
+  - package-ecosystem: npm
+    directory: "/lab-site/the-lab"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]

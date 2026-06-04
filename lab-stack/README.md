@@ -22,23 +22,29 @@ preview deployments — the self-hosted equivalent of "Vercel's infrastructure" 
 **External (not hosted here, ADR 0007):** S3-compatible object storage (`s3.crittercodes.dev`),
 SMTP email, Square payments, Google GenAI — the app connects out; treated as untrusted upstreams.
 
-## Planned directory layout (when we build it)
+## Directory layout (scaffolded — drafted, not yet applied)
 
 ```
 lab-stack/
 ├── README.md
 ├── CLAUDE.md
-├── cloud-init/           # first-boot: deploy user, SSH hardening, base packages
-│   └── user-data.yaml
+├── Makefile              # task runner: deps / lint / ping / converge-check / converge
+├── cloud-init/
+│   └── user-data.yaml    # first-boot: deploy user, SSH hardening, UFW, fail2ban, auto-updates
 ├── ansible/              # idempotent host convergence
+│   ├── ansible.cfg
+│   ├── requirements.yml  # galaxy collections (community.general, ansible.posix)
 │   ├── inventory.example.ini
-│   ├── playbook.yml      # harden + docker + coolify + firewall + fail2ban + backups
-│   └── roles/
-├── coolify/              # exported/declared Coolify config; MongoDB service definition
-│   └── README.md         # install/config + backup/export procedure
-├── cloudflare/           # DNS + cache/WAF settings (as code where possible)
-└── docs/                 # platform notes (links back to ../docs/runbooks)
+│   ├── group_vars/all.example.yml
+│   ├── playbook.yml      # harden → docker → coolify → backups
+│   └── roles/{harden,docker,coolify,backups}/
+├── coolify/README.md     # dashboard config: MongoDB service, app base-dir, webhooks, TLS
+└── cloudflare/README.md  # DNS (+ *.preview wildcard), origin lockdown, cache/WAF
 ```
+
+> **Drafted, not validated.** The Ansible roles and scripts are starter IaC to review and test
+> on the real VPS — applying them (`make converge`) is a **gated** action. `coolify/` and
+> `cloudflare/` are step-by-step guides for the dashboard config that isn't pure code.
 
 ## Build sequence (high level — becomes `docs/runbooks/bootstrap-vps.md`)
 
@@ -74,5 +80,6 @@ lab-stack/
 
 ## Status
 
-🟡 Design only — nothing provisioned. This README is the build plan; implementation begins
-after the plan is reviewed and the open decisions (root README) are settled.
+🟡 **IaC scaffolded, not applied.** cloud-init + Ansible roles + Coolify/Cloudflare guides +
+runbooks exist as drafts. Nothing provisioned — `make converge` and DNS cutover are **gated**
+and need the VPS, secrets, and the open decisions (domain, primary forge) settled first.

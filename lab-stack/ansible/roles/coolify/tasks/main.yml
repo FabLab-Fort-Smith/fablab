@@ -1,0 +1,32 @@
+---
+# Install Coolify (the deploy engine — ADR 0002).
+# SECURITY: we DOWNLOAD the installer, keep a copy for review, then run it — we do NOT
+# `curl | bash` blindly (@rules/lang-shell.md, @rules/std-supplychain.md). Review the script
+# (or pin a known-good checksum in `coolify_installer_sha256`) before first apply.
+#
+# STATUS: drafted — validate on the real VPS before relying on it.
+
+- name: Check if Coolify is already installed (idempotency guard)
+  ansible.builtin.stat:
+    path: /data/coolify
+  register: coolify_dir
+
+- name: Download Coolify installer (do not pipe to shell)
+  ansible.builtin.get_url:
+    url: https://cdn.coollabs.io/coolify/install.sh
+    dest: /opt/coolify-install.sh
+    mode: "0755"
+    checksum: >-
+      {{ ('sha256:' + coolify_installer_sha256)
+         if (coolify_installer_sha256 | default('') | length > 0)
+         else omit }}
+  when: not coolify_dir.stat.exists
+
+- name: Run the reviewed Coolify installer
+  ansible.builtin.command: /opt/coolify-install.sh
+  args:
+    creates: /data/coolify
+  when: not coolify_dir.stat.exists
+  changed_when: true          # installer mutates the host when it runs (guarded by `creates`)
+  # After this: open https://{{ coolify_fqdn }}, create the admin (MFA), then configure
+  # the MongoDB service, app, webhooks, and Cloudflare per ../../coolify/README.md.

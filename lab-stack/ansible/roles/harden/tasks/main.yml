@@ -1,0 +1,87 @@
+---
+# CIS-aligned host hardening (@rules/std-cis.md). Idempotent.
+
+- name: Install baseline security packages
+  ansible.builtin.apt:
+    name: [ufw, fail2ban, unattended-upgrades]
+    state: present
+    update_cache: true
+
+- name: Enable unattended security upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    mode: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+# --- SSH: keys only, no root, no passwords (defense in depth with cloud-init) ---
+- name: Deploy SSH hardening drop-in
+  ansible.builtin.template:
+    src: sshd_hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/10-fablab-hardening.conf
+    mode: "0644"
+    validate: "/usr/sbin/sshd -t -f %s"
+  notify: Restart ssh
+
+# --- Firewall: default-deny; SSH always; web only from Cloudflare (zero-trust origin) ---
+- name: UFW default policies (deny in / allow out)
+  community.general.ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: incoming, policy: deny }
+    - { direction: outgoing, policy: allow }
+
+- name: Allow SSH
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+
+- name: Allow HTTP/HTTPS only from Cloudflare ranges (origin lockdown)
+  community.general.ufw:
+    rule: allow
+    src: "{{ item.0 }}"
+    port: "{{ item.1 }}"
+    proto: tcp
+  loop: "{{ (cloudflare_ipv4_ranges + cloudflare_ipv6_ranges) | product(['80', '443']) | list }}"
+  when: restrict_web_to_cloudflare | default(true)
+
+- name: Allow HTTP/HTTPS from anywhere (ONLY if origin lockdown disabled — discouraged)
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: ["80", "443"]
+  when: not (restrict_web_to_cloudflare | default(true))
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+
+# --- fail2ban for SSH brute-force ---
+- name: Configure fail2ban sshd jail
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/sshd.local
+    mode: "0644"
+    content: |
+      [sshd]
+      enabled = true
+      maxretry = 4
+      bantime = 1h
+      findtime = 10m
+  notify: Restart fail2ban
+
+# --- Minimal kernel hardening ---
+- name: Apply sysctl network hardening
+  ansible.posix.sysctl:
+    name: "{{ item.k }}"
+    value: "{{ item.v }}"
+    state: present
+    reload: true
+  loop:
+    - { k: net.ipv4.conf.all.rp_filter, v: "1" }
+    - { k: net.ipv4.tcp_syncookies, v: "1" }
+    - { k: net.ipv4.conf.all.accept_redirects, v: "0" }
+    - { k: net.ipv4.conf.all.accept_source_route, v: "0" }
