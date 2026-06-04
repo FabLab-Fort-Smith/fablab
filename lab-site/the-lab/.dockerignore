@@ -1,0 +1,13 @@
+# Keep the build context small and secret-free (@rules/workflow-secrets.md).
+node_modules
+.next
+.git
+.github
+.env
+.env.*
+npm-debug.log*
+coverage
+test
+docs
+*.md
+.DS_Store
