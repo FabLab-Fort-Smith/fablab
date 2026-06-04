@@ -37,7 +37,7 @@
     "uuid": "^11.1.1"
   },
   "devDependencies": {
-    "eslint": "^9",
+    "eslint": "^10",
     "eslint-config-next": "16.2.6",
     "jest": "^30.4.2",
     "mongodb-memory-server": "^11.2.0",
