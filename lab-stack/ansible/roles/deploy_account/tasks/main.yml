@@ -1,0 +1,40 @@
+---
+# Non-custodial admin: a shared, Ansible-managed role account (not tied to any one person).
+# Its authorized_keys list is the SINGLE SOURCE OF TRUTH — add a maintainer/CI key to
+# `deploy_authorized_keys` in group_vars and re-run; remove one to offboard. Runs only when
+# `manage_deploy_account` is true (skip it if you connect as an existing personal sudo user).
+# (ADR 0008; @rules/workflow-secrets.md least-privilege / one-identity-per-workload.)
+
+- name: Require at least one authorized key before creating a login role account
+  ansible.builtin.assert:
+    that: deploy_authorized_keys | default([]) | length > 0
+    fail_msg: >-
+      manage_deploy_account is true but deploy_authorized_keys is empty — set the maintainer/CI
+      public keys in group_vars/all.yml (a keyless login account would be unusable).
+
+- name: Ensure the deploy group
+  ansible.builtin.group:
+    name: "{{ deploy_user }}"
+    state: present
+
+- name: Ensure the deploy role account
+  ansible.builtin.user:
+    name: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    groups: [sudo]
+    append: true
+    shell: /bin/bash
+    create_home: true
+
+- name: Install the authorized keys (this list is authoritative — removing a key offboards it)
+  ansible.posix.authorized_key:
+    user: "{{ deploy_user }}"
+    key: "{{ deploy_authorized_keys | join('\n') }}"
+    exclusive: true
+
+- name: Passwordless sudo for unattended automation (CI / scheduled ops)
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-{{ deploy_user }}"
+    mode: "0440"
+    content: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    validate: "visudo -cf %s"

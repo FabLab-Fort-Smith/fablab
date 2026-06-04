@@ -21,6 +21,7 @@
 |---|---|---|
 | VPS | RackNerd 8 GB, **Ubuntu 24.04 LTS** | x86_64; ADR 0004 |
 | Your SSH keypair | `~/.ssh/fablab_deploy(.pub)` | `ssh-keygen -t ed25519 -f ~/.ssh/fablab_deploy -C deploy@fablab` |
+| Maintainer + CI public keys | for `deploy_authorized_keys` | collect each maintainer's **public** key + generate a CI key; non-custodial (ADR 0008) |
 | Domain on Cloudflare | `fablabfortsmith.org` | zone already managed by Cloudflare |
 | Staging hostname | e.g. `staging.fablabfortsmith.org` | the VPS app URL pre-cutover (NOT the apex) |
 | Cloudflare API token | scope: **Zone › DNS › Edit** for the zone | for wildcard TLS (DNS-01) + DNS-as-code |
@@ -71,22 +72,27 @@ the Cloudflare Access policy. The detailed steps below explain each stage.
 1. RackNerd → order the 8 GB KVM VPS, OS = **Ubuntu 24.04**. Note the **public IP**.
 2. (Optional) set reverse DNS / hostname `fablab-prod`.
 
-## 2. First-boot hardening
-**If the box already has sudo users (`critter`, `b007ab1e`) with your SSH keys — SKIP this step.**
-Just point Ansible at one of them (`ansible_user=b007ab1e` in `inventory.ini`); the `harden` role
-applies SSH/firewall hardening **without** locking those users out (it adds no `AllowUsers`
-restriction unless you set `ssh_allow_users`).
+## 2. First-boot access (non-custodial — ADR 0008)
+Administration is **not** tied to one person: Ansible creates a shared **`deploy` role account**
+whose keys (`deploy_authorized_keys` in `group_vars` — one per maintainer + one for CI) are the
+single source of truth. You just need an existing sudo login for the **first** converge.
 
-Otherwise, bootstrap a deploy user (RackNerd/SolusVM usually can't inject cloud-init):
-```bash
-scp lab-stack/cloud-init/manual-bootstrap.sh root@<vps-ip>:/root/   # from the repo
-ssh root@<vps-ip> 'DEPLOY_PUBKEY="ssh-ed25519 AAAA... you@host" bash /root/manual-bootstrap.sh'
-```
-(Or paste `lab-stack/cloud-init/user-data.yaml` as user-data if your panel supports it.)
+- **Box already has sudo users (`critter`, `b007ab1e`) with your keys:** nothing to do here —
+  set `ansible_user=b007ab1e` for the first run. The `harden` role hardens SSH **without**
+  locking anyone out (no `AllowUsers` unless you set `ssh_allow_users`), and `deploy_account`
+  creates the shared `deploy` user. **After** the first converge, switch `ansible_user=deploy`.
+- **Fresh box with no users:** bootstrap one first (RackNerd/SolusVM can't inject cloud-init):
+  ```bash
+  scp lab-stack/cloud-init/manual-bootstrap.sh root@<vps-ip>:/root/
+  ssh root@<vps-ip> 'DEPLOY_PUBKEY="ssh-ed25519 AAAA... you@host" bash /root/manual-bootstrap.sh'
+  ```
+
+> To **offboard** a maintainer or rotate the CI key later: remove its line from
+> `deploy_authorized_keys` and re-run `make converge` (the list is authoritative).
 
 **Verify (from your laptop):**
 ```bash
-ssh -i ~/.ssh/fablab_deploy b007ab1e@<vps-ip> 'echo ok'   # existing user works (or deploy@)
+ssh -i ~/.ssh/fablab_deploy b007ab1e@<vps-ip> 'echo ok'   # first-run user (later: deploy@)
 ssh root@<vps-ip>                                          # MUST be refused after converge
 ```
 

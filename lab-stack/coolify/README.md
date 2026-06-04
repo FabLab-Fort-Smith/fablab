@@ -4,10 +4,14 @@ Coolify is installed by `ansible/roles/coolify`. The items below are configured 
 Coolify dashboard** (its UI is a necessary source of truth — ADR 0002); record them here and
 back up Coolify's own config/DB regularly so this is reproducible.
 
-## 1. Secure the dashboard (do first)
+## 1. Secure the dashboard (do first) — non-custodial (ADR 0008)
 - Create the admin account immediately after install; enable **MFA**.
+- **Invite every maintainer as a team member with their own login + MFA** — do **not** share one
+  dashboard password. Keep a documented break-glass owner.
+- Create a dedicated **API token for CI/automation** (revocable; not a human's session) — that's
+  what `coolify/bootstrap.sh` and any scheduled ops use. Never share or commit it.
 - Put the dashboard (`deploy.<domain>`) behind **Cloudflare Access** or an IP allow-list; never
-  expose it openly (threat model R3). Never share the Coolify API token.
+  expose it openly (threat model R3).
 
 ## 2. MongoDB service (ADR 0007)
 - Add a **MongoDB** resource on Coolify's **private network only** (not publicly exposed).

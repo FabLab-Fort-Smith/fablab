@@ -2,13 +2,24 @@
 # secret store / Coolify and are injected at runtime (@rules/workflow-secrets.md). Use
 # ansible-vault for anything sensitive that must be in Ansible.
 
-# --- Identity / access ---
-# The box already has sudo users (critter, b007ab1e) with your SSH keys — connect Ansible as one
-# of them (set ansible_user in inventory.ini). deploy_user just owns the docker group + backup files.
-deploy_user: b007ab1e
+# --- Identity / access (non-custodial — ADR 0008) ---
+# A shared, Ansible-managed role account owns automation/ops, so nothing is tied to one person.
+# FIRST run: connect as an existing sudo user (ansible_user=b007ab1e in inventory.ini) to create it;
+# AFTERWARDS you can set ansible_user=deploy. Set manage_deploy_account: false to instead just use
+# an existing personal account (then deploy_user should name that account).
+deploy_user: deploy
+manage_deploy_account: true
 
-# Restrict SSH logins to these users. LEAVE EMPTY to avoid locking out existing sudo users
-# (SSH stays key-only, no root, no password regardless). To lock down later: [b007ab1e, critter].
+# Authorized keys for the deploy account — the SINGLE SOURCE OF TRUTH. One line per maintainer +
+# one for CI/scheduled ops; each is independently revocable (remove it and re-run = offboarded).
+deploy_authorized_keys:
+  - "ssh-ed25519 AAAA__MAINTAINER_1__ critter"
+  - "ssh-ed25519 AAAA__MAINTAINER_2__ b007ab1e"
+  - "ssh-ed25519 AAAA__CI_DEPLOY_KEY__ ci@fablab"   # automation identity (rotate independently)
+
+# Restrict SSH logins to these users. LEAVE EMPTY to avoid lockout (SSH stays key-only, no root,
+# no password regardless). If you later lock down, include EVERY maintainer + deploy, e.g.
+# [deploy, critter, b007ab1e].
 ssh_allow_users: []
 
 # --- Domains (ADR 0002) ---
