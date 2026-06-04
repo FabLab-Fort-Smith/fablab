@@ -1,0 +1,302 @@
+[
+    {
+        "title": "📸 Showcase Pioneer",
+        "description": "Be one of the first to post a project in the new Member Showcase! Upload a photo and description of something you've made recently.",
+        "rewardType": "custom",
+        "rewardValue": "Early Adopter Status",
+        "stakeValue": 10,
+        "requirements": ["Post a project to the Showcase", "Include at least one image"],
+        "recurrence": "none",
+        "isInfinite": true
+    },
+    {
+        "title": "🐛 Bug Hunter Beta",
+        "description": "We need your help testing the new dashboard! Find a bug, report it using the Bug Tracker, and help us improve the system.",
+        "rewardType": "custom",
+        "rewardValue": "Bug Squasher Badge",
+        "stakeValue": 15,
+        "requirements": ["Submit a valid bug report", "Bug must be verified by admin"],
+        "recurrence": "none",
+        "isInfinite": true
+    },
+    {
+        "title": "📍 Check-In Streak",
+        "description": "Test out the new QR code check-in system! Check in to the lab on 3 separate days this week.",
+        "rewardType": "hours",
+        "rewardValue": 1,
+        "stakeValue": 5,
+        "requirements": ["Check in 3 times in one week"],
+        "recurrence": "weekly",
+        "isInfinite": false
+    },
+    {
+        "title": "🤝 Community Voice",
+        "description": "Engage with your fellow makers! Leave a constructive comment or question on 3 different projects in the Showcase.",
+        "rewardType": "custom",
+        "rewardValue": "High Five",
+        "stakeValue": 5,
+        "requirements": ["Comment on 3 different projects"],
+        "recurrence": "weekly",
+        "isInfinite": false
+    },
+    {
+        "title": "🎨 Sticker Design Challenge",
+        "description": "Design a cool sticker for the FabLab! The winning design will be printed and distributed to all members.",
+        "rewardType": "custom",
+        "rewardValue": "Free Materials & Prints",
+        "stakeValue": 50,
+        "requirements": ["Upload design to Showcase", "Tag with #StickerChallenge"],
+        "recurrence": "none",
+        "isInfinite": false
+    },
+    {
+        "title": "🎓 Workshop Wizard",
+        "description": "Share your knowledge! Host a workshop or class for other members on a topic you're passionate about.",
+        "rewardType": "hours",
+        "rewardValue": 5,
+        "stakeValue": 20,
+        "requirements": ["Host a scheduled workshop", "At least 3 attendees"],
+        "recurrence": "monthly",
+        "isInfinite": true
+    },
+    {
+        "title": "📚 Wiki Writer",
+        "description": "Help build our knowledge base. Write a tutorial or documentation page for a machine or process.",
+        "rewardType": "custom",
+        "rewardValue": "Contributor Badge",
+        "stakeValue": 10,
+        "requirements": ["Submit a new wiki page", "Approved by staff"],
+        "recurrence": "none",
+        "isInfinite": true
+    },
+    {
+        "title": "🦺 Safety Scout",
+        "description": "Keep the lab safe! Identify and report a safety hazard, or fix a minor safety issue (like organizing cables).",
+        "rewardType": "custom",
+        "rewardValue": "Safety First Badge",
+        "stakeValue": 5,
+        "requirements": ["Report or fix a safety issue", "Verify with staff"],
+        "recurrence": "weekly",
+        "isInfinite": true
+    },
+    {
+        "title": "🧹 Deep Clean: Laser",
+        "description": "The laser cutters need love too. Perform a deep clean of the laser bed and optics (training required).",
+        "rewardType": "hours",
+        "rewardValue": 1,
+        "stakeValue": 10,
+        "requirements": ["Clean honeycomb bed", "Clean optics", "Empty crumb tray"],
+        "recurrence": "weekly",
+        "isInfinite": true
+    },
+    {
+        "title": "🖨️ Deep Clean: 3D Printers",
+        "description": "Help maintain our fleet. Clean print beds, check nozzles, and level beds on 3 printers.",
+        "rewardType": "hours",
+        "rewardValue": 1,
+        "stakeValue": 10,
+        "requirements": ["Service 3 printers", "Log maintenance"],
+        "recurrence": "weekly",
+        "isInfinite": true
+    },
+    {
+        "title": "🔧 Tool Wall Tetris",
+        "description": "Chaos reigns on the tool wall. Reorganize a section, outline tools, or label bins.",
+        "rewardType": "custom",
+        "rewardValue": "Organizer Badge",
+        "stakeValue": 5,
+        "requirements": ["Organize one tool section", "Post before/after photo"],
+        "recurrence": "monthly",
+        "isInfinite": true
+    },
+    {
+        "title": "♻️ Scrap Sorter",
+        "description": "The scrap bin is overflowing. Sort usable scraps from trash and organize the material rack.",
+        "rewardType": "custom",
+        "rewardValue": "Recycler Badge",
+        "stakeValue": 5,
+        "requirements": ["Organize scrap bin", "Dispose of unusable waste"],
+        "recurrence": "weekly",
+        "isInfinite": true
+    },
+    {
+        "title": "📱 Social Share",
+        "description": "Spread the word! Share a photo of your current project on social media and tag the FabLab.",
+        "rewardType": "custom",
+        "rewardValue": "Social Shoutout",
+        "stakeValue": 5,
+        "requirements": ["Post on Instagram/Twitter/FB", "Tag the lab"],
+        "recurrence": "weekly",
+        "isInfinite": true
+    },
+    {
+        "title": "⭐ Google Review",
+        "description": "Love the lab? Leave us a 5-star review on Google Maps to help others find us.",
+        "rewardType": "custom",
+        "rewardValue": "Supporter Badge",
+        "stakeValue": 10,
+        "requirements": ["Leave a Google Review", "Send screenshot"],
+        "recurrence": "none",
+        "isInfinite": false
+    },
+    {
+        "title": "👋 New Member Buddy",
+        "description": "Help a newbie! Spend an hour assisting a new member with their first project or machine setup.",
+        "rewardType": "hours",
+        "rewardValue": 1,
+        "stakeValue": 15,
+        "requirements": ["Assist a new member", "Verified by member"],
+        "recurrence": "none",
+        "isInfinite": true
+    },
+    {
+        "title": "📸 Event Photographer",
+        "description": "Capture the moment. Take high-quality photos during a lab event or busy night for our marketing.",
+        "rewardType": "hours",
+        "rewardValue": 1,
+        "stakeValue": 10,
+        "requirements": ["Submit 10+ high quality photos"],
+        "recurrence": "monthly",
+        "isInfinite": true
+    },
+    {
+        "title": "🧵 Filament Restocker",
+        "description": "Check the 3D printing filament stock, organize spools, and list what colors we're low on.",
+        "rewardType": "custom",
+        "rewardValue": "Filament Keeper",
+        "stakeValue": 5,
+        "requirements": ["Inventory filament", "Submit restock list"],
+        "recurrence": "weekly",
+        "isInfinite": true
+    },
+    {
+        "title": "🌪️ Woodshop Dust Buster",
+        "description": "The dust collectors are full! Empty the bags and sweep the floor around the woodshop machines.",
+        "rewardType": "hours",
+        "rewardValue": 1,
+        "stakeValue": 5,
+        "requirements": ["Empty dust bags", "Sweep woodshop"],
+        "recurrence": "weekly",
+        "isInfinite": true
+    },
+    {
+        "title": "🛠️ Repair Cafe Hero",
+        "description": "Something broken? Fix a broken tool, chair, or equipment in the lab.",
+        "rewardType": "custom",
+        "rewardValue": "Fixer Badge",
+        "stakeValue": 20,
+        "requirements": ["Repair a lab item", "Document the fix"],
+        "recurrence": "none",
+        "isInfinite": true
+    },
+    {
+        "title": "🤝 Project Collaboration",
+        "description": "Two heads are better than one. Complete a project that involves collaborating with another member.",
+        "rewardType": "custom",
+        "rewardValue": "Collaborator Badge",
+        "stakeValue": 15,
+        "requirements": ["Post collab project to Showcase", "Tag partner"],
+        "recurrence": "none",
+        "isInfinite": true
+    },
+    {
+        "title": "👋 Open House Greeter",
+        "description": "Be the face of the lab. Volunteer to man the front desk or give tours during an Open House event.",
+        "rewardType": "hours",
+        "rewardValue": 2,
+        "stakeValue": 10,
+        "requirements": ["Volunteer for 2 hours", "Give tours"],
+        "recurrence": "monthly",
+        "isInfinite": true
+    },
+    {
+        "title": "💻 Code Contributor",
+        "description": "Hacker time. Submit a Pull Request to the FabLab's open-source repository (website, tools, etc.).",
+        "rewardType": "custom",
+        "rewardValue": "Contributor Badge",
+        "stakeValue": 25,
+        "requirements": ["Merged PR on GitHub"],
+        "recurrence": "none",
+        "isInfinite": true
+    },
+    {
+        "title": "🎥 Video Tutorial",
+        "description": "Create a short video tutorial (TikTok/Reel/YouTube) demonstrating how to use a machine or technique.",
+        "rewardType": "custom",
+        "rewardValue": "Content Creator Badge",
+        "stakeValue": 20,
+        "requirements": ["Post video", "Share link"],
+        "recurrence": "monthly",
+        "isInfinite": true
+    },
+    {
+        "title": "📦 Material Donor",
+        "description": "Got extra supplies? Donate useful materials (wood, acrylic, filament, electronics) to the community pile.",
+        "rewardType": "custom",
+        "rewardValue": "Donor Badge",
+        "stakeValue": 10,
+        "requirements": ["Donate materials", "Verify with staff"],
+        "recurrence": "none",
+        "isInfinite": true
+    },
+    {
+        "title": "🦉 Midnight Maker",
+        "description": "Burning the midnight oil. Check in to the lab after 8 PM for a late-night build session.",
+        "rewardType": "custom",
+        "rewardValue": "Night Owl Badge",
+        "stakeValue": 5,
+        "requirements": ["Check in after 8 PM"],
+        "recurrence": "none",
+        "isInfinite": true
+    },
+    {
+        "title": "🌅 Early Bird",
+        "description": "Rise and grind. Check in to the lab before 9 AM to start your day making.",
+        "rewardType": "custom",
+        "rewardValue": "Early Bird Badge",
+        "stakeValue": 5,
+        "requirements": ["Check in before 9 AM"],
+        "recurrence": "none",
+        "isInfinite": true
+    },
+    {
+        "title": "📅 Weekend Warrior",
+        "description": "No days off. Check in on both Saturday and Sunday in a single weekend.",
+        "rewardType": "custom",
+        "rewardValue": "Weekend Warrior Badge",
+        "stakeValue": 10,
+        "requirements": ["Check in Sat & Sun"],
+        "recurrence": "weekly",
+        "isInfinite": true
+    },
+    {
+        "title": "📝 Feedback Loop",
+        "description": "We want to hear from you. Complete the monthly member satisfaction survey.",
+        "rewardType": "custom",
+        "rewardValue": "Voter Badge",
+        "stakeValue": 5,
+        "requirements": ["Complete survey"],
+        "recurrence": "monthly",
+        "isInfinite": true
+    },
+    {
+        "title": "♻️ Zero Waste Warrior",
+        "description": "One man's trash is another's treasure. Create a project entirely from scrap bin materials.",
+        "rewardType": "custom",
+        "rewardValue": "Eco Badge",
+        "stakeValue": 10,
+        "requirements": ["Project from scraps", "Post to Showcase"],
+        "recurrence": "none",
+        "isInfinite": true
+    },
+    {
+        "title": "🏗️ Master of Materials",
+        "description": "Show off your versatility. Create a single project that uses at least 3 different machines (e.g., Laser, 3D Print, Wood).",
+        "rewardType": "custom",
+        "rewardValue": "Master Maker Badge",
+        "stakeValue": 15,
+        "requirements": ["Use 3+ machines", "Post to Showcase"],
+        "recurrence": "none",
+        "isInfinite": true
+    }
+]

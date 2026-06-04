@@ -1,0 +1,753 @@
+// src/app/api/users/user.service.js
+
+import bcrypt from "bcryptjs";
+import User from "./class";
+import UserModel from "./model";
+import { isAdmin, toPublicUser, stripSensitive, isPublicActiveMember, sanitizeSelfUpdate } from "./access";
+import { stripMongoOperators } from "@/lib/mongoSanitize";
+import BadgeModel from "../badges/model";
+import BountyModel from "../bounties/model";
+import PortfolioModel from "../portfolio/model";
+import Constants from "@/lib/constants";
+import AuthService from '../../auth/[...nextauth]/service.js';
+import DiscordService from "@/lib/discord";
+import NotificationService from "../notifications/service";
+import WalletService from "@/app/api/v1/wallet/service";
+import { 
+    sendApplicationReceivedEmail, 
+    sendStatusChangeEmail, 
+    sendAdminNotificationEmail
+} from "@/app/utils/email.util";
+
+export default class UserService {
+    /**
+     * ✅ Create a new user
+     * @param {Object} userData - The data required to create a user
+     * @returns {Object|null} - Created user or null if failed
+     */
+    static createUser = async (userData) => {
+        try {
+            // SEC-19: strip any $-prefixed (Mongo operator) keys from the raw body
+            // before it touches persistence.
+            userData = stripMongoOperators(userData || {});
+            // Encrypt email and phone before creating a new user
+            if(userData.email) userData.email = AuthService.encryptEmail(userData.email);
+            if(userData.phoneNumber) userData.phoneNumber = AuthService.encryptPhone(userData.phoneNumber);
+            userData.password = '';
+            // Validate the required fields through the User class
+            const newUser = new User(
+                userData.firstName,
+                userData.lastName,
+                userData.username,
+                userData.email,
+                userData.password,
+                userData.phoneNumber,
+                userData?.role,
+                userData?.status,
+                userData?.provider,
+                userData?.discordHandle,
+                userData?.discordId,
+                userData?.googleId,
+                userData?.bio,
+                userData?.skills,
+                userData?.stake,
+                userData?.image,
+                userData?.boardPosition
+            );
+            return await UserModel.createUser(newUser);
+        } catch (error) {
+            console.error("Error in UserService.createUser:", error);
+            throw new Error("Failed to create user.");
+        }
+    }
+
+    /**
+     * ✅ Fetch a user based on a query.
+     *
+     * @param {Object} query - The query to find a user
+     * @param {Object} [actor] - HTTP caller context `{ userID, role }`. Omit for
+     *   trusted server-side callers (they receive the full record). When present,
+     *   the owner and admins get the full record (minus the password hash) with
+     *   decrypted PII; everyone else gets a public-safe projection, and only if
+     *   the target is a public active member.
+     * @returns {Object|null} - User data or null if not found / not visible
+     */
+    static getUserByQuery = async (query, actor) => {
+        try {
+            // Encrypt email in query if present
+            if (query.email) query.email = AuthService.encryptEmail(query.email);
+            const user = await UserModel.getUserByQuery(query);
+            if (!user) return null;
+
+            const privileged = actor === undefined || isAdmin(actor) || actor.userID === user.userID;
+
+            if (privileged) {
+                user.email = AuthService.decryptEmail(user.email);
+                if (user.phoneNumber) user.phoneNumber = AuthService.decryptPhone(user.phoneNumber);
+                // Trusted server-side caller gets the raw record; HTTP owner/admin
+                // gets it minus the password hash.
+                return actor === undefined ? user : stripSensitive(user);
+            }
+
+            // Non-owner / anonymous: only public active members, projected.
+            return isPublicActiveMember(user) ? toPublicUser(user) : null;
+        } catch (error) {
+            console.error("❌ Error in UserService.getUserByQuery:", error);
+            throw new Error("Failed to fetch user.");
+        }
+    }
+    
+    
+
+    /**
+     * ✅ Fetch all users
+     * @param {Object} filters - Filter criteria
+     * @param {number} page - Page number
+     * @param {number} limit - Items per page
+     * @returns {Object} - List of users and pagination info
+     */
+    static getAllUsers = async (filters = {}, page = 1, limit = 10, actor) => {
+        try {
+            // Trusted server-side callers and admins get the full directory with
+            // decrypted PII. Everyone else is restricted to public members and
+            // receives a public-safe projection (no PII, no credentials).
+            const privileged = actor === undefined || isAdmin(actor);
+            const effectiveFilters = privileged ? filters : { ...filters, isPublic: true };
+
+            const skip = (page - 1) * limit;
+            const users = await UserModel.getAllUsers(effectiveFilters, skip, limit);
+            const total = await UserModel.countUsers(effectiveFilters);
+
+            const projected = privileged
+                ? users.map(user => {
+                    user.email = AuthService.decryptEmail(user.email);
+                    if (user.phoneNumber) user.phoneNumber = AuthService.decryptPhone(user.phoneNumber);
+                    return actor === undefined ? user : stripSensitive(user);
+                })
+                : users.map(toPublicUser);
+
+            return {
+                users: projected,
+                total,
+                page,
+                totalPages: Math.ceil(total / limit)
+            };
+        } catch (error) {
+            console.error("Error in UserService.getAllUsers:", error);
+            throw new Error("Failed to fetch all users.");
+        }
+    }
+
+    /**
+     * ✅ Update a user's data
+     * @param {Object} query - Query to find the user
+     * @param {Object} updateData - Data to update
+     * @param {Object} [actor] - HTTP caller context `{ userID, role }`. Omit for
+     *   trusted server-side callers (full write access). A non-admin actor may
+     *   only set self-writable fields on their own record (see sanitizeSelfUpdate);
+     *   role/status/stake/access-granting membership fields are dropped.
+     * @returns {Object|null} - Updated user or null if failed
+     */
+    static updateUser = async (query, updateData, actor) => {
+        try {
+            // Encrypt email and phone in updateData if present
+            if(updateData.email) updateData.email = AuthService.encryptEmail(updateData.email);
+            if(updateData.phoneNumber) updateData.phoneNumber = AuthService.encryptPhone(updateData.phoneNumber);
+
+            // Prevent overwriting stakeHistory with $set if it exists in updateData
+            // This avoids "Updating the path 'stakeHistory' would create a conflict" errors
+            // when we also use $push on stakeHistory later in this function.
+            if (updateData.stakeHistory) {
+                delete updateData.stakeHistory;
+            }
+
+            // 1. Fetch current user to calculate new status
+            // We construct a search query that matches UserModel.getUserByQuery logic
+            const searchObj = {
+                userID: query,
+                email: query,
+                username: query,
+                phoneNumber: query,
+                firstName: query,
+                lastName: query
+            };
+            
+            const currentUser = await UserModel.getUserByQuery(searchObj);
+
+            // SEC-02: a non-admin updating their own record may only set
+            // self-writable fields. Drop role/status/stake/badges and rebuild
+            // membership from the stored record so access can't be self-granted.
+            // Trusted server-side callers (actor === undefined) and admins are
+            // unrestricted.
+            if (actor !== undefined && !isAdmin(actor)) {
+                updateData = sanitizeSelfUpdate(updateData, currentUser);
+            }
+
+            // Flags for rewards to be issued AFTER user update
+            let shouldAwardProfile = false;
+            let shouldAwardApplication = false;
+
+            // Check for profile completion reward
+            if (currentUser) {
+                const hasBio = !!currentUser.bio;
+                const hasImage = !!currentUser.image;
+                const willHaveBio = !!(updateData.bio || currentUser.bio);
+                const willHaveImage = !!(updateData.image || currentUser.image);
+                
+                // Check if already awarded by looking at stakeHistory
+                const alreadyAwarded = currentUser.stakeHistory?.some(h => h.reason === "Profile Completion Reward");
+
+                if (willHaveBio && willHaveImage && !alreadyAwarded) {
+                     console.log("🎉 Queuing Profile Completion Stake!");
+                     shouldAwardProfile = true;
+                     updateData.isPublic = true; // Still set public status
+                }
+            }
+
+            // Track changes for notifications
+            let statusChanged = false;
+            let applicationSubmitted = false;
+            let hasNewPendingLog = false;
+            let approvedLogs = [];
+            let oldStatus = currentUser?.membership?.status;
+            let newStatus = oldStatus;
+
+            if (currentUser && updateData.membership) {
+                // Merge membership data
+                const mergedMembership = {
+                    ...currentUser.membership,
+                    ...updateData.membership,
+                    accessKey: {
+                        ...(currentUser.membership?.accessKey || {}),
+                        ...(updateData.membership?.accessKey || {})
+                    }
+                };
+
+                // Check for volunteer log changes
+                if (updateData.membership.volunteerLog) {
+                    const oldLogs = currentUser.membership.volunteerLog || [];
+                    const newLogs = updateData.membership.volunteerLog;
+                    
+                    // 1. Check for new pending logs (Admin Notification)
+                    if (newLogs.length > oldLogs.length) {
+                        const oldIds = new Set(oldLogs.map(l => l.id));
+                        const addedLogs = newLogs.filter(l => !oldIds.has(l.id));
+                        
+                        if (addedLogs.some(l => l.status === 'pending')) {
+                            hasNewPendingLog = true;
+                        }
+                    }
+
+                    // 2. Check for approved logs (User Notification)
+                    const oldLogMap = new Map(oldLogs.map(l => [l.id, l]));
+                    for (const newLog of newLogs) {
+                        const oldLog = oldLogMap.get(newLog.id);
+                        // If it existed before as pending, and is now approved
+                        if (oldLog && oldLog.status === 'pending' && newLog.status === 'approved') {
+                            approvedLogs.push(newLog);
+                        }
+                    }
+
+                    // 3. Check for Volunteer Star Badge (10+ Hours)
+                    // Calculate total approved hours from the NEW state
+                    const totalApprovedHours = newLogs
+                        .filter(l => l.status === 'approved')
+                        .reduce((acc, log) => acc + (Number(log.hours) || 0), 0);
+                    
+                    const currentBadges = updateData.badges || currentUser.badges || [];
+                    if (totalApprovedHours >= 10 && !currentBadges.includes(Constants.BADGES.VOLUNTEER_STAR.id)) {
+                        console.log(`🌟 Awarding Volunteer Star Badge to ${currentUser.userID}`);
+                        updateData.badges = [...currentBadges, Constants.BADGES.VOLUNTEER_STAR.id];
+                        
+                        // Fetch badge details from DB for notification
+                        const badge = await BadgeModel.getBadgeById(Constants.BADGES.VOLUNTEER_STAR.id);
+                        const badgeName = badge ? badge.name : Constants.BADGES.VOLUNTEER_STAR.name;
+
+                        // Notify about badge
+                        await NotificationService.create({
+                            userID: currentUser.userID,
+                            type: 'success',
+                            title: 'New Badge Earned!',
+                            message: `You earned the "${badgeName}" badge for logging 10+ volunteer hours!`,
+                            link: `/dashboard/${currentUser.userID}/profile`,
+                            metadata: { badgeID: Constants.BADGES.VOLUNTEER_STAR.id }
+                        });
+                    }
+                }
+
+                // Check if application was just submitted
+                if (!currentUser.membership?.applicationDate && mergedMembership.applicationDate) {
+                    applicationSubmitted = true;
+                    // Queue reward instead of setting updateData.stake
+                    shouldAwardApplication = true;
+                }
+
+                // Check if we should auto-update status
+                const currentStatus = currentUser.membership?.status;
+                const incomingStatus = updateData.membership?.status;
+                const isManualStatus = currentStatus === 'probation' || currentStatus === 'suspended'
+                    || currentStatus === 'declined' || incomingStatus === 'declined';
+                
+                // Only auto-calculate if not in a manual status, OR if the update explicitly changes status (which we can't easily detect here without comparing, but let's assume if they are in manual status we leave it unless they change it manually)
+                // Actually, if the user is in probation, we shouldn't auto-promote them.
+                
+                if (!isManualStatus) {
+                    newStatus = 'registered';
+                    
+                    if (mergedMembership.applicationDate) newStatus = 'applicant';
+                    if (mergedMembership.contacted) newStatus = 'contacted';
+                    if (mergedMembership.onboardingComplete) newStatus = 'onboarding';
+                    
+                    // Check for probation eligibility (Waived or Active Subscription)
+                    const isMember = mergedMembership.isWaived || (mergedMembership.sponsorshipExpiresAt && new Date(mergedMembership.sponsorshipExpiresAt) > new Date());
+                    
+                    // ✅ Force Co-op type if waived
+                    if (mergedMembership.isWaived) {
+                        mergedMembership.type = 'co-op';
+                    }
+
+                    if (mergedMembership.onboardingComplete && isMember) newStatus = 'probation';
+
+                    if (mergedMembership.accessKey?.issued) newStatus = 'active';
+
+                    // Update the status in the merged membership
+                    mergedMembership.status = newStatus;
+                }
+                
+                // Check if status changed (either by auto-calc or manual override in updateData)
+                if (updateData.membership.status) {
+                     // If manual override was provided, use it and write back to mergedMembership
+                     newStatus = updateData.membership.status;
+                     mergedMembership.status = newStatus;
+                }
+                
+                if (oldStatus !== newStatus) {
+                    statusChanged = true;
+                }
+
+                // ✅ IMPORTANT: Update the updateData with the fully merged membership object
+                // This prevents MongoDB from replacing the entire membership object with just the partial update
+                updateData.membership = mergedMembership;
+            }
+
+            const updatedUser = await UserModel.updateUser(query, updateData);
+            if(updatedUser) {
+                updatedUser.email = AuthService.decryptEmail(updatedUser.email);
+                if(updatedUser.phoneNumber) updatedUser.phoneNumber = AuthService.decryptPhone(updatedUser.phoneNumber);
+
+                // ✅ Send Notifications
+                if (applicationSubmitted) {
+                    // Notify User
+                    sendApplicationReceivedEmail(updatedUser.email, updatedUser.firstName).catch(console.error);
+                    
+                    // Notify Admin
+                    sendAdminNotificationEmail(
+                        "New Membership Application",
+                        `${updatedUser.firstName} ${updatedUser.lastName} has submitted a new membership application. Please review it.`,
+                        `${process.env.NEXT_PUBLIC_URL}/dashboard/onboarding-reviews`,
+                        "Review Application"
+                    ).catch(console.error);
+                }
+
+                if (hasNewPendingLog) {
+                    // Notify Admin
+                    sendAdminNotificationEmail(
+                        "New Volunteer Hours Submitted",
+                        `${updatedUser.firstName} ${updatedUser.lastName} has submitted new volunteer hours for approval.`,
+                        `${process.env.NEXT_PUBLIC_URL}/dashboard/volunteers`,
+                        "Review Hours"
+                    ).catch(console.error);
+                }
+
+                if (statusChanged) {
+                    sendStatusChangeEmail(updatedUser.email, updatedUser.firstName, newStatus).catch(console.error);
+
+                    // If status changed to 'probation' (new member), send profile reminder AND notify admin to issue key
+                    if (newStatus === 'probation') {
+                        // Notify User via NotificationService
+                        NotificationService.create({
+                            userID: updatedUser.userID,
+                            type: 'info',
+                            title: 'Complete Your Profile',
+                            message: 'Welcome to Probation! Please complete your profile to get started.',
+                            link: `/dashboard/${updatedUser.userID}/profile`,
+                            emailType: 'profile_completion',
+                            emailData: {
+                                dashboardLink: `${process.env.NEXT_PUBLIC_URL}/dashboard/${updatedUser.userID}/profile`
+                            }
+                        }).catch(err => console.error("Failed to send profile completion notification:", err));
+                        
+                        // Notify Admin
+                        sendAdminNotificationEmail(
+                            "New Member - Access Key Needed",
+                            `${updatedUser.firstName} ${updatedUser.lastName} has completed onboarding and payment. They are now a Probationary Member and need an Access Key issued.`,
+                            `${process.env.NEXT_PUBLIC_URL}/dashboard/members`,
+                            "Manage Member"
+                        ).catch(console.error);
+                    }
+                }
+
+                // 5. Send Volunteer Hours Approved Email (To User)
+                if (approvedLogs.length > 0) {
+                    // Send an email for each approved log
+                    for (const log of approvedLogs) {
+                        NotificationService.create({
+                             userID: updatedUser.userID,
+                             type: 'success',
+                             title: 'Volunteer Hours Approved',
+                             message: `Your volunteer hours (${log.hours}) for "${log.description}" have been approved.`,
+                             link: `/dashboard/${updatedUser.userID}/membership`,
+                             emailType: 'volunteer_approved',
+                             emailData: {
+                                 hours: log.hours,
+                                 description: log.description
+                             }
+                        }).catch(console.error);
+                    }
+                }
+
+                // ✅ Sync Discord Roles
+                if (updatedUser.discordId) {
+                    // Sync Creator Types
+                    if (updatedUser.creatorType) {
+                        DiscordService.syncCreatorRoles(updatedUser.discordId, updatedUser.creatorType)
+                            .catch(err => console.error("Background Creator Role Sync Failed:", err));
+                    }
+                    
+                    // Sync Membership Role (LabRatz)
+                    if (updatedUser.membership?.status) {
+                        DiscordService.syncMembershipRole(updatedUser.discordId, updatedUser.membership.status)
+                            .catch(err => console.error("Background Membership Role Sync Failed:", err));
+                    }
+                }
+
+                // 6. Award Staked Rewards (Wallet Service)
+                if (shouldAwardProfile) {
+                     await WalletService.addStake(
+                         updatedUser.userID,
+                         Constants.ONBOARDING_REWARDS.COMPLETE_PROFILE,
+                         "Profile Completion Reward",
+                         "onboarding_reward_profile"
+                     ).catch(err => console.error("Failed to award profile stake:", err));
+                }
+
+                if (shouldAwardApplication) {
+                     await WalletService.addStake(
+                         updatedUser.userID,
+                         Constants.ONBOARDING_REWARDS.SUBMIT_APPLICATION,
+                         "Application Submitted Reward",
+                         "onboarding_reward_app"
+                     ).catch(err => console.error("Failed to award application stake:", err));
+                }
+            }
+            // Never return the password hash to an HTTP caller (response-shape).
+            // Server-side callers (actor === undefined) get the record unchanged.
+            return actor === undefined ? updatedUser : stripSensitive(updatedUser);
+        } catch (error) {
+            console.error("Error in UserService.updateUser:", error);
+            throw error;
+        }
+    }
+
+    /**
+     * ✅ Delete a user
+     * @param {Object} query - Query to identify the user
+     * @returns {Boolean} - True if deletion was successful, false otherwise
+     */
+    static deleteUser = async (query) => {
+        try {
+            const deletionResult = await UserModel.deleteUser(query);
+            return deletionResult;
+        } catch (error) {
+            console.error("Error in UserService.deleteUser:", error);
+            throw new Error("Failed to delete user.");
+        }
+    }
+
+    /**
+     * ✅ Nudge a user based on their current status
+     * @param {string} userID - The ID of the user to nudge
+     * @param {boolean} preview - If true, returns the nudge details without sending email
+     */
+    static nudgeUser = async (userID, preview = false) => {
+        try {
+            const user = await this.getUserByQuery({ userID });
+            if (!user) throw new Error("User not found");
+
+            const status = user.membership?.status || 'registered';
+            let step = '';
+            let message = '';
+            let actionLink = '';
+            let actionText = '';
+
+            switch (status) {
+                case 'registered':
+                    step = 'Complete Questionnaire';
+                    message = 'We noticed you haven\'t completed your membership application yet. Tell us a bit about yourself to get started!';
+                    actionLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/onboarding`;
+                    actionText = 'Complete Questionnaire';
+                    break;
+                case 'contacted':
+                    step = 'Schedule Orientation';
+                    message = 'Your application has been approved! The next step is to schedule your safety orientation at the lab.';
+                    actionLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/appointments`;
+                    actionText = 'Schedule Orientation';
+                    break;
+                case 'onboarding':
+                    // Check if they already have a subscription (even if status hasn't updated yet)
+                    const hasSubscription = user.membership?.subscriptionStatus === 'ACTIVE' || 
+                                          user.membership?.isWaived || 
+                                          (user.membership?.sponsorshipExpiresAt && new Date(user.membership.sponsorshipExpiresAt) > new Date());
+
+                    if (!hasSubscription) {
+                        step = 'Subscribe to Membership';
+                        message = 'You have completed your orientation! The final step is to select a membership plan and set up payment.';
+                        actionLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/${userID}/profile?tab=1`;
+                        actionText = 'Subscribe';
+                        break;
+                    }
+                    // If they have a subscription, fall through to probation/active logic
+                case 'probation':
+                case 'active':
+                    // 1. Check Profile Completion First
+                    // We consider profile incomplete if bio or image is missing
+                    if (!user.bio || !user.image) {
+                        step = 'Complete Profile';
+                        message = 'Make the most of your membership by completing your public profile. It helps other members find you for collaboration!';
+                        actionLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/${userID}/profile`;
+                        actionText = 'Edit Profile';
+                        break; // Exit switch, send profile nudge
+                    }
+
+                    // 2. Check Volunteer Hours
+                    const volunteerLogs = user.membership?.volunteerLog || [];
+                    
+                    const now = new Date();
+                    const currentMonth = now.getMonth();
+                    const currentYear = now.getFullYear();
+
+                    const currentMonthLogs = volunteerLogs.filter(log => {
+                        if (!log.date) return false;
+                        const logDate = new Date(log.date);
+                        return logDate.getMonth() === currentMonth && logDate.getFullYear() === currentYear;
+                    });
+
+                    const totalHours = currentMonthLogs.reduce((acc, log) => acc + (parseFloat(log.hours) || 0), 0);
+                    const requiredHours = Constants.REQUIRED_VOLUNTEER_HOURS || 4;
+                    const hoursNeeded = requiredHours - totalHours;
+
+                    if (hoursNeeded > 0) {
+                        step = 'Volunteer Hours Needed';
+                        actionLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/activities/bounties`;
+                        actionText = 'View Bounties';
+
+                        if (status === 'probation') {
+                            // Probation specific message
+                            if (totalHours === 0) {
+                                message = `You haven't logged any volunteer hours this month. You need ${requiredHours} hours to qualify for your access key. Check out the available bounties!`;
+                            } else {
+                                message = `You're almost there! You only need ${hoursNeeded} more volunteer hour${hoursNeeded === 1 ? '' : 's'} to qualify for your access key.`;
+                            }
+                        } else {
+                            // Active specific message
+                            if (totalHours === 0) {
+                                message = `You haven't logged any volunteer hours this month yet. You need ${requiredHours} hours every month to maintain your membership. Check out the available bounties!`;
+                            } else {
+                                message = `You're doing great! You only need ${hoursNeeded} more volunteer hour${hoursNeeded === 1 ? '' : 's'} to meet your monthly goal. Check out the bounties to finish up!`;
+                            }
+                        }
+                    } else {
+                        // Fallback if everything is good (maybe nudge to check events? or just profile again?)
+                        // For now, let's default to profile but with a "All good" vibe? 
+                        // Or actually, if they are all good, maybe we shouldn't nudge? 
+                        // But the UI expects a nudge. Let's stick to Profile as a generic "keep it updated"
+                        step = 'Update Profile';
+                        message = 'Your membership is in good standing! Why not update your profile with your latest projects?';
+                        actionLink = `${process.env.NEXT_PUBLIC_URL}/dashboard/${userID}/profile`;
+                        actionText = 'Edit Profile';
+                    }
+                    break;
+                default:
+                    throw new Error("No nudge action available for this status.");
+            }
+
+            if (preview) {
+                return { 
+                    success: true, 
+                    preview: true,
+                    details: {
+                        step,
+                        message,
+                        actionLink,
+                        actionText,
+                        recipient: user.firstName
+                    }
+                };
+            }
+
+            if (user.email) {
+                // Email is already decrypted by getUserByQuery
+                await NotificationService.create({
+                    userID: user.userID,
+                    type: 'info',
+                    title: step,
+                    message: message,
+                    link: actionLink,
+                    emailType: 'nudge',
+                    emailData: {
+                        actionText: actionText
+                    }
+                });
+                return { success: true, message: `Nudge sent for ${step}` };
+            }
+            throw new Error("User has no valid email.");
+
+        } catch (error) {
+            console.error("Error in UserService.nudgeUser:", error);
+            throw error;
+        }
+    }
+
+    /**
+     * ✅ Merge two users
+     * Moves data from sourceUser to targetUser and deletes sourceUser
+     * @param {string} targetUserID - The ID of the user to keep
+     * @param {string} sourceUserID - The ID of the user to delete
+     * @param {Object} overrides - Optional field overrides { fieldName: 'source' | 'target' }
+     */
+    static mergeUsers = async (targetUserID, sourceUserID, overrides = {}, actor) => {
+        try {
+            console.log(`🔀 Merging User ${sourceUserID} into ${targetUserID}`);
+            
+            const targetUser = await this.getUserByQuery({ userID: targetUserID });
+            const sourceUser = await this.getUserByQuery({ userID: sourceUserID });
+
+            if (!targetUser || !sourceUser) {
+                throw new Error("One or both users not found.");
+            }
+
+            // 1. Merge Basic Fields (Only if missing in target, unless overridden)
+            const fieldsToMerge = [
+                'discordHandle', 'discordId', 'googleId', 'phoneNumber', 
+                'firstName', 'lastName', 'image', 'bio', 'hobbies', 'creatorType',
+                'cityChange', 'knownMembers', 'questions', 'squareID'
+            ];
+
+            const updateData = {};
+            fieldsToMerge.forEach(field => {
+                // If override says 'source', take from source (if exists)
+                if (overrides[field] === 'source') {
+                    if (sourceUser[field]) updateData[field] = sourceUser[field];
+                }
+                // If override says 'target', do nothing (keep target)
+                else if (overrides[field] === 'target') {
+                    // Do nothing
+                }
+                // Default: Only fill if missing in target
+                else if (!targetUser[field] && sourceUser[field]) {
+                    updateData[field] = sourceUser[field];
+                }
+            });
+
+            if (sourceUser.provider && (!targetUser.provider || targetUser.provider === 'local')) {
+                updateData.provider = sourceUser.provider;
+            }
+
+            // 2. Merge Stake
+            const sourceStake = sourceUser.stake || 0;
+            if (sourceStake > 0) {
+                updateData.stake = (targetUser.stake || 0) + sourceStake;
+            }
+
+            // 3. Merge Arrays (StakeHistory, VolunteerLog, Badges, CapturedFlags)
+            
+            // Stake History
+            const targetHistory = targetUser.stakeHistory || [];
+            const sourceHistory = sourceUser.stakeHistory || [];
+            if (sourceHistory.length > 0) {
+                updateData.stakeHistory = [...targetHistory, ...sourceHistory];
+            }
+
+            // Volunteer Log (Membership)
+            const sourceLog = sourceUser.membership?.volunteerLog || [];
+            if (sourceLog.length > 0) {
+                const targetLog = targetUser.membership?.volunteerLog || [];
+                const mergedLog = [...targetLog, ...sourceLog];
+                
+                // We need to preserve other membership fields
+                // If we haven't touched membership in updateData yet, copy from target
+                if (!updateData.membership) {
+                    updateData.membership = { ...(targetUser.membership || {}) };
+                }
+                updateData.membership.volunteerLog = mergedLog;
+            }
+
+            // Badges (Unique)
+            const sourceBadges = sourceUser.badges || [];
+            if (sourceBadges.length > 0) {
+                const targetBadges = targetUser.badges || [];
+                const mergedBadges = [...new Set([...targetBadges, ...sourceBadges])];
+                updateData.badges = mergedBadges;
+            }
+
+            // Captured Flags (Unique)
+            const sourceFlags = sourceUser.capturedFlags || [];
+            if (sourceFlags.length > 0) {
+                const targetFlags = targetUser.capturedFlags || [];
+                const mergedFlags = [...new Set([...targetFlags, ...sourceFlags])];
+                updateData.capturedFlags = mergedFlags;
+            }
+
+            // 4. Update Target User
+            if (Object.keys(updateData).length > 0) {
+                console.log("Updating target user with merged data:", updateData);
+                await this.updateUser(targetUserID, updateData);
+            }
+
+            // 5. Update References in Other Collections
+            await BountyModel.updateUserReferences(sourceUserID, targetUserID);
+            await PortfolioModel.updateUserReferences(sourceUserID, targetUserID);
+
+            // 6. Delete Source User
+            console.log("Deleting source user:", sourceUserID);
+            await this.deleteUser({ userID: sourceUserID });
+
+            return await this.getUserByQuery({ userID: targetUserID }, actor);
+
+        } catch (error) {
+            console.error("❌ Error in UserService.mergeUsers:", error);
+            throw error;
+        }
+    }
+
+    /**
+     * ✅ Verify ownership of an account by its credentials. Used to authorize a
+     * self-merge: the caller must prove they control the source account before
+     * its data is absorbed and the account deleted.
+     * @param {string} userID - the source account's userID
+     * @param {string} email - the source account's email (defence-in-depth bind)
+     * @param {string} password - the source account's plaintext password
+     * @returns {boolean} true only if the password (and email, if given) match
+     */
+    static verifyCredentials = async (userID, email, password) => {
+        try {
+            if (!userID || !password) return false;
+            const user = await UserModel.getUserByID(userID);
+            if (!user || !user.password) return false;
+
+            const passwordMatches = await bcrypt.compare(password, user.password);
+            if (!passwordMatches) return false;
+
+            if (email) {
+                const storedEmail = AuthService.decryptEmail(user.email);
+                if (!storedEmail || storedEmail.toLowerCase() !== String(email).toLowerCase()) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (error) {
+            console.error("Error in UserService.verifyCredentials:", error);
+            return false;
+        }
+    }
+}

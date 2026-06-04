@@ -1,0 +1,2 @@
+Dec 27 10:00:01 server sshd[1234]: Accepted password for user admin from 192.168.1.50 port 22 ssh2
+Dec 27 10:05:23 server sudo: pam_unix(sudo:auth): conversation failed

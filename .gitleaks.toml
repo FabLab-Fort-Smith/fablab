@@ -1,0 +1,30 @@
+# Monorepo gitleaks config. Extends the default ruleset and carries over the allowlist from
+# the consolidated app (lab-site/the-lab/.gitleaks.toml — The-Lab CLAUDE.md §14 CTF content +
+# triaged false positives). Patterns are unanchored, so they match both the app's historical
+# paths (e.g. vps/missions/...) and their consolidated form (lab-site/the-lab/vps/missions/...).
+# Real infra/member-data paths are NOT allowlisted and remain scanned.
+
+title = "fablab gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Consolidated app CTF content + confirmed-public / test-fixture false positives"
+paths = [
+  # --- Hack the Lab CTF zones: intentionally-planted fake secrets/flags (game content) ---
+  '''vps/missions/.*''',
+  '''src/app/dashboard/activities/terminal/.*''',
+  '''src/app/api/v1/holodeck/.*''',
+  '''src/app/api/v1/arcade/.*''',
+  '''src/app/components/holodeck/.*''',
+  '''docs/game/.*''',
+  # --- Confirmed false positives (triaged in The-Lab, Refs #111) ---
+  '''test/.*''',                 # fixtures use deliberately fake keys (e.g. AUTH_SECRET="a")
+  '''src/lib/constants\.js''',   # public Discord channel/role snowflake IDs (client-visible)
+  '''\.gitleaks\.toml''',        # the config files carry example secret patterns
+]
+regexes = [
+  # reCAPTCHA *site* keys are public by design (the secret is the server-side key, not in source).
+  '''6L[0-9A-Za-z_-]{38}''',
+]

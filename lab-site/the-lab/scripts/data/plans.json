@@ -1,0 +1,26 @@
+[
+    {
+        "id": "OKFS4ROMYYNQTG7SI3OMUKMV",
+        "name": "Plus (Annual)",
+        "price": 1000,
+        "embed": "<div style=\"overflow: auto; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; width: 259px; background: #000000; border: 1px solid rgba(0, 255, 0, 0.1); box-shadow: -2px 10px 5px rgba(0, 0, 0, 0); border-radius: 10px; font-family: 'Roboto Mono', monospace;\"><div style=\"padding: 20px;\"><a target=\"_blank\" href=\"https://checkout.square.site/merchant/MLS2T2SQG04G7/checkout/MKQ7HU7ASJ6345BXAGLE5YKJ?src=embed\" style=\"display: inline-block; font-size: 18px; line-height: 48px; height: 48px; color: #000000; min-width: 212px; background-color: #00ff00; text-align: center; box-shadow: 0 0 0 1px rgba(0,0,0,.1) inset; border-radius: 6px;\">Subscribe</a></div></div>"
+    },
+    {
+        "id": "U7PVGCXFGU2CUCMAW4MSZI4B",
+        "name": "Plus (Monthly)",
+        "price": 100,
+        "embed": "<div style=\"overflow: auto; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; width: 259px; background: #000000; border: 1px solid rgba(0, 255, 0, 0.1); box-shadow: -2px 10px 5px rgba(0, 0, 0, 0); border-radius: 10px; font-family: 'Roboto Mono', monospace;\"><div style=\"padding: 20px;\"><a target=\"_blank\" href=\"https://checkout.square.site/merchant/MLS2T2SQG04G7/checkout/JCZWANGJLM2N43JKL5DGSO2I?src=embed\" style=\"display: inline-block; font-size: 18px; line-height: 48px; height: 48px; color: #000000; min-width: 212px; background-color: #00ff00; text-align: center; box-shadow: 0 0 0 1px rgba(0,0,0,.1) inset; border-radius: 6px;\">Subscribe</a></div></div>"
+    },
+    {
+        "id": "PCEZ6T7O75VRUSXXYNVOD2PC",
+        "name": "Basic (Monthly)",
+        "price": 45,
+        "embed": "<div style=\"overflow: auto; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; width: 259px; background: #000000; border: 1px solid rgba(0, 255, 0, 0.1); box-shadow: -2px 10px 5px rgba(0, 0, 0, 0); border-radius: 10px; font-family: 'Roboto Mono', monospace;\"><div style=\"padding: 20px;\"><a target=\"_blank\" href=\"https://checkout.square.site/merchant/MLS2T2SQG04G7/checkout/NPJQGZ3NNACBOJ5VXYBMALMT?src=embed\" style=\"display: inline-block; font-size: 18px; line-height: 48px; height: 48px; color: #000000; min-width: 212px; background-color: #00ff00; text-align: center; box-shadow: 0 0 0 1px rgba(0,0,0,.1) inset; border-radius: 6px;\">Subscribe</a></div></div>"
+    },
+    {
+        "id": "3BEI7BOU3QW6BOKM7T4CX7IZ",
+        "name": "Basic (Annual)",
+        "price": 450,
+        "embed": "<div style=\"overflow: auto; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; width: 259px; background: #000000; border: 1px solid rgba(0, 255, 0, 0.1); box-shadow: -2px 10px 5px rgba(0, 0, 0, 0); border-radius: 10px; font-family: 'Roboto Mono', monospace;\"><div style=\"padding: 20px;\"><a target=\"_blank\" href=\"https://checkout.square.site/merchant/MLS2T2SQG04G7/checkout/V6BY5HGKEPX5FFP3XZPAZUFK?src=embed\" style=\"display: inline-block; font-size: 18px; line-height: 48px; height: 48px; color: #000000; min-width: 212px; background-color: #00ff00; text-align: center; box-shadow: 0 0 0 1px rgba(0,0,0,.1) inset; border-radius: 6px;\">Subscribe</a></div></div>"
+    }
+]

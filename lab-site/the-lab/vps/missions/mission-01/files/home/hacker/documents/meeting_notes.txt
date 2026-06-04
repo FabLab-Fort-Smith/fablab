@@ -1,0 +1,3 @@
+Meeting with the team.
+Discussed the new security protocols.
+Need to rotate keys every 30 days.
