@@ -9,8 +9,10 @@ step-by-step and executable by someone who didn't write it.
 
 ## Planned set (priority order for this platform)
 
-- [x] **bootstrap-vps.md** — order/prepare the RackNerd VPS, run cloud-init + Ansible, install
-      Coolify + MongoDB service, point DNS + Cloudflare. *(drafted — validate on first run)*
+- [x] **bootstrap-vps.md** — **full setup & configuration guide**: order VPS → first-boot
+      hardening (cloud-init or `manual-bootstrap.sh`) → Cloudflare DNS (staging/preview only) →
+      Ansible converge → Coolify (MongoDB, GitHub App, app, previews, TLS) → backups → verify.
+      Parallel-run; apex stays on Vercel. *(validate on first run)*
 - [x] **migrate-from-vercel.md** — the parallel-run → data-migrate → validate → DNS-cutover →
       decommission flow, incl. MongoDB export/restore/reconcile. *(drafted — rehearse on staging)*
 - [ ] **deploy.md** — promote/release a site version (mostly automatic via Coolify; documents
