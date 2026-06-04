@@ -111,8 +111,8 @@ been moved yet (that's an execution step — see Next steps).
 
 ## Open decisions
 
-- [ ] **Primary domain** + the `*.preview.<domain>` wildcard for previews.
-- [ ] **Which forge is primary vs. mirror** (ADR 0003 leans GitHub-primary).
+- [x] **Primary domain** — `fablabfortsmith.org` (previews at `*.preview.fablabfortsmith.org`).
+- [x] **Primary forge** — **GitHub** (`FabLab-Fort-Smith`); GitLab is the mirror (ADR 0003).
 - [ ] **Consolidation method** for The-Lab → `lab-site/the-lab`: `git subtree` (preserves history,
       recommended) vs. plain copy; and whether this monorepo becomes the new origin (with
       The-Lab archived) — see ADR 0005.

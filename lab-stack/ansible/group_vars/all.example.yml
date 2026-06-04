@@ -6,9 +6,9 @@
 deploy_user: deploy
 
 # --- Domains (ADR 0002) ---
-primary_domain: "example.org"          # e.g. fablabfortsmith.org
-coolify_fqdn: "deploy.example.org"     # Coolify dashboard host
-preview_wildcard: "*.preview.example.org"
+primary_domain: "fablabfortsmith.org"
+coolify_fqdn: "deploy.fablabfortsmith.org"     # Coolify dashboard host
+preview_wildcard: "*.preview.fablabfortsmith.org"
 
 # --- Firewall: lock web ports to Cloudflare only (zero-trust origin — std-zero-trust) ---
 # Refresh from https://www.cloudflare.com/ips (IPv4 + IPv6). Truncated sample shown.
