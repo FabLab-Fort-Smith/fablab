@@ -114,16 +114,20 @@ jobs:
           python-version: "3.12"
       - name: Install semgrep
         run: pipx install semgrep
-      - name: Run semgrep
+      - name: Run semgrep (diff-aware blocking — fails on NEW findings only)
         run: |
           if [ -f lab-site/the-lab/.semgrep.yml ]; then
             # App present: use its vetted ruleset (the app's source of truth). CTF zones are
-            # intentionally vulnerable — excluded, as in .gitleaks.toml. The bulk subtree import
-            # carries a pre-existing, upstream-tracked backlog (The-Lab SEC-##); this scan is
-            # AUDIT (non-blocking) to grandfather the import. The immediate follow-up flips this
-            # to diff-aware BLOCKING so any NEW finding fails (workflow-cicd: block on new):
-            #   semgrep ci  (or: --error --baseline-commit "$(git merge-base origin/main HEAD)")
-            semgrep scan --config lab-site/the-lab/.semgrep.yml \
+            # intentionally vulnerable — excluded, as in .gitleaks.toml. DIFF-AWARE: block on
+            # findings a change INTRODUCES (workflow-cicd: block on new); the imported backlog
+            # (The-Lab SEC-##) is grandfathered because main is the baseline. On a push to main
+            # the baseline == HEAD, so the diff is empty and the backlog never re-blocks.
+            git fetch -q --unshallow 2>/dev/null || true
+            git fetch -q origin main 2>/dev/null || true
+            BASE="$(git merge-base origin/main HEAD 2>/dev/null || git rev-parse HEAD)"
+            echo "diff-aware SAST baseline: $BASE"
+            semgrep scan --error --baseline-commit "$BASE" \
+              --config lab-site/the-lab/.semgrep.yml \
               --exclude 'lab-site/the-lab/vps/missions' \
               --exclude 'lab-site/the-lab/src/app/api/v1/holodeck' \
               --exclude 'lab-site/the-lab/src/app/api/v1/arcade' \
