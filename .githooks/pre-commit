@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Local pre-commit (convenience mirror of CI — NOT the authoritative gate; CI still enforces).
+# Enable with: scripts/setup.sh  (sets core.hooksPath=.githooks)
+set -euo pipefail
+
+# 1) Commits must be signed (master mandate / workflow-git).
+if [ "$(git config --bool commit.gpgsign 2>/dev/null || echo false)" != "true" ]; then
+  echo "✖ commit.gpgsign is not enabled — commits must be signed."
+  echo "  Fix: git config commit.gpgsign true   (and configure your SSH/GPG signing key)"
+  exit 1
+fi
+
+# 2) Secret scan of staged changes (if gitleaks is installed). Uses root .gitleaks.toml.
+if command -v gitleaks >/dev/null 2>&1; then
+  echo "• gitleaks: scanning staged changes…"
+  gitleaks protect --staged --redact --no-banner
+else
+  echo "• gitleaks not installed — skipping local secret scan (CI still enforces it)."
+fi
