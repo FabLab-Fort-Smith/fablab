@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Local pre-push (convenience mirror of CI — NOT the authoritative gate; CI still enforces).
+# Lints only the areas you changed; skips gracefully when a tool isn't installed.
+set -euo pipefail
+IFS=$'\n\t'
+
+base="origin/main"
+git rev-parse --verify --quiet "$base" >/dev/null 2>&1 || base="HEAD~1"
+changed="$(git diff --name-only "${base}...HEAD" 2>/dev/null || true)"
+
+run() { echo "• $*"; "$@"; }
+
+if printf '%s\n' "$changed" | grep -q '^lab-stack/'; then
+  if command -v yamllint >/dev/null 2>&1; then run yamllint lab-stack; else echo "• yamllint not installed — skipping"; fi
+  if command -v ansible-lint >/dev/null 2>&1; then run ansible-lint lab-stack/ansible; else echo "• ansible-lint not installed — skipping"; fi
+fi
+
+if printf '%s\n' "$changed" | grep -q '^lab-site/the-lab/'; then
+  if [ -d lab-site/the-lab/node_modules ]; then
+    run npm --prefix lab-site/the-lab run lint
+  else
+    echo "• lab-site/the-lab/node_modules missing — run 'npm --prefix lab-site/the-lab ci' to enable the lint hook."
+  fi
+fi
+
+echo "✓ pre-push checks complete."
