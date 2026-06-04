@@ -18,6 +18,8 @@
 
   roles:
     - role: harden      # CIS-aligned: ssh, ufw (+ Cloudflare lock), fail2ban, auto-updates, sysctl
+    - role: deploy_account   # shared, non-custodial role account (multi-key) — ADR 0008
+      when: manage_deploy_account | default(false)
     - role: docker      # Docker Engine from the official repo, non-root deploy access
     - role: coolify      # install Coolify (reviewed installer); dashboard secured manually after
       when: coolify_install | default(true)
