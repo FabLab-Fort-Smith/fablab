@@ -47,6 +47,9 @@ const contentSecurityPolicyReportOnly = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Self-hosting on Coolify: emit a standalone server bundle (.next/standalone) so the
+  // Dockerfile can ship a lean runtime image. No-op on Vercel; this copy isn't deployed there.
+  output: "standalone",
   // Silence the Turbopack error since we are using a Webpack plugin (next-pwa)
   // PWA is disabled in dev mode anyway, so Turbopack should be fine for dev.
   turbopack: {},
