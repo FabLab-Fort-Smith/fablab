@@ -1,0 +1,7 @@
+---
+# ansible-lint config (@rules/workflow-cicd.md). Start at the `basic` profile (catches
+# breaking/deprecated/syntax issues) and ratchet strictness up over time (SAMM maturity).
+profile: basic
+
+exclude_paths:
+  - lab-stack/ansible/roles/**/templates/   # Jinja templates, linted at render/deploy time

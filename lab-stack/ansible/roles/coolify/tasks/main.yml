@@ -24,5 +24,6 @@
   args:
     creates: /data/coolify
   when: not coolify_dir.stat.exists
+  changed_when: true          # installer mutates the host when it runs (guarded by `creates`)
   # After this: open https://{{ coolify_fqdn }}, create the admin (MFA), then configure
   # the MongoDB service, app, webhooks, and Cloudflare per ../../coolify/README.md.

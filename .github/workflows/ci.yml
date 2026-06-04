@@ -45,11 +45,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0          # full history so gitleaks scans all commits
-      - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Uses .gitleaks.toml if present (comes with the app on consolidation).
+      - name: gitleaks (OSS CLI — the GitHub Action needs a paid org license; the CLI does not)
+        run: |
+          # Uses .gitleaks.toml at repo root if present (arrives with the app on consolidation).
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest \
+            detect --source=/repo --redact --no-banner --exit-code 1
 
   iac:
     name: IaC lint (lab-stack)
