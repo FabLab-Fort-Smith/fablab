@@ -1,0 +1,46 @@
+---
+# Scoped automation identity (ADR 0009): least-privilege account for CI / scheduled ops.
+# Unlike `deploy` (broad NOPASSWD:ALL, for human-run full converge), `automation`:
+#   - is NOT in the sudo or docker groups (docker group == root),
+#   - gets NOPASSWD for ONLY an explicit command allowlist (automation_sudo_commands),
+#   - has its keys (automation_authorized_keys) as the single source of truth.
+# Runs only when manage_automation_account is true.
+
+- name: Require at least one automation key
+  ansible.builtin.assert:
+    that: automation_authorized_keys | default([]) | length > 0
+    fail_msg: >-
+      manage_automation_account is true but automation_authorized_keys is empty — set the CI/ops
+      public key(s) in group_vars/all.yml.
+
+- name: Ensure the automation group
+  ansible.builtin.group:
+    name: "{{ automation_user | default('automation') }}"
+    state: present
+
+- name: Ensure the automation account (NO sudo/docker group — least privilege)
+  ansible.builtin.user:
+    name: "{{ automation_user | default('automation') }}"
+    group: "{{ automation_user | default('automation') }}"
+    shell: /bin/bash
+    create_home: true
+
+- name: Install the automation authorized keys (authoritative — remove + re-run = revoke)
+  ansible.posix.authorized_key:
+    user: "{{ automation_user | default('automation') }}"
+    key: "{{ automation_authorized_keys | join('\n') }}"
+    exclusive: true
+
+- name: Scoped sudo — allow ONLY the explicit command allowlist (NOPASSWD)
+  ansible.builtin.template:
+    src: automation-sudoers.j2
+    dest: "/etc/sudoers.d/80-{{ automation_user | default('automation') }}"
+    mode: "0440"
+    validate: "visudo -cf %s"
+  when: automation_sudo_commands | default([]) | length > 0
+
+- name: No allowlist → no sudo at all (remove any stale drop-in)
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/80-{{ automation_user | default('automation') }}"
+    state: absent
+  when: automation_sudo_commands | default([]) | length == 0

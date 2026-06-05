@@ -21,7 +21,8 @@
 |---|---|---|
 | VPS | RackNerd 8 GB, **Ubuntu 24.04 LTS** | x86_64; ADR 0004 |
 | Your SSH keypair | `~/.ssh/fablab_deploy(.pub)` | `ssh-keygen -t ed25519 -f ~/.ssh/fablab_deploy -C deploy@fablab` |
-| Maintainer + CI public keys | for `deploy_authorized_keys` | collect each maintainer's **public** key + generate a CI key; non-custodial (ADR 0008) |
+| Maintainer public keys | for `deploy_authorized_keys` | each maintainer's **public** key (broad ops account) — non-custodial (ADR 0008) |
+| CI/automation key | for `automation_authorized_keys` | a dedicated CI key for the **scoped** automation account (ADR 0009) |
 | Domain on Cloudflare | `fablabfortsmith.org` | zone already managed by Cloudflare |
 | Staging hostname | e.g. `staging.fablabfortsmith.org` | the VPS app URL pre-cutover (NOT the apex) |
 | Cloudflare API token | scope: **Zone › DNS › Edit** for the zone | for wildcard TLS (DNS-01) + DNS-as-code |
@@ -87,8 +88,15 @@ single source of truth. You just need an existing sudo login for the **first** c
   ssh root@<vps-ip> 'DEPLOY_PUBKEY="ssh-ed25519 AAAA... you@host" bash /root/manual-bootstrap.sh'
   ```
 
-> To **offboard** a maintainer or rotate the CI key later: remove its line from
-> `deploy_authorized_keys` and re-run `make converge` (the list is authoritative).
+**Two identities (ADR 0008/0009), both managed by Ansible:**
+- **`deploy`** — broad (`NOPASSWD:ALL`), for **maintainers** running full `converge`/host ops;
+  keys in `deploy_authorized_keys` (one per person).
+- **`automation`** — **scoped least-privilege** for **CI / scheduled ops**: NOT in sudo/docker
+  groups, may run as root only the exact commands in `automation_sudo_commands`; key(s) in
+  `automation_authorized_keys`. CI uses this, **not** `deploy`.
+
+> **Offboard / rotate:** remove the key line from the relevant list (`deploy_authorized_keys` or
+> `automation_authorized_keys`) and re-run `make converge` — the lists are authoritative.
 
 **Verify (from your laptop):**
 ```bash
