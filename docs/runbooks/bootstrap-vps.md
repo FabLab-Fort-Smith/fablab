@@ -30,6 +30,10 @@
 | GitHub App for Coolify | install on `FabLab-Fort-Smith` | richest integration (previews + commit status) |
 | Local tools | `ansible`, `ssh`, `git`, `gh` | `ansible-galaxy` comes with ansible-core |
 
+> **Tip:** `lab-stack/scripts/collect-keys.sh` builds the paste-ready YAML for the key lists —
+> e.g. `collect-keys.sh gh critter b007ab1e` (from GitHub), `... box` (read on the VPS), or
+> `-v automation_authorized_keys file ~/.ssh/fablab_ci.pub` for the CI key. Public keys only.
+
 **Secrets to have ready** (generate or pull from your secret store — never commit; you'll paste
 these into Coolify env at the app step). The app **fails to boot** if any required one is missing
 (`src/lib/env.js`):
