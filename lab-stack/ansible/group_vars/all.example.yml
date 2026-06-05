@@ -10,16 +10,28 @@
 deploy_user: deploy
 manage_deploy_account: true
 
-# Authorized keys for the deploy account — the SINGLE SOURCE OF TRUTH. One line per maintainer +
-# one for CI/scheduled ops; each is independently revocable (remove it and re-run = offboarded).
+# Authorized keys for the deploy account — the SINGLE SOURCE OF TRUTH. One line per MAINTAINER
+# (humans who run full ops); each independently revocable (remove it and re-run = offboarded).
+# CI/automation does NOT go here — it uses the scoped `automation` account below.
 deploy_authorized_keys:
   - "ssh-ed25519 AAAA__MAINTAINER_1__ critter"
   - "ssh-ed25519 AAAA__MAINTAINER_2__ b007ab1e"
-  - "ssh-ed25519 AAAA__CI_DEPLOY_KEY__ ci@fablab"   # automation identity (rotate independently)
+
+# --- Automation identity (scoped least-privilege — ADR 0009) for CI / scheduled ops ---
+# A SEPARATE account from `deploy`: NOT in sudo/docker groups; may run as root ONLY the explicit
+# commands in automation_sudo_commands (NOPASSWD). Use this key for CI and cron-driven ops.
+manage_automation_account: true
+automation_user: automation
+automation_authorized_keys:
+  - "ssh-ed25519 AAAA__CI_AUTOMATION_KEY__ ci@fablab"
+# Exact absolute command paths the automation account may run as root — nothing else. Empty = no
+# sudo at all. Keep this list minimal; expand deliberately as scheduled-ops needs appear.
+automation_sudo_commands:
+  - "/usr/local/sbin/fablab-backup-mongo"   # trigger an on-demand encrypted backup
 
 # Restrict SSH logins to these users. LEAVE EMPTY to avoid lockout (SSH stays key-only, no root,
-# no password regardless). If you later lock down, include EVERY maintainer + deploy, e.g.
-# [deploy, critter, b007ab1e].
+# no password regardless). If you later lock down, include EVERY maintainer + deploy + automation,
+# e.g. [deploy, automation, critter, b007ab1e].
 ssh_allow_users: []
 
 # --- Domains (ADR 0002) ---

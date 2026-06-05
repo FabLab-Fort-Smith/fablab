@@ -58,4 +58,4 @@ Make every administration layer **role-based and multi-principal**:
   Rejected for a multi-maintainer space (kept as a non-default option:
   `manage_deploy_account: false`).
 - **A separate dedicated `automation` account distinct from `deploy`** — cleaner separation for
-  CI; deferred (the CI key on `deploy` is revocable today) — revisit if CI needs scoped-down sudo.
+  CI; **now adopted in ADR 0009** (scoped allowlist sudo). CI no longer rides on `deploy`.

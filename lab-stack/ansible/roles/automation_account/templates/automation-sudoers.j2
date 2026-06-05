@@ -1,0 +1,3 @@
+# Managed by Ansible (roles/automation_account). Scoped least-privilege sudo for CI/scheduled ops.
+# ONLY these exact commands may run as root via NOPASSWD; nothing else. Not in sudo/docker groups.
+{{ automation_user | default('automation') }} ALL=(root) NOPASSWD: {{ automation_sudo_commands | join(', ') }}
