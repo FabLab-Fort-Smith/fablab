@@ -69,7 +69,7 @@ export async function sendPasswordResetEmail(email, token) {
         const info = await transporter.sendMail(mailOptions);
         console.log('Password reset email sent:', info.response);
     } catch (error) {
-        console.error('Error sending password reset email:', error);
+        console.error('Error sending account-recovery email:', error);
         throw new Error('Failed to send password reset email');
     }
 }
@@ -368,7 +368,7 @@ export async function sendProfileCompletionEmail(email, firstName, userID) {
         await transporter.sendMail(mailOptions);
         console.log(`Profile completion email sent`);
     } catch (error) {
-        console.error(`Error sending profile completion email:`, error);
+        console.error(`Error sending onboarding-completion email:`, error);
     }
 }
 

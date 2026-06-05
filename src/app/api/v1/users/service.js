@@ -375,7 +375,7 @@ export default class UserService {
                             emailData: {
                                 dashboardLink: `${process.env.NEXT_PUBLIC_URL}/dashboard/${updatedUser.userID}/profile`
                             }
-                        }).catch(err => console.error("Failed to send profile completion notification:", err));
+                        }).catch(err => console.error("Failed to send onboarding-completion notification:", err));
                         
                         // Notify Admin
                         sendAdminNotificationEmail(
@@ -428,7 +428,7 @@ export default class UserService {
                          Constants.ONBOARDING_REWARDS.COMPLETE_PROFILE,
                          "Profile Completion Reward",
                          "onboarding_reward_profile"
-                     ).catch(err => console.error("Failed to award profile stake:", err));
+                     ).catch(err => console.error("Failed to award onboarding-completion stake:", err));
                 }
 
                 if (shouldAwardApplication) {
