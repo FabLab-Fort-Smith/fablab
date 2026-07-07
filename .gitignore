@@ -18,6 +18,11 @@ secrets/
 !*.tfvars.example
 ansible/*.retry
 .vault-pass*
+# lab-stack: local Ansible inventory + group_vars carry the real VPS host/keys — never commit;
+# only the committed *.example templates are tracked.
+lab-stack/ansible/inventory.ini
+lab-stack/ansible/group_vars/*.yml
+!lab-stack/ansible/group_vars/*.example.yml
 
 # --- Build output ---
 dist/
