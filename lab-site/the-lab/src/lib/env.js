@@ -20,6 +20,7 @@ export const REQUIRED_ENV = [
     validate: (v) => (Buffer.byteLength(v, "utf8") === 32 ? null : "must be exactly 32 bytes"),
   },
   { name: "INTERNAL_API_SECRET", description: "internal/IoT API bearer secret" },
+  { name: "SOCKET_API_SECRET", description: "socket/IoT control API bearer secret" },
   { name: "SQUARE_ACCESS_TOKEN", description: "Square API access token" },
   { name: "SQUARE_WEBHOOK_SIGNATURE_KEY", description: "Square webhook signing key" },
 ];

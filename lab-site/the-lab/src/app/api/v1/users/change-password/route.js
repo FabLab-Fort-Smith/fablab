@@ -47,7 +47,7 @@ export async function POST(req) {
         return NextResponse.json({ message: "Password updated successfully." }, { status: 200 });
 
     } catch (error) {
-        console.error("Error changing password:", error);
+        console.error("Error changing account credential:", error);
         return NextResponse.json({ error: "Internal server error." }, { status: 500 });
     }
 }

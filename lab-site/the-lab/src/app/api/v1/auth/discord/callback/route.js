@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 import UserService from "@/app/api/v1/users/service";
 import DiscordService from "@/lib/discord";
+import { maskId } from "@/lib/redact"; // redact identifiers in logs (CLAUDE.md §5/§9, #133)
 
 /**
  * GET /api/v1/auth/discord/callback
@@ -62,7 +63,7 @@ export async function GET(request) {
         const tokenData = await tokenRes.json();
         accessToken = tokenData.access_token;
     } catch (e) {
-        console.error("Discord link: token exchange error", e.message);
+        console.error("Discord link: OAuth code exchange error", e.message);
         return NextResponse.redirect(`${dashboardBase}?discord_link=error&reason=token_exchange`);
     }
 
@@ -75,7 +76,7 @@ export async function GET(request) {
         if (!profileRes.ok) throw new Error(`Profile fetch failed: ${profileRes.status}`);
         profile = await profileRes.json();
     } catch (e) {
-        console.error("Discord link: profile fetch error", e.message);
+        console.error("Discord link: identity fetch error", e.message);
         return NextResponse.redirect(`${dashboardBase}?discord_link=error&reason=profile_fetch`);
     }
 
@@ -85,7 +86,8 @@ export async function GET(request) {
             discordId: profile.id,
             discordHandle: profile.username,
         });
-        console.log(`✅ Discord linked: user ${targetUserID} → Discord ${profile.id} (${profile.username})`);
+        const discordRef = maskId(profile.id);
+        console.log(`✅ Discord linked: user ${maskId(targetUserID)} → Discord ${discordRef}`);
     } catch (e) {
         console.error("Discord link: DB update failed", e.message);
         return NextResponse.redirect(`${dashboardBase}?discord_link=error&reason=db_update`);

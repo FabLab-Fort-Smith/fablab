@@ -13,7 +13,7 @@ const UserImage = ({ picture, onUpload, editable = false }) => {
             const url = await uploadFileToS3(file);
             if (onUpload) onUpload(url);
         } catch (error) {
-            console.error("Failed to upload profile picture:", error);
+            console.error("Failed to upload avatar:", error);
             alert("Failed to upload profile picture.");
         } finally {
             setUploading(false);
