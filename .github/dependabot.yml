@@ -9,12 +9,13 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
 
-  # The app's npm dependencies (active once consolidated into lab-site/the-lab).
-  - package-ecosystem: npm
-    directory: "/lab-site/the-lab"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-    groups:
-      minor-and-patch:
-        update-types: [minor, patch]
+  # NOTE: The app's npm dependencies under lab-site/the-lab are intentionally NOT tracked
+  # by Dependabot here. That directory is a git-subtree MIRROR of FabLab-Fort-Smith/The-Lab;
+  # bumps committed to the mirror diverge from upstream and are OVERWRITTEN on the next
+  # `git subtree pull`. App dependency updates are handled UPSTREAM in The-Lab (its own
+  # Dependabot + remediation PRs) and flow into fablab through the subtree sync.
+  #
+  # Supply-chain coverage is NOT lost: the fablab CI `App build/test` job runs
+  # `npm audit --audit-level=high` against lab-site/the-lab, so an unpatched high-severity
+  # CVE in the mirror still fails the gate (@rules/std-supplychain.md,
+  # @rules/workflow-vuln-mgmt.md) — it just doesn't generate throwaway PRs in this repo.
