@@ -11,8 +11,8 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 
 describe("SEC-21 — no hardcoded infra/secret fallbacks", () => {
     test.each([
-        ["src/lib/access-control.js", [/http:\/\/localhost:3001/, /ACCESS_CONTROL_API_URL\s*\|\|/]],
-        ["src/app/api/admin/pair-card/route.js", [/socket\.crittercodes\.dev/, /WS_SERVER_URL\s*\|\|/]],
+        ["src/lib/access-control.js", [/http:\/\/localhost:3001/, /ACCESS_CONTROL_API_URL\s*\|\|/, /SOCKET_API_SECRET\s*\|\|/]],
+        ["src/app/api/admin/pair-card/route.js", [/socket\.crittercodes\.dev/, /WS_SERVER_URL\s*\|\|/, /SOCKET_API_SECRET\s*\|\|/]],
         ["src/app/api/v1/memberships/pair-key/route.js", [/socket\.crittercodes\.dev/, /WS_SERVER_URL\s*\|\|/]],
         ["src/app/api/discord/interactions/route.js", [/FabLabFS/, /WIFI_PASSWORD\s*\|\|/]],
         ["src/app/api/auth/register/route.js", [/RECAPTCHA_SECRET_KEY\s*\|\|/, /6LeIxAcTAAAA/]],
