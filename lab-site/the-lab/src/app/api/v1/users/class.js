@@ -112,7 +112,7 @@ export default class User {
         try {
             return jwt.verify(token, JWT_SECRET);
         } catch (error) {
-            console.error("Invalid or expired token:", error);
+            console.error("Invalid or expired JWT:", error);
             return false;
         }
     }

@@ -6,6 +6,7 @@ const fullEnv = () => ({
   JWT_SECRET: "b",
   ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef", // exactly 32 bytes
   INTERNAL_API_SECRET: "c",
+  SOCKET_API_SECRET: "s",
   SQUARE_ACCESS_TOKEN: "d",
   SQUARE_WEBHOOK_SIGNATURE_KEY: "e",
 });

@@ -28,4 +28,17 @@ describe("SEC-20 — no PII / profiles / credentials in logs", () => {
             expect(call).not.toMatch(/\$\{email\}/);
         }
     });
+
+    test("REGRESSION: identifier logs are redacted via maskId, not raw (#133)", () => {
+        const RAW = [
+            /\$\{profile\.id\}/, /\$\{profile\.username\}/, /\$\{token\.userID\}/,
+            /\$\{user\.userID\}/, /\$\{targetUser\.userID\}/, /\$\{targetUserID\}/,
+        ];
+        for (const f of ["auth.js", "src/app/api/v1/auth/discord/callback/route.js"]) {
+            const calls = read(f).match(/console\.\w+\([^;]*\)/g) || [];
+            for (const call of calls) {
+                for (const re of RAW) expect(call).not.toMatch(re);
+            }
+        }
+    });
 });

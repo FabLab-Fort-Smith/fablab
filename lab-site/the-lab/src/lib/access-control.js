@@ -7,12 +7,19 @@ function controlApiUrl() {
     return url;
 }
 
-// Bearer secret for the socket server's control endpoints (SEC-05). The server
-// rejects requests that don't carry it, so device control is no longer open.
+// Bearer secret for the socket server's control endpoints (SEC-05). SEC-21: require it from
+// the environment (no empty `|| ''` fallback) so a missing secret fails closed/loudly instead
+// of sending an empty bearer — mirrors controlApiUrl() above.
+function socketApiSecret() {
+    const secret = process.env.SOCKET_API_SECRET;
+    if (!secret) throw new Error('SOCKET_API_SECRET is not configured');
+    return secret;
+}
+
 function authHeaders(extra = {}) {
     return {
         ...extra,
-        Authorization: `Bearer ${process.env.SOCKET_API_SECRET || ''}`,
+        Authorization: `Bearer ${socketApiSecret()}`,
     };
 }
 

@@ -8,6 +8,7 @@ import AuthController from '@/app/api/auth/[...nextauth]/controller'; // Import 
 import AuthService from '@/app/api/auth/[...nextauth]/service'; // Email encryption helpers
 import DiscordService from '@/lib/discord';
 import TransactionService from '@/app/api/v1/transactions/service';
+import { maskId } from '@/lib/redact'; // redact identifiers in logs (CLAUDE.md §5/§9, #133)
 
 const baseURL = `${process.env.NEXT_PUBLIC_URL}`;
 
@@ -110,7 +111,8 @@ const providers = [
                     const payload = jwtLib.default.verify(linkCookie.value, process.env.JWT_SECRET);
                     const targetUser = await UsersService.getUserByQuery({ userID: payload.userID });
                     if (targetUser) {
-                        console.log(`🔗 Link intent: attaching Discord ${profile.id} to ${targetUser.userID}`);
+                        const discordRef = maskId(profile.id);
+                        console.log(`🔗 Link intent: attaching Discord ${discordRef} to user ${maskId(targetUser.userID)}`);
                         await UsersService.updateUser(targetUser.userID, {
                             discordId: profile.id,
                             discordHandle: profile.username,
@@ -214,7 +216,7 @@ const providers = [
                 if (newUser) {
                     try {
                         const claimedAmount = await TransactionService.claimPendingTips(newUser.userID, profile.id);
-                        if (claimedAmount > 0) console.log(`💰 Claimed ${claimedAmount} stake for new user ${newUser.userID}`);
+                        if (claimedAmount > 0) console.log(`💰 Claimed ${claimedAmount} stake for new user ${maskId(newUser.userID)}`);
                     } catch (err) {
                         console.error("Error claiming tips:", err);
                     }
@@ -252,7 +254,7 @@ const providers = [
             // ✅ Claim Pending Tips
             try {
                 const claimedAmount = await TransactionService.claimPendingTips(user.userID, profile.id);
-                if (claimedAmount > 0) console.log(`💰 Claimed ${claimedAmount} stake for user ${user.userID}`);
+                if (claimedAmount > 0) console.log(`💰 Claimed ${claimedAmount} stake for user ${maskId(user.userID)}`);
             } catch (err) {
                 console.error("Error claiming tips:", err);
             }
@@ -341,7 +343,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             if (user) {
                 // Check for Merge Scenario
                 if (token.userID && token.userID !== user.userID) {
-                    console.log(`⚠️ Merge Detected: Merging ${user.userID} into ${token.userID}`);
+                    const mergeIntoRef = maskId(token.userID);
+                    console.log(`⚠️ Merge Detected: Merging ${maskId(user.userID)} into ${mergeIntoRef}`);
 
                     // If the incoming user has Discord credentials (OAuth link flow), write them
                     // to the existing account immediately — before the merge — so the link is
@@ -353,7 +356,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                 discordHandle: user.username || '',
                             });
                             token.discordId = user.discordId;
-                            console.log(`🔗 Discord credentials linked to ${token.userID} pre-merge`);
+                            const linkedRef = maskId(token.userID);
+                            console.log(`🔗 Discord credentials linked to ${linkedRef} pre-merge`);
                         } catch (linkErr) {
                             console.error("❌ Pre-merge Discord link failed:", linkErr);
                         }
@@ -404,7 +408,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         const expires = new Date(m.gracePeriodStartedAt);
                         expires.setDate(expires.getDate() + GRACE_DAYS);
                         if (new Date() > expires) {
-                            console.log(`🔒 Grace period expired for ${token.userID} — revoking access`);
+                            const graceRef = maskId(token.userID);
+                            console.log(`🔒 Grace period expired for ${graceRef} — revoking access`);
                             await UsersService.updateUser({ userID: token.userID }, {
                                 "membership.status": "suspended",
                                 "membership.accessKey.issued": false,

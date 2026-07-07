@@ -34,6 +34,23 @@ const eslintConfig = [
             "react-hooks/incompatible-library": "off",
         },
     },
+    {
+        // Logging mandate (CLAUDE.md §9): no raw console in app code — use @/lib/logger (server)
+        // or @/lib/logger.client (client). WARNING during the migration off console.* (#135);
+        // flip to "error" once that migration completes.
+        rules: { "no-console": "warn" },
+    },
+    {
+        // The logging layer itself + operational scripts/tests legitimately use console.
+        files: [
+            "src/lib/logger.js",
+            "src/lib/logger.client.js",
+            "src/lib/audit.js",
+            "scripts/**",
+            "test/**",
+        ],
+        rules: { "no-console": "off" },
+    },
 ];
 
 export default eslintConfig;

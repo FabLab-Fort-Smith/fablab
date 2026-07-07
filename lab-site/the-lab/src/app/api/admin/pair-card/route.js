@@ -27,11 +27,18 @@ export async function POST(req) {
             return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
         }
 
+        // SEC-21: require the bearer secret from env (no empty `|| ''` fallback) — fail closed.
+        const socketApiSecret = process.env.SOCKET_API_SECRET;
+        if (!socketApiSecret) {
+            console.error('SOCKET_API_SECRET is not configured');
+            return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+        }
+
         const response = await fetch(`${wsServerUrl}/api/v2/pairing/start`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${process.env.SOCKET_API_SECRET || ''}`,
+                Authorization: `Bearer ${socketApiSecret}`,
             },
             body: JSON.stringify({
                 userId,
