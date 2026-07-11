@@ -1,0 +1,5 @@
+# Managed by Ansible (roles/mongodb). Sourced by the backup cron (roles/backups). 0600, root-only.
+# The app connection string uses the least-privilege app user over the private docker network.
+MONGODB_URI=mongodb://{{ mongodb_app_user }}:{{ mongodb_app_pw | urlencode }}@{{ mongodb_container_name }}:27017/{{ mongodb_app_db }}?authSource={{ mongodb_app_db }}
+MONGO_BACKUP_NETWORK={{ mongodb_network }}
+MONGO_IMAGE={{ mongodb_image }}

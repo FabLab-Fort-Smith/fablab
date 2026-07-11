@@ -59,6 +59,15 @@ cloudflare_ipv6_ranges:
 # --- Coolify ---
 coolify_install: true
 
+# --- MongoDB (ADR 0010: standalone self-hosted on a private docker network) ---
+# Root + app passwords are AUTO-GENERATED into ../.env (`make secrets`) and read at converge time
+# — NOT here (@rules/workflow-secrets.md). These are non-secret knobs only.
+mongodb_manage: true
+mongodb_image: "mongo:7.0"              # pin to a digest before prod (@rules/std-supplychain.md)
+mongodb_app_db: "thelab"
+mongodb_app_user: "thelab_app"
+mongodb_network: "fablab"              # attach the Coolify app to this docker network
+
 # --- Backups (ADR 0007: MongoDB on the VPS = our responsibility) ---
 backups_enabled: true
 backup_local_dir: "/var/backups/fablab"

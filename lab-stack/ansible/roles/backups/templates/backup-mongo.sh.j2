@@ -9,13 +9,18 @@ BACKUP_DIR="{{ backup_local_dir | default('/var/backups/fablab') }}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"          # UTC, monotonic-safe naming (@rules/topic-numeric-correctness.md)
 OUT="${BACKUP_DIR}/mongo-${STAMP}.archive.gz"
 
-: "${MONGODB_URI:?MONGODB_URI must be set (from the secret store)}"
+# Connection wired by the mongodb role (roles/mongodb): MONGODB_URI + MONGO_BACKUP_NETWORK +
+# MONGO_IMAGE. Falls back to the environment/secret store if the file isn't present.
+if [ -f /etc/fablab/mongo.env ]; then . /etc/fablab/mongo.env; fi
+: "${MONGODB_URI:?MONGODB_URI must be set (roles/mongodb writes /etc/fablab/mongo.env)}"
 
 umask 077
 mkdir -p "${BACKUP_DIR}"
 
-# 1) Dump (compressed archive). Adjust to the container exec form if Mongo runs in Coolify.
-mongodump --uri="${MONGODB_URI}" --archive="${OUT}" --gzip
+# 1) Dump to a compressed archive. MongoDB is PRIVATE to the docker network (no host port), so
+#    run mongodump in an ephemeral container ON that network and stream the archive to disk.
+docker run --rm --network "${MONGO_BACKUP_NETWORK:-fablab}" "${MONGO_IMAGE:-mongo:7.0}" \
+  mongodump --uri="${MONGODB_URI}" --archive --gzip > "${OUT}"
 
 # 2) Encrypt at rest before it leaves the box (age/gpg). Example with age:
 #    age -r "${BACKUP_AGE_RECIPIENT}" -o "${OUT}.age" "${OUT}" && shred -u "${OUT}"
