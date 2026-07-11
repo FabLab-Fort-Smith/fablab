@@ -23,6 +23,18 @@ ENV_FILE="../.env"
 ENV_EXAMPLE="../.env.example"
 noninteractive="${SETUP_NONINTERACTIVE:-}"
 
+# shellcheck source=scripts/_lib.sh
+. "scripts/_lib.sh"   # env_get, env_set (shared with gen-secrets.sh)
+
+regen=""
+for a in "$@"; do
+  case "$a" in
+    --regenerate|-r) regen=1 ;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    *) printf 'unknown arg: %s\n' "$a" >&2; exit 2 ;;
+  esac
+done
+
 info() { printf '  %s\n' "$*"; }
 warn() { printf 'WARN: %s\n' "$*" >&2; }
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -48,20 +60,7 @@ ask_secret() {
 # yesno "prompt" -> returns 0 for yes (default No)
 yesno() { local a=""; ask a "$1 (y/N)" "N"; case "$a" in [Yy]*) return 0;; *) return 1;; esac; }
 
-env_get() { [ -f "$1" ] || return 0; sed -n "s/^$2=//p" "$1" | head -n1; }
 inv_get() { [ -f "$INV" ] || return 0; awk -F= -v k="$1" '$1==k{sub(/[[:space:]].*/,"",$2);print $2;exit}' "$INV"; }
-
-# env_set FILE KEY VAL — upsert (value never printed; awk avoids sed delimiter/secret-char issues)
-env_set() {
-  local f="$1" k="$2" v="$3" tmp; tmp="$(mktemp)"
-  if [ -f "$f" ] && grep -q "^$k=" "$f"; then
-    KVAL="$v" awk -v k="$k" 'BEGIN{FS="="} $1==k{print k"="ENVIRON["KVAL"];d=1;next}{print} END{if(!d)print k"="ENVIRON["KVAL"]}' "$f" > "$tmp"
-  else
-    [ -f "$f" ] && cat "$f" > "$tmp"
-    printf '%s=%s\n' "$k" "$v" >> "$tmp"
-  fi
-  mv "$tmp" "$f"; chmod 600 "$f"
-}
 
 ssh_ok() {
   ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new \
@@ -76,7 +75,11 @@ fi
 if [ ! -f "$GV" ] && [ -f "$GV_EXAMPLE" ]; then cp "$GV_EXAMPLE" "$GV"; info "created $GV from example"; fi
 
 printf '== fablab deploy platform — connectivity & config setup ==\n'
-printf 'Provider-agnostic: needs only SSH access to the box (ADR 0004).\n\n'
+printf 'Provider-agnostic: needs only SSH access to the box (ADR 0004).\n'
+if [ -z "$regen" ] && [ -n "$(env_get "$ENV_FILE" AUTH_SECRET)" ]; then
+  printf 'Existing configuration detected — NON-DESTRUCTIVE run (keeps secrets; use --regenerate to rotate).\n'
+fi
+printf '\n'
 
 # --- 1. connection details (defaults from existing config) -------------------
 ask LAB_VPS_HOST "VPS host / IP" "$(env_get "$ENV_FILE" LAB_VPS_HOST)"
@@ -140,6 +143,10 @@ ask_secret COOLIFY_TOKEN "Coolify API token" "$co_has"
 if [ -n "$COOLIFY_TOKEN" ]; then env_set "$ENV_FILE" COOLIFY_TOKEN "$COOLIFY_TOKEN"; fi
 unset CLOUDFLARE_API_TOKEN COOLIFY_TOKEN
 info "updated $ENV_FILE (0600, git-ignored)"
+
+# --- 4b. local service/app secrets (auto-generated, non-destructive) ---------
+printf '\n== local secrets (auto-generated; provider keys above stay as entered) ==\n'
+if [ -n "$regen" ]; then bash scripts/gen-secrets.sh --force; else bash scripts/gen-secrets.sh; fi
 
 # --- 5. deploy_authorized_keys (optional, additive) --------------------------
 if [ -z "$noninteractive" ]; then

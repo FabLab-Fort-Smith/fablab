@@ -17,7 +17,7 @@ try() { desc="$1"; shift; if "$@"; then ok "$desc"; else bad "$desc"; fi; }
 
 # fixture repo tree so setup.sh (which cd's to its ../) operates in the sandbox
 mkdir -p "$T/lab-stack/scripts" "$T/lab-stack/ansible/group_vars"
-cp "$here/setup.sh" "$here/collect-keys.sh" "$T/lab-stack/scripts/"
+cp "$here/setup.sh" "$here/collect-keys.sh" "$here/gen-secrets.sh" "$here/_lib.sh" "$T/lab-stack/scripts/"
 : > "$T/lab-stack/ansible/inventory.example.ini"
 printf 'deploy_authorized_keys: []\n' > "$T/lab-stack/ansible/group_vars/all.example.yml"
 printf 'LAB_VPS_HOST=\nCOOLIFY_URL=\n' > "$T/.env.example"
