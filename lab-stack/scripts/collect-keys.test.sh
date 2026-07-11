@@ -14,6 +14,8 @@ pass=0; fail=0
 ok()   { printf '  ok   - %s\n' "$1"; pass=$((pass+1)); }
 bad()  { printf '  FAIL - %s\n' "$1" >&2; fail=$((fail+1)); }
 check(){ if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (want '$3', got '$2')"; fi; }
+# try DESC CMD... : run CMD, ok on success else bad (avoids the SC2015 && || pitfall).
+try()  { desc="$1"; shift; if "$@"; then ok "$desc"; else bad "$desc"; fi; }
 
 items() { awk -v v="$1" '$0~"^"v":"{f=1;next} f&&/^  - /{c++} f&&!/^[[:space:]]/&&!/^$/{f=0} END{print c+0}' "$2"; }
 has()   { grep -qF "$(cut -d' ' -f2 "$1")" "$2"; }
@@ -37,12 +39,12 @@ echo "collect-keys.sh regression tests"
 seed
 "$ck" --into "$T/all.yml" file "$T/k3.pub" >/dev/null 2>&1
 check "additive: 3 keys after adding k3" "$(items deploy_authorized_keys "$T/all.yml")" "3"
-has "$T/k1.pub" "$T/all.yml" && ok "k1 preserved" || bad "k1 preserved"
-has "$T/k2.pub" "$T/all.yml" && ok "k2 preserved" || bad "k2 preserved"
-has "$T/k3.pub" "$T/all.yml" && ok "k3 added"     || bad "k3 added"
-grep -q '^some_key: value'     "$T/all.yml" && ok "content above intact" || bad "content above intact"
-grep -q '^ssh_allow_users: \[\]' "$T/all.yml" && ok "content below intact" || bad "content below intact"
-[ -f "$T/all.yml.bak" ] && ok ".bak written" || bad ".bak written"
+try "k1 preserved" has "$T/k1.pub" "$T/all.yml"
+try "k2 preserved" has "$T/k2.pub" "$T/all.yml"
+try "k3 added"     has "$T/k3.pub" "$T/all.yml"
+try "content above intact" grep -q '^some_key: value' "$T/all.yml"
+try "content below intact" grep -q '^ssh_allow_users: \[\]' "$T/all.yml"
+try ".bak written" test -f "$T/all.yml.bak"
 
 # 2. idempotent: re-adding the same key changes nothing
 "$ck" --into "$T/all.yml" file "$T/k3.pub" >/dev/null 2>&1
@@ -54,12 +56,12 @@ check "dup add stays 3 (nothing dropped)" "$(items deploy_authorized_keys "$T/al
 
 # 4. a different var appends its own block, leaving deploy_* untouched
 "$ck" -v automation_authorized_keys --into "$T/all.yml" file "$T/k2.pub" >/dev/null 2>&1
-grep -q '^automation_authorized_keys:' "$T/all.yml" && ok "new var block appended" || bad "new var block appended"
+try "new var block appended" grep -q '^automation_authorized_keys:' "$T/all.yml"
 check "deploy block untouched by other-var write" "$(items deploy_authorized_keys "$T/all.yml")" "3"
 
 # 5. default stdout mode still emits a block
-out="$("$ck" file "$T/k1.pub" 2>/dev/null)"
-printf '%s\n' "$out" | grep -q '^deploy_authorized_keys:' && ok "stdout mode emits block" || bad "stdout mode emits block"
+"$ck" file "$T/k1.pub" > "$T/out.txt" 2>/dev/null
+try "stdout mode emits block" grep -q '^deploy_authorized_keys:' "$T/out.txt"
 
 # 6. --merge previews the union without writing
 before_ct="$(items deploy_authorized_keys "$T/all.yml")"
