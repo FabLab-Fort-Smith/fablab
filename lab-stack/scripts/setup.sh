@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Interactive, PROVIDER-AGNOSTIC setup of connectivity + config for the deploy platform.
-# Collects the VPS connection details + platform secrets from you, writes the (git-ignored)
-# ansible/inventory.ini and ../.env, then verifies SSH/Ansible reachability — after which
-# `make converge` configures the box. Works with ANY VPS reachable over SSH (ADR 0004): it
-# talks to the host over SSH only, never to a cloud provider's API.
+# Prints the KEYS REQUIRED to continue up front, collects the VPS connection details + provider
+# secrets (interactively, or from ../.env if already set), and REFUSES to continue until every
+# required key is present. Then writes the git-ignored ansible/inventory.ini + ../.env, verifies
+# SSH/Ansible reachability, and auto-generates the local app secrets. Works with ANY VPS reachable
+# over SSH (ADR 0004): it talks to the host over SSH only, never a cloud provider's API.
 #
 # Re-runnable: existing values become the defaults (press Enter to keep). Secrets are read
 # SILENTLY, never echoed or logged; ../.env is written mode 0600. inventory.ini is backed up.
 #
-# Usage:  make setup            (or: bash scripts/setup.sh)
+# Usage:  make setup                 (or: bash scripts/setup.sh [--regenerate])
+#   --regenerate/-r  also ROTATE the local secrets (gated confirmation; see gen-secrets.sh)
 # Non-interactive (CI/testing): SETUP_NONINTERACTIVE=1 with values via env —
 #   LAB_VPS_HOST SSH_PORT SSH_USER SSH_KEY CLOUDFLARE_API_TOKEN COOLIFY_URL COOLIFY_TOKEN
 set -euo pipefail
@@ -22,6 +24,18 @@ GV_EXAMPLE="$ANSIBLE_DIR/group_vars/all.example.yml"
 ENV_FILE="../.env"
 ENV_EXAMPLE="../.env.example"
 noninteractive="${SETUP_NONINTERACTIVE:-}"
+
+# shellcheck disable=SC1091  # _lib.sh is a sibling script, linted separately
+. "scripts/_lib.sh"   # env_get, env_set, key manifests (shared with gen-secrets.sh)
+
+regen=""
+for a in "$@"; do
+  case "$a" in
+    --regenerate|-r) regen=1 ;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    *) printf 'unknown arg: %s\n' "$a" >&2; exit 2 ;;
+  esac
+done
 
 info() { printf '  %s\n' "$*"; }
 warn() { printf 'WARN: %s\n' "$*" >&2; }
@@ -48,25 +62,15 @@ ask_secret() {
 # yesno "prompt" -> returns 0 for yes (default No)
 yesno() { local a=""; ask a "$1 (y/N)" "N"; case "$a" in [Yy]*) return 0;; *) return 1;; esac; }
 
-env_get() { [ -f "$1" ] || return 0; sed -n "s/^$2=//p" "$1" | head -n1; }
 inv_get() { [ -f "$INV" ] || return 0; awk -F= -v k="$1" '$1==k{sub(/[[:space:]].*/,"",$2);print $2;exit}' "$INV"; }
-
-# env_set FILE KEY VAL — upsert (value never printed; awk avoids sed delimiter/secret-char issues)
-env_set() {
-  local f="$1" k="$2" v="$3" tmp; tmp="$(mktemp)"
-  if [ -f "$f" ] && grep -q "^$k=" "$f"; then
-    KVAL="$v" awk -v k="$k" 'BEGIN{FS="="} $1==k{print k"="ENVIRON["KVAL"];d=1;next}{print} END{if(!d)print k"="ENVIRON["KVAL"]}' "$f" > "$tmp"
-  else
-    [ -f "$f" ] && cat "$f" > "$tmp"
-    printf '%s=%s\n' "$k" "$v" >> "$tmp"
-  fi
-  mv "$tmp" "$f"; chmod 600 "$f"
-}
 
 ssh_ok() {
   ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new \
       -p "$SSH_PORT" -i "$SSH_KEY" "$SSH_USER@$LAB_VPS_HOST" 'echo ok' 2>/dev/null | grep -q '^ok$'
 }
+
+# status line for a key in the manifest
+kstat() { if [ -n "$(env_get "$ENV_FILE" "$1")" ]; then printf '%s' "$2"; else printf '%s' "$3"; fi; }
 
 # --- 0. base files -----------------------------------------------------------
 if [ ! -f "$ENV_FILE" ]; then
@@ -76,29 +80,58 @@ fi
 if [ ! -f "$GV" ] && [ -f "$GV_EXAMPLE" ]; then cp "$GV_EXAMPLE" "$GV"; info "created $GV from example"; fi
 
 printf '== fablab deploy platform — connectivity & config setup ==\n'
-printf 'Provider-agnostic: needs only SSH access to the box (ADR 0004).\n\n'
+printf 'Provider-agnostic: needs only SSH access to the box (ADR 0004).\n'
+if [ -z "$regen" ] && [ -n "$(env_get "$ENV_FILE" AUTH_SECRET)" ]; then
+  printf 'Existing configuration detected — NON-DESTRUCTIVE run (keeps secrets; use --regenerate to rotate).\n'
+fi
+printf '\n'
 
-# --- 1. connection details (defaults from existing config) -------------------
+# --- 1. required-keys manifest (shown BEFORE any configuration) ---------------
+printf 'Keys REQUIRED to continue (provisioning) — must be in %s or entered now:\n' "$ENV_FILE"
+for k in "${REQUIRED_PROVISION_KEYS[@]}"; do printf '  %s %s\n' "$(kstat "$k" '[have]  ' '[needed]')" "$k"; done
+printf 'Local secrets — AUTO-GENERATED for you (no action needed):\n'
+for k in "${LOCAL_SECRET_KEYS[@]}"; do printf '  %s %s\n' "$(kstat "$k" '[have]  ' '[autogen]')" "$k"; done
+printf 'Provider keys needed BEFORE app go-live — enter at the Coolify app step (MONGODB_URI is made then):\n'
+for k in "${REQUIRED_APP_PROVIDER_KEYS[@]}"; do printf '  %s %s\n' "$(kstat "$k" '[have]  ' '[later] ')" "$k"; done
+printf '\n'
+
+# --- 2. collect connection details -------------------------------------------
 ask LAB_VPS_HOST "VPS host / IP" "$(env_get "$ENV_FILE" LAB_VPS_HOST)"
-case "$LAB_VPS_HOST" in ""|CHANGEME_VPS_IP) die "a real VPS host/IP is required";; esac
+case "$LAB_VPS_HOST" in ""|CHANGEME_VPS_IP) die "a real VPS host/IP is required to continue";; esac
+env_set "$ENV_FILE" LAB_VPS_HOST "$LAB_VPS_HOST"
 ask SSH_PORT "SSH port" "${SSH_PORT:-$(inv_get ansible_port)}"; SSH_PORT="${SSH_PORT:-22}"
 ask SSH_USER "First-run SSH user (an EXISTING sudo user, e.g. b007ab1e / critter)" "${SSH_USER:-$(inv_get ansible_user)}"
 SSH_USER="${SSH_USER:-b007ab1e}"
 ask SSH_KEY  "SSH private key path" "${SSH_KEY:-$(inv_get ansible_ssh_private_key_file)}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"; SSH_KEY="${SSH_KEY/#\~/$HOME}"
 
-if [ ! -f "$SSH_KEY" ] && [ -z "$noninteractive" ]; then
-  if yesno "Key '$SSH_KEY' not found — generate a new ed25519 keypair?"; then
-    ssh-keygen -t ed25519 -f "$SSH_KEY" -C "fablab-deploy"
-  else
-    warn "no key at $SSH_KEY — connectivity test will fail until one exists"
-  fi
-fi
+# --- 3. collect provider secrets (interactive; kept from .env if present) -----
+ask COOLIFY_URL "Coolify URL (e.g. https://deploy.fablabfortsmith.org)" "$(env_get "$ENV_FILE" COOLIFY_URL)"
+if [ -n "$COOLIFY_URL" ]; then env_set "$ENV_FILE" COOLIFY_URL "$COOLIFY_URL"; fi
+cf_has=no; if [ -n "$(env_get "$ENV_FILE" CLOUDFLARE_API_TOKEN)" ]; then cf_has=yes; fi
+ask_secret CLOUDFLARE_API_TOKEN "Cloudflare API token (Zone:DNS:Edit)" "$cf_has"
+if [ -n "$CLOUDFLARE_API_TOKEN" ]; then env_set "$ENV_FILE" CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"; fi
+co_has=no; if [ -n "$(env_get "$ENV_FILE" COOLIFY_TOKEN)" ]; then co_has=yes; fi
+ask_secret COOLIFY_TOKEN "Coolify API token" "$co_has"
+if [ -n "$COOLIFY_TOKEN" ]; then env_set "$ENV_FILE" COOLIFY_TOKEN "$COOLIFY_TOKEN"; fi
+unset CLOUDFLARE_API_TOKEN COOLIFY_TOKEN
 
-# --- 2. write inventory.ini (backup existing) --------------------------------
+# --- 4. GATE: do NOT continue until every required key is present -------------
+missing=()
+for k in "${REQUIRED_PROVISION_KEYS[@]}"; do
+  if [ -z "$(env_get "$ENV_FILE" "$k")" ]; then missing+=("$k"); fi
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+  printf 'ERROR: cannot continue — required key(s) still unset (add to %s, or re-run and enter them):\n' "$ENV_FILE" >&2
+  for k in "${missing[@]}"; do printf '  - %s\n' "$k" >&2; done
+  exit 1
+fi
+info "all required provisioning keys present ✓"
+
+# --- 5. write inventory.ini (backup existing) --------------------------------
 [ -f "$INV" ] && cp -p "$INV" "$INV.bak"
 cat > "$INV" <<INVEOF
-# Generated by scripts/setup.sh (git-ignored). Re-run \`make setup\` to update.
+# Generated by scripts/setup.sh (git-ignored). Re-run 'make setup' to update.
 # After the FIRST converge you may switch ansible_user to 'deploy' (ADR 0008).
 [lab_vps]
 fablab-prod ansible_host=$LAB_VPS_HOST
@@ -111,8 +144,15 @@ ansible_become=true
 INVEOF
 info "wrote $INV"
 
-# --- 3. verify / establish connectivity --------------------------------------
+# --- 6. verify / establish connectivity --------------------------------------
 if [ -z "$noninteractive" ]; then
+  if [ ! -f "$SSH_KEY" ]; then
+    if yesno "Key '$SSH_KEY' not found — generate a new ed25519 keypair?"; then
+      ssh-keygen -t ed25519 -f "$SSH_KEY" -C "fablab-deploy"
+    else
+      warn "no key at $SSH_KEY — connectivity test will fail until one exists"
+    fi
+  fi
   printf '\nTesting SSH to %s@%s:%s …\n' "$SSH_USER" "$LAB_VPS_HOST" "$SSH_PORT"
   if ssh_ok; then
     info "✓ key-based SSH works"
@@ -125,23 +165,11 @@ if [ -z "$noninteractive" ]; then
   fi
 fi
 
-# --- 4. platform secrets (silent) → .env -------------------------------------
-env_set "$ENV_FILE" LAB_VPS_HOST "$LAB_VPS_HOST"
+# --- 7. local service/app secrets (auto-generated, non-destructive) ----------
+printf '\n== local secrets (auto-generated; provider keys stay as entered) ==\n'
+if [ -n "$regen" ]; then bash scripts/gen-secrets.sh --force; else bash scripts/gen-secrets.sh; fi
 
-ask COOLIFY_URL "Coolify URL (e.g. https://deploy.fablabfortsmith.org)" "$(env_get "$ENV_FILE" COOLIFY_URL)"
-if [ -n "$COOLIFY_URL" ]; then env_set "$ENV_FILE" COOLIFY_URL "$COOLIFY_URL"; fi
-
-cf_has=no; if [ -n "$(env_get "$ENV_FILE" CLOUDFLARE_API_TOKEN)" ]; then cf_has=yes; fi
-ask_secret CLOUDFLARE_API_TOKEN "Cloudflare API token (Zone:DNS:Edit)" "$cf_has"
-if [ -n "$CLOUDFLARE_API_TOKEN" ]; then env_set "$ENV_FILE" CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"; fi
-
-co_has=no; if [ -n "$(env_get "$ENV_FILE" COOLIFY_TOKEN)" ]; then co_has=yes; fi
-ask_secret COOLIFY_TOKEN "Coolify API token" "$co_has"
-if [ -n "$COOLIFY_TOKEN" ]; then env_set "$ENV_FILE" COOLIFY_TOKEN "$COOLIFY_TOKEN"; fi
-unset CLOUDFLARE_API_TOKEN COOLIFY_TOKEN
-info "updated $ENV_FILE (0600, git-ignored)"
-
-# --- 5. deploy_authorized_keys (optional, additive) --------------------------
+# --- 8. deploy_authorized_keys (optional, additive) --------------------------
 if [ -z "$noninteractive" ]; then
   logins=""; ask logins "GitHub logins for deploy_authorized_keys (space-separated; blank to skip)" ""
   if [ -n "$logins" ]; then
@@ -150,7 +178,7 @@ if [ -z "$noninteractive" ]; then
   fi
 fi
 
-# --- 6. verify with Ansible + next steps -------------------------------------
+# --- 9. verify with Ansible + next steps -------------------------------------
 if command -v ansible >/dev/null 2>&1 && [ -z "$noninteractive" ]; then
   printf '\nVerifying with Ansible ping…\n'
   if (cd "$ANSIBLE_DIR" && ansible lab_vps -m ping) >/dev/null 2>&1; then info "✓ ansible ping ok"

@@ -43,9 +43,12 @@
 > and it writes a `.bak`): `scripts/collect-keys.sh --into ansible/group_vars/all.yml gh <newdev>`.
 > Then `make converge` to apply. Offboard = delete that person's line and re-run `make converge`.
 
-**Secrets to have ready** (generate or pull from your secret store — never commit; you'll paste
-these into Coolify env at the app step). The app **fails to boot** if any required one is missing
-(`src/lib/env.js`):
+**Secrets.** The **local** secrets — `AUTH_SECRET`, `JWT_SECRET`, `ENCRYPTION_KEY`,
+`INTERNAL_API_SECRET`, `SOCKET_API_SECRET`, and the MongoDB passwords — are **auto-generated** into
+`../.env` by `make setup` (or `make secrets`): non-destructive (kept on re-run), rotated only with
+`make secrets ARGS=--force` (typed confirmation). You only supply the **provider** values below —
+those can't be generated. The app **fails to boot** if any required one is missing (`src/lib/env.js`);
+paste them into Coolify env at the app step:
 
 | Secret | Required | How to get / generate |
 |---|---|---|
@@ -75,10 +78,12 @@ these into Coolify env at the app step). The app **fails to boot** if any requir
 Most of this is automated. Once the box exists (step 1):
 ```bash
 cd lab-stack
-make setup              # INTERACTIVE: prompts for host/user/key + Cloudflare/Coolify secrets,
-                        #   writes the git-ignored inventory.ini + ../.env (0600), and VERIFIES
-                        #   SSH connectivity (offers ssh-copy-id if the key isn't on the box yet).
-                        #   Provider-agnostic — needs only SSH to the VPS. Re-runnable.
+make setup              # INTERACTIVE: first PRINTS the keys required to continue, then prompts for
+                        #   host/user/key + Cloudflare/Coolify secrets and REFUSES to continue until
+                        #   every required key is present (via prompt or ../.env). Auto-generates the
+                        #   local app secrets; writes git-ignored inventory.ini + ../.env (0600); and
+                        #   VERIFIES SSH (offers ssh-copy-id if the key isn't on the box yet).
+                        #   Provider-agnostic — needs only SSH to the VPS. Re-runnable + non-destructive.
 make converge-check     # dry-run --diff — review before applying
 make provision          # GATED: preflight -> Ansible converge -> Cloudflare DNS -> Coolify check
 # (or run stages: bash provision.sh preflight|converge|dns|coolify)
