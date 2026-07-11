@@ -5,10 +5,13 @@
 .DEFAULT_GOAL := help
 ANSIBLE_DIR := ansible
 
-.PHONY: help deps lint test ping converge converge-check
+.PHONY: help setup deps lint test ping converge converge-check
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
+
+setup: ## Interactive: collect VPS connection + secrets, write config, verify SSH (provider-agnostic)
+	bash scripts/setup.sh
 
 deps: ## Install Ansible Galaxy collections
 	cd $(ANSIBLE_DIR) && ansible-galaxy collection install -r requirements.yml
@@ -19,6 +22,7 @@ lint: ## Lint Ansible + all shell scripts (yamllint/ansible-lint/shellcheck if i
 
 test: ## Run script unit tests (no network / no VPS needed)
 	bash scripts/collect-keys.test.sh
+	bash scripts/setup.test.sh
 
 ping: ## Verify SSH/connectivity to the VPS (inventory.ini required)
 	cd $(ANSIBLE_DIR) && ansible lab_vps -m ping
