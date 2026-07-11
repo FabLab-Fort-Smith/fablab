@@ -72,13 +72,19 @@ these into Coolify env at the app step). The app **fails to boot** if any requir
 ---
 
 ## Fast path (scripted)
-Most of this is automated. Once the box exists and `ansible/inventory.ini` + `group_vars/all.yml`
-are filled (steps 1, 4) and `../.env` has the Cloudflare/Coolify values:
+Most of this is automated. Once the box exists (step 1):
 ```bash
 cd lab-stack
-make provision          # preflight -> Ansible converge -> Cloudflare DNS -> Coolify check
+make setup              # INTERACTIVE: prompts for host/user/key + Cloudflare/Coolify secrets,
+                        #   writes the git-ignored inventory.ini + ../.env (0600), and VERIFIES
+                        #   SSH connectivity (offers ssh-copy-id if the key isn't on the box yet).
+                        #   Provider-agnostic — needs only SSH to the VPS. Re-runnable.
+make converge-check     # dry-run --diff — review before applying
+make provision          # GATED: preflight -> Ansible converge -> Cloudflare DNS -> Coolify check
 # (or run stages: bash provision.sh preflight|converge|dns|coolify)
 ```
+`make setup` is the front door for **connectivity + config**; the manual equivalents are steps 1–4
+below. Secrets are read silently and land only in `../.env` (never in inventory.ini or git).
 The only non-scriptable bits left are one-time UI: Coolify admin+MFA, the GitHub App install, and
 the Cloudflare Access policy. The detailed steps below explain each stage.
 
