@@ -173,9 +173,13 @@ UFW allows 80/443 **only from Cloudflare ranges** + SSH.
 **a. Secure it first:** create the admin account, **enable MFA**, and put `deploy.fablabfortsmith.org`
 behind **Cloudflare Access** (or the IP allow-list). Never expose it openly.
 
-**b. MongoDB service:** add a **MongoDB** resource on Coolify's **private network** (not publicly
-exposed). Set a strong root password; create a least-privilege **app user + database**. Copy the
-resulting connection string → this is your `MONGODB_URI`.
+**b. MongoDB — already provisioned by `make converge`** (Ansible `mongodb` role, ADR 0010): a
+standalone MongoDB runs as `fablab-mongo` on the **private `fablab` docker network** (no host
+port), with a least-privilege **app user + database** created from the auto-generated
+`MONGO_APP_PASSWORD`. You do **not** create it in Coolify. Two wiring steps here:
+- **Attach the app to the `fablab` network** (Coolify → your app → Networks → connect `fablab`).
+- **Set `MONGODB_URI`** in the app's env — the value is on the VPS at `/etc/fablab/mongo.env`
+  (root-only). Rotate creds with `make secrets ARGS=--force` → `make converge` → redeploy.
 
 **c. Cloudflare token for TLS:** add the scoped Cloudflare API token so Traefik can issue the
 `*.preview.fablabfortsmith.org` wildcard cert via DNS-01.

@@ -23,6 +23,8 @@
     - role: automation_account   # scoped least-privilege CI/ops identity — ADR 0009
       when: manage_automation_account | default(false)
     - role: docker      # Docker Engine from the official repo, non-root deploy access
+    - role: mongodb     # standalone self-hosted MongoDB on a private docker network (ADR 0010)
+      when: mongodb_manage | default(true)
     - role: coolify      # install Coolify (reviewed installer); dashboard secured manually after
       when: coolify_install | default(true)
     - role: backups     # encrypted MongoDB dumps + off-box copy + restore script
@@ -34,6 +36,7 @@
         msg:
           - "Coolify: finish setup at https://{{ coolify_fqdn }} (admin + MFA),"
           - "behind Cloudflare Access/allow-list."
-          - "Add MongoDB on Coolify's PRIVATE network; app base dir lab-site/the-lab."
-          - "Configure forge webhooks (HMAC) + Cloudflare DNS/origin lock."
-          - "See ../coolify and ../cloudflare."
+          - "MongoDB is provisioned by the mongodb role (private '{{ mongodb_network }}' net)."
+          - "In Coolify: attach the app (base dir lab-site/the-lab) to '{{ mongodb_network }}',"
+          - "and set MONGODB_URI (value in {{ mongodb_backup_env }} on the VPS)."
+          - "Configure forge webhooks (HMAC) + Cloudflare DNS/origin lock. See ../coolify, ../cloudflare."

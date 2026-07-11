@@ -32,7 +32,8 @@ preflight() {
 }
 
 converge() {
-  echo "== converge (Ansible: harden + docker + coolify + backups) =="
+  echo "== converge (Ansible: harden + docker + mongodb + coolify + backups) =="
+  load_env   # export ../.env so generated MongoDB (and other) secrets reach Ansible
   ( cd ansible && ansible-galaxy collection install -r requirements.yml && ansible-playbook playbook.yml )
 }
 

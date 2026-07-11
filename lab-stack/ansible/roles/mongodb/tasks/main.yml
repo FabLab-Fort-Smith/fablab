@@ -1,0 +1,91 @@
+---
+# Deploy standalone MongoDB as a Docker Compose stack on a PRIVATE docker network (never a
+# published host port). Root creds + a least-privilege app user/db are created from the
+# generated secrets in ../.env (ADR 0010). Idempotent; safe to re-run (ADR 0004).
+#
+# STATUS: drafted — validate on the real VPS (dump + connect from the app) before relying on it.
+
+- name: Require MongoDB secrets (from ../.env via `make converge`; generate with `make secrets`)
+  ansible.builtin.assert:
+    that:
+      - lookup('ansible.builtin.env', 'MONGO_ROOT_PASSWORD') | length > 0
+      - lookup('ansible.builtin.env', 'MONGO_APP_PASSWORD') | length > 0
+    fail_msg: >-
+      MONGO_ROOT_PASSWORD and MONGO_APP_PASSWORD must be set. Run via `make converge`
+      (it sources ../.env); generate them first with `make secrets` / `make setup`.
+
+- name: Capture MongoDB secrets (never logged)
+  ansible.builtin.set_fact:
+    mongodb_root_pw: "{{ lookup('ansible.builtin.env', 'MONGO_ROOT_PASSWORD') }}"
+    mongodb_app_pw: "{{ lookup('ansible.builtin.env', 'MONGO_APP_PASSWORD') }}"
+  no_log: true
+
+- name: Create compose project + init dirs (root-only)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  loop:
+    - "{{ mongodb_dir }}"
+    - "{{ mongodb_dir }}/init"
+
+- name: Render root credentials env-file for compose (0600)
+  ansible.builtin.template:
+    src: mongo.env.j2
+    dest: "{{ mongodb_dir }}/mongo.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Render the app-user init script (first-boot only; 0600)
+  ansible.builtin.template:
+    src: mongo-init.js.j2
+    dest: "{{ mongodb_dir }}/init/10-app-user.js"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Render the compose file
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ mongodb_dir }}/compose.yaml"
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Start / refresh the MongoDB compose stack
+  ansible.builtin.command:
+    cmd: docker compose -f {{ mongodb_dir }}/compose.yaml up -d --remove-orphans
+  register: mongodb_compose
+  changed_when: >-
+    ('Started' in mongodb_compose.stderr) or ('Created' in mongodb_compose.stderr)
+    or ('Recreated' in mongodb_compose.stderr)
+
+- name: Ensure the backup env-file directory exists (root-only)
+  ansible.builtin.file:
+    path: "{{ mongodb_backup_env | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Write the backup env-file (MONGODB_URI for the backup cron; 0600)
+  ansible.builtin.template:
+    src: backup-env.j2
+    dest: "{{ mongodb_backup_env }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Remind — wire the app to MongoDB (no secrets printed)
+  ansible.builtin.debug:
+    msg:
+      - "MongoDB '{{ mongodb_container_name }}' is up on private net '{{ mongodb_network }}' (no host port)."
+      - "In Coolify: attach the app to the '{{ mongodb_network }}' network."
+      - "Set MONGODB_URI in Coolify — value is in {{ mongodb_backup_env }} on the VPS."
+      - "DB '{{ mongodb_app_db }}', app user '{{ mongodb_app_user }}' (readWrite)."

@@ -1,0 +1,30 @@
+# Managed by Ansible (lab-stack/ansible/roles/mongodb). Standalone MongoDB, PRIVATE network
+# only — NO published host port (@rules/topic-database.md, @rules/std-zero-trust.md).
+name: fablab-mongo
+services:
+  mongo:
+    image: "{{ mongodb_image }}"
+    container_name: "{{ mongodb_container_name }}"
+    restart: unless-stopped
+    command: ["--auth", "--bind_ip_all"]
+    env_file:
+      - ./mongo.env
+    volumes:
+      - "{{ mongodb_volume }}:/data/db"
+      - ./init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - fablab
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  {{ mongodb_volume }}:
+    name: "{{ mongodb_volume }}"
+
+networks:
+  fablab:
+    name: "{{ mongodb_network }}"

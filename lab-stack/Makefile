@@ -32,10 +32,10 @@ ping: ## Verify SSH/connectivity to the VPS (inventory.ini required)
 	cd $(ANSIBLE_DIR) && ansible lab_vps -m ping
 
 converge-check: ## Dry-run the playbook (no changes) — review the diff first
-	cd $(ANSIBLE_DIR) && ansible-playbook playbook.yml --check --diff
+	if [ -f ../.env ]; then set -a; . ../.env; set +a; fi; cd $(ANSIBLE_DIR) && ansible-playbook playbook.yml --check --diff
 
-converge: ## GATED: apply host config (harden + docker + coolify + backups) to the VPS
-	cd $(ANSIBLE_DIR) && ansible-playbook playbook.yml
+converge: ## GATED: apply host config (harden + docker + mongodb + coolify + backups) to the VPS
+	if [ -f ../.env ]; then set -a; . ../.env; set +a; fi; cd $(ANSIBLE_DIR) && ansible-playbook playbook.yml
 
 dns: ## GATED: create/update Cloudflare DNS for the VPS (deploy/staging/preview; apex untouched)
 	bash cloudflare/dns.sh

@@ -1,0 +1,9 @@
+// Managed by Ansible (roles/mongodb). Runs ONCE, authenticated as root, only on first
+// initialization (empty data dir) — the official image runs /docker-entrypoint-initdb.d/*.js then.
+// Creates the least-privilege application user + database (@rules/topic-database.md).
+db = db.getSiblingDB({{ mongodb_app_db | to_json }});
+db.createUser({
+  user: {{ mongodb_app_user | to_json }},
+  pwd: {{ mongodb_app_pw | to_json }},
+  roles: [{ role: "readWrite", db: {{ mongodb_app_db | to_json }} }],
+});
