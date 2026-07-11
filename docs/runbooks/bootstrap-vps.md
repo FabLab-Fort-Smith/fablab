@@ -31,8 +31,17 @@
 | Local tools | `ansible`, `ssh`, `git`, `gh` | `ansible-galaxy` comes with ansible-core |
 
 > **Tip:** `lab-stack/scripts/collect-keys.sh` builds the paste-ready YAML for the key lists —
-> e.g. `collect-keys.sh gh critter b007ab1e` (from GitHub), `... box` (read on the VPS), or
+> e.g. `collect-keys.sh gh 0xb007ab1e CritterCodes` (from GitHub), `... box` (read on the VPS), or
 > `-v automation_authorized_keys file ~/.ssh/fablab_ci.pub` for the CI key. Public keys only.
+> ⚠️ **Use the exact GitHub logins:** the maintainers are **`0xb007ab1e`** and **`CritterCodes`**
+> (id 95759238). Do **not** use `b007ab1e` or `critter` — `critter` (id 73031) is an unrelated
+> third party, and fetching its keys would grant a stranger SSH access to the `deploy` account.
+> Always eyeball the resulting `deploy_authorized_keys` before converge.
+>
+> **Onboarding a new dev later (safe, additive):** re-run with `--into` to MERGE into the existing
+> list — it unions + dedups and **never drops** an existing key (a superset guard aborts otherwise,
+> and it writes a `.bak`): `scripts/collect-keys.sh --into ansible/group_vars/all.yml gh <newdev>`.
+> Then `make converge` to apply. Offboard = delete that person's line and re-run `make converge`.
 
 **Secrets to have ready** (generate or pull from your secret store — never commit; you'll paste
 these into Coolify env at the app step). The app **fails to boot** if any required one is missing
@@ -72,6 +81,19 @@ make provision          # preflight -> Ansible converge -> Cloudflare DNS -> Coo
 ```
 The only non-scriptable bits left are one-time UI: Coolify admin+MFA, the GitHub App install, and
 the Cloudflare Access policy. The detailed steps below explain each stage.
+
+> **Config state (as of 2026-07-11):** `lab-stack/ansible/inventory.ini`,
+> `lab-stack/ansible/group_vars/all.yml`, and `../.env` are **already scaffolded** from the
+> examples — domains are filled and `deploy_authorized_keys` holds the verified `0xb007ab1e` +
+> `CritterCodes` public keys. You **fill the placeholders**, don't re-`cp`: the VPS IP
+> (`CHANGEME_VPS_IP` in inventory.ini + `LAB_VPS_HOST` in `.env`), the `.env` secrets (Cloudflare
+> + Coolify tokens), and the real CI key in `automation_authorized_keys`. All three files are
+> **git-ignored** (they hold the real host/keys — never commit them; only the `*.example` are
+> tracked).
+>
+> **Where to run it:** `make provision` needs `ansible` + your SSH access to the box + the filled
+> `.env`. Run it from a machine/checkout that has all three (an agent sandbox without ansible or
+> the deploy key can't).
 
 ## 1. Order the VPS
 1. RackNerd → order the 8 GB KVM VPS, OS = **Ubuntu 24.04**. Note the **public IP**.

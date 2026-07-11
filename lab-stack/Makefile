@@ -5,7 +5,7 @@
 .DEFAULT_GOAL := help
 ANSIBLE_DIR := ansible
 
-.PHONY: help deps lint ping converge converge-check
+.PHONY: help deps lint test ping converge converge-check
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -13,9 +13,12 @@ help: ## Show this help
 deps: ## Install Ansible Galaxy collections
 	cd $(ANSIBLE_DIR) && ansible-galaxy collection install -r requirements.yml
 
-lint: ## Lint Ansible + shell (yamllint/ansible-lint/shellcheck if installed)
+lint: ## Lint Ansible + all shell scripts (yamllint/ansible-lint/shellcheck if installed)
 	cd $(ANSIBLE_DIR) && ansible-lint || true
-	@command -v shellcheck >/dev/null && shellcheck cloud-init/*.yaml 2>/dev/null || true
+	@command -v shellcheck >/dev/null && shellcheck provision.sh cloudflare/*.sh coolify/*.sh scripts/*.sh cloud-init/*.sh 2>/dev/null || echo "(shellcheck not installed — skipping)"
+
+test: ## Run script unit tests (no network / no VPS needed)
+	bash scripts/collect-keys.test.sh
 
 ping: ## Verify SSH/connectivity to the VPS (inventory.ini required)
 	cd $(ANSIBLE_DIR) && ansible lab_vps -m ping
