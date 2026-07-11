@@ -27,3 +27,16 @@ rand_b64() {
 
 # rand_alnum NCHARS -> N URI-safe [A-Za-z0-9] chars (for passwords embedded in connection strings).
 rand_alnum() { LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$1"; }
+
+# --- key manifests (single source of truth; used by setup.sh + gen-secrets.sh) ---
+# These are consumed by scripts that SOURCE this lib, so shellcheck can't see the use here.
+# Local secrets we auto-generate (app secrets per src/lib/env.js + self-hosted MongoDB creds).
+# shellcheck disable=SC2034  # used by sourcing scripts
+LOCAL_SECRET_KEYS=(AUTH_SECRET JWT_SECRET ENCRYPTION_KEY INTERNAL_API_SECRET SOCKET_API_SECRET MONGO_ROOT_PASSWORD MONGO_APP_PASSWORD)
+# Provider keys REQUIRED to continue provisioning (can't be generated — .env or interactive).
+# shellcheck disable=SC2034  # used by sourcing scripts
+REQUIRED_PROVISION_KEYS=(LAB_VPS_HOST CLOUDFLARE_API_TOKEN COOLIFY_URL COOLIFY_TOKEN)
+# Provider keys required before the APP boots — entered at the Coolify app step (MONGODB_URI is
+# produced when the Coolify Mongo service is created), so NOT gated at connectivity setup.
+# shellcheck disable=SC2034  # used by sourcing scripts
+REQUIRED_APP_PROVIDER_KEYS=(MONGODB_URI SQUARE_ACCESS_TOKEN SQUARE_WEBHOOK_SIGNATURE_KEY)

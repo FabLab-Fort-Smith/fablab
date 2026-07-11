@@ -78,10 +78,12 @@ paste them into Coolify env at the app step:
 Most of this is automated. Once the box exists (step 1):
 ```bash
 cd lab-stack
-make setup              # INTERACTIVE: prompts for host/user/key + Cloudflare/Coolify secrets,
-                        #   writes the git-ignored inventory.ini + ../.env (0600), and VERIFIES
-                        #   SSH connectivity (offers ssh-copy-id if the key isn't on the box yet).
-                        #   Provider-agnostic — needs only SSH to the VPS. Re-runnable.
+make setup              # INTERACTIVE: first PRINTS the keys required to continue, then prompts for
+                        #   host/user/key + Cloudflare/Coolify secrets and REFUSES to continue until
+                        #   every required key is present (via prompt or ../.env). Auto-generates the
+                        #   local app secrets; writes git-ignored inventory.ini + ../.env (0600); and
+                        #   VERIFIES SSH (offers ssh-copy-id if the key isn't on the box yet).
+                        #   Provider-agnostic — needs only SSH to the VPS. Re-runnable + non-destructive.
 make converge-check     # dry-run --diff — review before applying
 make provision          # GATED: preflight -> Ansible converge -> Cloudflare DNS -> Coolify check
 # (or run stages: bash provision.sh preflight|converge|dns|coolify)

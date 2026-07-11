@@ -56,5 +56,27 @@ dupes="$(grep -c '^CLOUDFLARE_API_TOKEN=' "$env" || true)"
 if [ "$dupes" = 1 ]; then ok "no duplicate secret keys after re-run"; else bad "no duplicate secret keys (got $dupes)"; fi
 try "host still correct after re-run" grep -q '^LAB_VPS_HOST=203.0.113.10$' "$env"
 
+# manifest of required keys is printed up front
+SETUP_NONINTERACTIVE=1 LAB_VPS_HOST=203.0.113.10 SSH_USER=critter SSH_KEY=/home/x/.ssh/id_ed25519 \
+  CLOUDFLARE_API_TOKEN=cf COOLIFY_URL=https://d COOLIFY_TOKEN=co \
+  bash "$T/lab-stack/scripts/setup.sh" > "$T/out.txt" 2>&1 || true
+try "manifest shows required-keys header" grep -q 'Keys REQUIRED to continue' "$T/out.txt"
+try "manifest lists a required provider key" grep -q 'CLOUDFLARE_API_TOKEN' "$T/out.txt"
+try "manifest lists an auto-generated key"   grep -q 'AUTH_SECRET' "$T/out.txt"
+
+# GATE: a missing required key aborts (non-zero) and does NOT write the inventory
+T2="$(mktemp -d)"; mkdir -p "$T2/lab-stack/scripts" "$T2/lab-stack/ansible/group_vars"
+cp "$here/setup.sh" "$here/collect-keys.sh" "$here/gen-secrets.sh" "$here/_lib.sh" "$T2/lab-stack/scripts/"
+: > "$T2/lab-stack/ansible/inventory.example.ini"
+printf 'deploy_authorized_keys: []\n' > "$T2/lab-stack/ansible/group_vars/all.example.yml"
+printf 'LAB_VPS_HOST=\nCOOLIFY_URL=\n' > "$T2/.env.example"
+rc=0
+SETUP_NONINTERACTIVE=1 LAB_VPS_HOST=203.0.113.10 SSH_USER=critter SSH_KEY=/k \
+  CLOUDFLARE_API_TOKEN=cf COOLIFY_URL=https://d \
+  bash "$T2/lab-stack/scripts/setup.sh" >/dev/null 2>&1 || rc=$?
+if [ "$rc" -ne 0 ]; then ok "gate: aborts when a required key (COOLIFY_TOKEN) is missing"; else bad "gate: aborts when a required key is missing"; fi
+try "gate: inventory NOT written on abort" test ! -f "$T2/lab-stack/ansible/inventory.ini"
+rm -rf "$T2"
+
 echo "-------- $pass passed, $fail failed --------"
 [ "$fail" -eq 0 ]

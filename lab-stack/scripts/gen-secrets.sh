@@ -12,7 +12,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 cd "$(dirname "$0")/.." || exit 1        # -> lab-stack/
-# shellcheck source=scripts/_lib.sh
+# shellcheck disable=SC1091  # _lib.sh is a sibling script, linted separately
 . "scripts/_lib.sh"
 
 ENV_FILE="../.env"; ENV_EXAMPLE="../.env.example"
@@ -32,9 +32,7 @@ if [ ! -f "$ENV_FILE" ]; then
   chmod 600 "$ENV_FILE"
 fi
 
-# Local, self-generatable secrets (app secrets per src/lib/env.js + self-hosted MongoDB creds).
-# Array (not a space string) — IFS excludes space here, so a string wouldn't word-split.
-LOCAL_KEYS=(AUTH_SECRET JWT_SECRET ENCRYPTION_KEY INTERNAL_API_SECRET SOCKET_API_SECRET MONGO_ROOT_PASSWORD MONGO_APP_PASSWORD)
+# Local, self-generatable secrets come from LOCAL_SECRET_KEYS (defined in _lib.sh).
 
 gen() {  # gen KEY -> a fresh value suited to KEY
   case "$1" in
@@ -48,7 +46,7 @@ gen() {  # gen KEY -> a fresh value suited to KEY
 
 # how many local secrets already exist (drives the clobber-confirmation gate)
 existing=0
-for k in "${LOCAL_KEYS[@]}"; do
+for k in "${LOCAL_SECRET_KEYS[@]}"; do
   if [ -n "$(env_get "$ENV_FILE" "$k")" ]; then existing=$((existing+1)); fi
 done
 
@@ -66,7 +64,7 @@ if [ -n "$force" ] && [ "$existing" -gt 0 ] && [ -z "$assume_yes" ]; then
 fi
 
 gen_n=0; keep_n=0; rot_n=0
-for k in "${LOCAL_KEYS[@]}"; do
+for k in "${LOCAL_SECRET_KEYS[@]}"; do
   cur="$(env_get "$ENV_FILE" "$k")"
   if [ -z "$cur" ]; then
     env_set "$ENV_FILE" "$k" "$(gen "$k")"; gen_n=$((gen_n+1)); printf '  + generated %s\n' "$k"
@@ -78,4 +76,4 @@ for k in "${LOCAL_KEYS[@]}"; do
 done
 chmod 600 "$ENV_FILE"
 printf 'local secrets: %d generated, %d rotated, %d kept  (%s, 0600)\n' "$gen_n" "$rot_n" "$keep_n" "$ENV_FILE"
-printf 'provider keys are NOT generated — set them via `make setup` or edit %s.\n' "$ENV_FILE"
+printf 'provider keys are NOT generated — set them via make setup or by editing %s.\n' "$ENV_FILE"

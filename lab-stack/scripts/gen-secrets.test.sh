@@ -19,7 +19,6 @@ mkdir -p "$T/lab-stack/scripts"
 cp "$here/gen-secrets.sh" "$here/_lib.sh" "$T/lab-stack/scripts/"
 printf 'LAB_VPS_HOST=\nCOOLIFY_URL=\n' > "$T/.env.example"
 env="$T/.env"
-GS="$T/lab-stack/scripts/gen-secrets.sh"
 val() { sed -n "s/^$1=//p" "$env" | head -n1; }
 run() { ( cd "$T/lab-stack" && bash scripts/gen-secrets.sh "$@" ); }
 
