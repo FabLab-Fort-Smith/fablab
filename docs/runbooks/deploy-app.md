@@ -74,4 +74,4 @@ summary: Create/update The-Lab's Coolify application from code (reconcile.sh ove
   `lab-stack/coolify/reconcile.sh`, `lab-stack/coolify/README.md`, ADR 0005/0006/0012.
 
 ---
-_Last validated: never (draft — validate on first real deploy). Owner: platform._
+_Last validated: 2026-07-12 (API deploy of the-lab-staging + verified push-to-deploy on `dev`). Owner: platform._

@@ -23,7 +23,8 @@
 - Host: RackNerd 8 GB KVM VPS, Ubuntu LTS (provider-agnostic config — ADR 0004).
 - Config tooling: cloud-init + Ansible (idempotent). Docker + Coolify.
 - Proxy/TLS: Traefik (Coolify-managed) + Let's Encrypt. Edge: Cloudflare.
-- Data: **self-hosted MongoDB** as a Coolify service on the private network (ADR 0007); holds
+- Data: **self-hosted MongoDB**, standalone Docker via the Ansible `mongodb` role on the private
+  network (ADR 0010, superseding the Coolify-managed service in ADR 0007); holds
   personal/payment-adjacent data → *restricted* (master §5). S3/SMTP are external.
 
 ## Component-specific rules

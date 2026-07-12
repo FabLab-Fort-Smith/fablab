@@ -25,7 +25,7 @@ fablab/                  ← monorepo: platform + site(s) + docs
 │   │   └── adr/             ← Architecture Decision Records (why we chose what)
 │   ├── security/
 │   │   └── threat-model.md  ← STRIDE over push→build→deploy + app data flows
-│   └── runbooks/            ← operational procedures (populated once infra exists)
+│   └── runbooks/            ← operational procedures (populated; also an interactive web catalog)
 │
 ├── lab-stack/           ← THE DEPLOY PLATFORM (VPS): Coolify, Traefik, MongoDB, IaC
 │   └── README.md
@@ -37,8 +37,10 @@ fablab/                  ← monorepo: platform + site(s) + docs
 ```
 
 Environments (production / staging / preview) are **Coolify deployments built from git
-branches**, *not* folders: `main`→production (`<domain>`), `dev`→staging (`dev.<domain>`), each
-PR→ephemeral preview (`pr-<n>.preview.<domain>`).
+branches**, *not* folders: `main`→production, `dev`→staging, each PR→ephemeral preview. **Live
+today:** `dev`→**`https://staging.fablabfortsmith.org`** (auto-deploy on push). Production is
+still served by Vercel (apex/`www`) until a deliberate cutover (ADR 0006); per-PR preview
+environments (`pr-<n>.preview.<domain>`) are the remaining piece to wire up.
 
 **Conventions:** all **directories are lowercase `kebab-case`** (canonical root files like this
 README keep standard casing); a component with sub-parts gets one folder per part; each site is
@@ -78,7 +80,7 @@ shape security scope and the deploy stack:
 | Capability | Tech | Implication |
 |---|---|---|
 | Auth | Auth.js / NextAuth v5, JWT, bcryptjs | personal data, session security (`topic-authn-authz`) |
-| Database | **MongoDB** | self-hosted on the VPS (ADR 0007); NoSQL injection, backups |
+| Database | **MongoDB** | self-hosted on the VPS, standalone via Ansible (ADR 0007/0010); NoSQL injection, encrypted+off-box backups |
 | Payments | **Square** (Web Payments SDK + server SDK) | **PCI** scope — hosted/tokenized fields (SAQ-A); never store SAD |
 | Object storage | S3-compatible (`s3.crittercodes.dev`) | **kept external** (ADR 0007) |
 | Email | nodemailer (SMTP) | **kept external**; deliverability + no PII leakage |

@@ -11,7 +11,8 @@ summary: Stand up the deploy platform on a fresh VPS and run The-Lab alongside V
 > Stand up the deploy platform on a fresh VPS and run **The-Lab** on it **in parallel with
 > Vercel** (no cutover yet). Rules: `@rules/workflow-bootstrap.md`, `@rules/std-cis.md`, ADRs
 > 0002/0004/0007. **Production stays on Vercel** until the separate, gated cutover
-> (`migrate-from-vercel.md`). **STATUS: validate on first real run.**
+> (`migrate-from-vercel.md`). **STATUS: validated 2026-07-12** on the real VPS (staging live); keep
+> current on each rebuild.
 
 ## When to use
 - First-time provisioning of the platform (or rebuilding it on a new VPS).
@@ -246,4 +247,4 @@ port), with a least-privilege **app user + database** created from the auto-gene
   `lab-stack/coolify/README.md`, `lab-stack/cloudflare/README.md`, `lab-stack/README.md`.
 
 ---
-_Last validated: never (draft — validate on first run). Owner: platform._
+_Last validated: 2026-07-12 (full run on the real VPS — converge, DNS, Coolify, app live on staging). Owner: platform._

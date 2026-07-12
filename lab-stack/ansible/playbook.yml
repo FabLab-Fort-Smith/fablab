@@ -2,8 +2,9 @@
 # Converge the VPS to its desired state. Idempotent; safe to re-run (ADR 0004).
 # Usage (from lab-stack/): `make converge`  (or `ansible-playbook ansible/playbook.yml`)
 #
-# Order matters: harden the host first, then Docker, then Coolify, then backups.
-- name: Converge fablab VPS (harden + docker + coolify + backups)
+# Order matters: harden first, then tailnet + SSH-CA, the role accounts, Docker, MongoDB,
+# Coolify, and backups last.
+- name: Converge fablab VPS (harden + tailscale + ssh_ca + accounts + docker + mongodb + coolify + backups)
   hosts: lab_vps
   become: true
   gather_facts: true
