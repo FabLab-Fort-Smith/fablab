@@ -38,7 +38,10 @@ back up Coolify's own config/DB regularly so this is reproducible.
 
 ## 6. Per-PR preview deployments (Vercel feature #2)
 Coolify creates an ephemeral preview container for each PR (via the GitHub App) and routes it by
-Host header; `reconcile.sh` sets the URL template to **`pr-{{pr_id}}-preview.fablabfortsmith.org`**.
+Host header, using the app's **preview URL template** — set it to
+**`pr-{{pr_id}}-preview.fablabfortsmith.org`**. (Coolify v4.1.2's API rejects this field, so it's a
+one-time **UI** step: app → *Preview Deployments* → URL template. `reconcile.sh` prints the exact
+value to use and manages everything else.)
 - **Why that hostname:** a *single* label under the apex, so Cloudflare **Universal SSL**
   (`*.fablabfortsmith.org`) covers the edge cert — no ACM/Enterprise. (A 2-level
   `*.preview.<domain>` would need a paid cert.)
@@ -51,7 +54,8 @@ Host header; `reconcile.sh` sets the URL template to **`pr-{{pr_id}}-preview.fab
   on this app (prod is Vercel). Known caveat: auth callback / absolute-URL flows may misbehave on a
   preview host until a per-preview `NEXTAUTH_URL`/`APP_URL` is set (revisit at prod cutover).
 - **Enable (deliberate, one-time):**
-  1. `make coolify-apply` — pushes the preview URL template to Coolify.
+  1. In the Coolify UI (over the tailnet), set the app's **Preview Deployments → URL template** to
+     `pr-{{pr_id}}-preview.fablabfortsmith.org` (the API can't set this on v4.1.2).
   2. Add GitHub **Actions secrets** on the repo: `CLOUDFLARE_API_TOKEN` (Zone > DNS > Edit) and
      `LAB_VPS_HOST` (VPS public IP). Fork PRs get neither (safe: no preview DNS for forks).
   3. Open a test PR → confirm the Action creates `pr-<n>-preview.fablabfortsmith.org`, Coolify
