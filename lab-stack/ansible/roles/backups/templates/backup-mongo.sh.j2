@@ -1,33 +1,70 @@
 #!/usr/bin/env bash
-# Managed by Ansible (lab-stack/ansible/roles/backups). MongoDB dump → encrypt → off-box.
-# Secrets (MONGODB_URI, BACKUP_AGE_RECIPIENT / restic creds) come from the environment /
-# secret store at runtime — NEVER hardcode them here (@rules/workflow-secrets.md).
+# Managed by Ansible (lab-stack/ansible/roles/backups). MongoDB dump -> encrypt (age) -> off-box
+# (restic). Secrets/config come from /etc/fablab/{mongo,backup}.env at runtime — NEVER hardcode
+# them here (@rules/workflow-secrets.md). An untested backup is not a backup: drill with
+# lab-stack/scripts/mongo-restore-drill.sh (docs/runbooks/backup-restore.md).
 set -euo pipefail
 IFS=$'\n\t'
 
-BACKUP_DIR="{{ backup_local_dir | default('/var/backups/fablab') }}"
+BACKUP_DIR="{{ backups_local_dir | default('/var/backups/fablab') }}"
+LOCAL_RETENTION_DAYS="{{ backups_local_retention_days | default(7) }}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"          # UTC, monotonic-safe naming (@rules/topic-numeric-correctness.md)
 OUT="${BACKUP_DIR}/mongo-${STAMP}.archive.gz"
 
-# Connection wired by the mongodb role (roles/mongodb): MONGODB_URI + MONGO_BACKUP_NETWORK +
-# MONGO_IMAGE. Falls back to the environment/secret store if the file isn't present.
+# Mongo connection (roles/mongodb writes this): MONGODB_URI + MONGO_BACKUP_NETWORK + MONGO_IMAGE.
+# shellcheck source=/dev/null
 if [ -f /etc/fablab/mongo.env ]; then . /etc/fablab/mongo.env; fi
+# Backup encryption + off-box config (roles/backups writes this, 0600): BACKUP_AGE_RECIPIENT,
+# RESTIC_REPOSITORY, RESTIC_PASSWORD, AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, RESTIC_KEEP_*.
+# shellcheck source=/dev/null
+if [ -f /etc/fablab/backup.env ]; then . /etc/fablab/backup.env; fi
 : "${MONGODB_URI:?MONGODB_URI must be set (roles/mongodb writes /etc/fablab/mongo.env)}"
 
 umask 077
 mkdir -p "${BACKUP_DIR}"
 
-# 1) Dump to a compressed archive. MongoDB is PRIVATE to the docker network (no host port), so
-#    run mongodump in an ephemeral container ON that network and stream the archive to disk.
+# 1) Dump. MongoDB is PRIVATE to the docker network (no host port), so run mongodump in an
+#    ephemeral container ON that network and stream the compressed archive to disk.
 docker run --rm --network "${MONGO_BACKUP_NETWORK:-fablab}" "${MONGO_IMAGE:-mongo:7.0}" \
   mongodump --uri="${MONGODB_URI}" --archive --gzip > "${OUT}"
+[ -s "${OUT}" ] || { echo "ERROR: dump produced an empty archive (check Mongo auth)"; rm -f "${OUT}"; exit 1; }
 
-# 2) Encrypt at rest before it leaves the box (age/gpg). Example with age:
-#    age -r "${BACKUP_AGE_RECIPIENT}" -o "${OUT}.age" "${OUT}" && shred -u "${OUT}"
-# 3) Copy OFF-BOX (restic/rclone/S3) so a VPS loss doesn't lose backups. TODO: wire target.
-#    restic backup "${OUT}.age"   # repo + password from the secret store
+# 2) Encrypt at rest BEFORE it leaves the box (age). The recipient is a PUBLIC key; the private
+#    identity stays OFFLINE with the maintainer, so this box cannot decrypt its own backups — a
+#    box compromise never exposes backup contents (master §5; key-to-encrypt != creds-to-access).
+ARTIFACT="${OUT}"
+if [ -n "${BACKUP_AGE_RECIPIENT:-}" ]; then
+  command -v age >/dev/null || { echo "ERROR: BACKUP_AGE_RECIPIENT set but 'age' is not installed"; exit 1; }
+  age -r "${BACKUP_AGE_RECIPIENT}" -o "${OUT}.age" "${OUT}"
+  shred -u "${OUT}" 2>/dev/null || rm -f "${OUT}"
+  ARTIFACT="${OUT}.age"
+  echo "encrypted (age): ${ARTIFACT}"
+else
+  echo "WARNING: BACKUP_AGE_RECIPIENT unset — this backup is NOT encrypted at rest on the box." >&2
+fi
 
-# 4) Local retention (keep 7 days); off-box retention handled by the off-box tool.
-find "${BACKUP_DIR}" -name 'mongo-*.archive.gz*' -mtime +7 -delete
+# 3) Ship OFF-BOX with restic (its own repo encryption + dedup + integrity + retention), so a VPS
+#    loss doesn't lose backups. restic reads RESTIC_REPOSITORY/RESTIC_PASSWORD + backend creds
+#    from the environment sourced above.
+if [ -n "${RESTIC_REPOSITORY:-}" ]; then
+  command -v restic >/dev/null || { echo "ERROR: RESTIC_REPOSITORY set but 'restic' is not installed"; exit 1; }
+  : "${RESTIC_PASSWORD:?RESTIC_PASSWORD must be set when RESTIC_REPOSITORY is set}"
+  export RESTIC_REPOSITORY RESTIC_PASSWORD
+  [ -n "${AWS_ACCESS_KEY_ID:-}" ] && export AWS_ACCESS_KEY_ID
+  [ -n "${AWS_SECRET_ACCESS_KEY:-}" ] && export AWS_SECRET_ACCESS_KEY
+  RHOST="${RESTIC_HOST:-$(hostname)}"
+  restic backup --host "${RHOST}" --tag mongo "${ARTIFACT}"
+  # Retention on the off-box repo (independent of local retention below).
+  restic forget --host "${RHOST}" --tag mongo --prune \
+    --keep-daily "${RESTIC_KEEP_DAILY:-7}" \
+    --keep-weekly "${RESTIC_KEEP_WEEKLY:-4}" \
+    --keep-monthly "${RESTIC_KEEP_MONTHLY:-6}"
+  echo "shipped off-box (restic): repo=${RESTIC_REPOSITORY} host=${RHOST}"
+else
+  echo "WARNING: RESTIC_REPOSITORY unset — backup is LOCAL-ONLY; a VPS loss loses it." >&2
+fi
 
-echo "backup complete: ${OUT} (remember: encrypt + ship off-box + restore-drill)"
+# 4) Local retention (keep encrypted or plaintext artifacts N days). Off-box retention is restic's.
+find "${BACKUP_DIR}" -name 'mongo-*.archive.gz*' -mtime +"${LOCAL_RETENTION_DAYS}" -delete
+
+echo "backup complete: ${ARTIFACT}"

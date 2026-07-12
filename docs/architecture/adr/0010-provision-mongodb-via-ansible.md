@@ -52,9 +52,13 @@ Provision MongoDB with an **Ansible `mongodb` role** run during `make converge`:
     (a documented one-time step).
   - The app password rests in a root-only init script + `mongo.env` on the VPS (0600) — standard
     for self-hosted; rotate via `make secrets ARGS=--force` then re-converge + redeploy.
-  - **TLS in transit** and **at-rest encryption** are not yet configured (Community edition lacks
-    native at-rest; rely on host-disk encryption). Tracked as hardening follow-ups; private-net +
-    auth + least-privilege are in place now.
+  - **TLS in transit** and DB-level **at-rest encryption** are not yet configured (Community
+    edition lacks native at-rest; rely on host-disk encryption). Tracked as hardening follow-ups;
+    private-net + auth + least-privilege are in place now. **Backups** are separately protected:
+    `roles/backups` encrypts each dump with **age** (recipient public key on the box; private
+    identity offline) and ships it **off-box with restic** (opt-in via `../.env`; see
+    `docs/runbooks/backup-restore.md`), so backup confidentiality does not depend on DB-level
+    at-rest.
   - Still a SPOF on one host (as in 0007); HA/replica deferred.
 
 ## Alternatives considered

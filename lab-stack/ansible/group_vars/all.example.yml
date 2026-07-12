@@ -88,8 +88,15 @@ mongodb_app_db: "thelab"
 mongodb_app_user: "thelab_app"
 mongodb_network: "fablab"              # attach the Coolify app to this docker network
 
-# --- Backups (ADR 0007: MongoDB on the VPS = our responsibility) ---
+# --- Backups (ADR 0007/0010: MongoDB on the VPS = our responsibility) ---
 backups_enabled: true
-backup_local_dir: "/var/backups/fablab"
-backup_schedule_hour: 3                 # daily mongodump at 03:00 (monotonic-safe cron)
-# Off-box target (S3/restic) configured via the secret store; see roles/backups.
+backups_local_dir: "/var/backups/fablab"
+backups_schedule_hour: 3                 # daily mongodump at 03:00 UTC (monotonic-safe cron)
+backups_local_retention_days: 7          # local copies pruned after N days
+# At-rest encryption (age) + off-box (restic) are OPT-IN via SECRETS in ../.env — never here
+# (BACKUP_AGE_RECIPIENT, RESTIC_REPOSITORY/PASSWORD, BACKUP_S3_ACCESS_KEY_ID/SECRET_ACCESS_KEY).
+# Unset = local-only + a loud warning. Enabling steps: docs/runbooks/backup-restore.md.
+# Off-box restic retention (override if needed):
+backups_restic_keep_daily: 7
+backups_restic_keep_weekly: 4
+backups_restic_keep_monthly: 6
