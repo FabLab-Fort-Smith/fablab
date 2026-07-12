@@ -53,6 +53,9 @@ PRIMARY_DOMAIN="fablabfortsmith.org"
 # A GitHub Action (.github/workflows/preview-dns.yml) creates a matching PROXIED CF record per PR,
 # so previews flow through Cloudflare (origin firewall stays Cloudflare-only) and Traefik gets an
 # LE cert via HTTP-01 through CF. {{pr_id}} is Coolify's PR-number token.
+# NOTE: Coolify v4.1.2's API does NOT accept this field on create/update (it's response-only), so
+# it is a one-time UI step — set it in the app's Preview Deployments settings to the value below.
+# See coolify/README.md §6. We print it here for reference and to keep the desired value declared.
 PREVIEW_URL_TEMPLATE="pr-{{pr_id}}-preview.${PRIMARY_DOMAIN}"
 # App env keys to sync into Coolify (VALUES read from ../.env; empty ones are skipped + warned).
 # REQUIRED mirrors The-Lab's src/lib/env.js REQUIRED_ENV (the boot gate); keep in sync with it.
@@ -116,12 +119,11 @@ app_payload(){
     --arg build_pack "$BUILD_PACK" --arg base_directory "$BASE_DIRECTORY" \
     --arg dockerfile_location "$DOCKERFILE_LOCATION" --arg ports_exposes "$PORTS_EXPOSES" \
     --arg domains "$DOMAINS" --arg name "$APP_NAME" \
-    --arg preview_url_template "$PREVIEW_URL_TEMPLATE" \
     '{project_uuid:$project_uuid, server_uuid:$server_uuid, environment_name:$environment_name,
       github_app_uuid:$github_app_uuid, git_repository:$git_repository, git_branch:$git_branch,
       build_pack:$build_pack, base_directory:$base_directory, dockerfile_location:$dockerfile_location,
       ports_exposes:$ports_exposes, domains:$domains, name:$name, instant_deploy:false,
-      is_auto_deploy_enabled:true, preview_url_template:$preview_url_template}'
+      is_auto_deploy_enabled:true}'
 }
 
 if [ "$DRY" -eq 1 ]; then
@@ -174,5 +176,6 @@ fi
 
 echo "== done =="
 info "app: $APP_NAME ($APP_UUID)  env: $ENVIRONMENT_NAME  branch: $GIT_BRANCH  domain: $DOMAINS"
-info "preview URL template: $PREVIEW_URL_TEMPLATE (per-PR DNS via .github/workflows/preview-dns.yml)"
+info "preview URL template (set ONCE in Coolify UI — API won't accept it): $PREVIEW_URL_TEMPLATE"
+info "  per-PR DNS handled by .github/workflows/preview-dns.yml (coolify/README.md §6)"
 [ "$DEPLOY" -eq 1 ] || info "(no deploy; re-run with --deploy, or use docs/runbooks/redeploy-rollback.md)"
