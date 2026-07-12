@@ -56,6 +56,17 @@ cloudflare_ipv6_ranges:
   - "2606:4700::/32"
   # ... add the full current list.
 
+# --- SSH certificate authority (agent access — ADR 0011) ---
+# Trust a CA so short-lived, CA-signed certs grant access instead of long-lived authorized_keys.
+# The PRIVATE CA key stays offline / in the secret store (or use Vault's SSH engine as the broker,
+# see ../ssh-ca/README.md); only the PUBLIC key goes here. Leave disabled until you set the key.
+ssh_ca_enabled: false
+ssh_ca_public_key: ""   # e.g. "ssh-ed25519 AAAA... fablab-ssh-ca"
+ssh_ca_principals:
+  automation: ["automation"]     # ops-role certs -> the scoped automation account (ADR 0009)
+  deploy: ["deploy", "maintainer"]
+ssh_ca_krl_content: ""  # optional Key Revocation List; empty = rely on short TTLs
+
 # --- Coolify ---
 coolify_install: true
 

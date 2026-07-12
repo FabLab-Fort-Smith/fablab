@@ -1,0 +1,7 @@
+# Managed by Ansible (lab-stack/ansible/roles/ssh_ca — ADR 0011). Do not edit by hand.
+# Accept user certificates signed by the fablab SSH CA, mapped to accounts via principals.
+TrustedUserCAKeys /etc/ssh/fablab_ca.pub
+AuthorizedPrincipalsFile /etc/ssh/auth_principals/%u
+{% if ssh_ca_krl_content | length > 0 %}
+RevokedKeys /etc/ssh/fablab_krl
+{% endif %}

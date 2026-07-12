@@ -1,0 +1,62 @@
+---
+# Trust an SSH CA for user certificates (ADR 0011). Idempotent; safe to re-run.
+# Runs only when ssh_ca_enabled. Fails closed if the CA public key is missing.
+
+- name: Require a CA public key when the role is enabled
+  ansible.builtin.assert:
+    that:
+      - ssh_ca_public_key is defined
+      - ssh_ca_public_key | length > 0
+    fail_msg: >-
+      ssh_ca_enabled is true but ssh_ca_public_key is empty — set the PUBLIC CA key in
+      group_vars/all.yml (the private half stays offline / in the secret store).
+
+- name: Install the trusted CA public key
+  ansible.builtin.copy:
+    dest: /etc/ssh/fablab_ca.pub
+    content: "{{ ssh_ca_public_key }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart ssh
+
+- name: Ensure the AuthorizedPrincipals directory
+  ansible.builtin.file:
+    path: /etc/ssh/auth_principals
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# One file per login account listing the cert principals allowed to assume it. A cert whose
+# principals match NONE of these lines is rejected even though it is validly CA-signed.
+- name: Write per-account authorized principals (deny-by-default mapping)
+  ansible.builtin.copy:
+    dest: "/etc/ssh/auth_principals/{{ item.key }}"
+    content: "{{ item.value | join('\n') }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ ssh_ca_principals | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Install the Key Revocation List (when provided)
+  ansible.builtin.copy:
+    dest: /etc/ssh/fablab_krl
+    content: "{{ ssh_ca_krl_content }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: ssh_ca_krl_content | length > 0
+  notify: Restart ssh
+
+- name: Deploy the sshd CA drop-in (TrustedUserCAKeys + AuthorizedPrincipalsFile [+ RevokedKeys])
+  ansible.builtin.template:
+    src: sshd_ca.conf.j2
+    dest: /etc/ssh/sshd_config.d/20-fablab-ssh-ca.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "/usr/sbin/sshd -t -f %s"
+  notify: Restart ssh

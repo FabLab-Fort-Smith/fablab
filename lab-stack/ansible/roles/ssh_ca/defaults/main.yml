@@ -1,0 +1,23 @@
+---
+# ssh_ca role defaults (ADR 0011). Make a machine TRUST an SSH certificate authority so that
+# short-lived, CA-signed certs (minted by ssh-ca/sign-ssh-cert.sh or a Vault SSH engine) grant
+# access — instead of pasting long-lived keys into authorized_keys. Disabled by default; opt in
+# with ssh_ca_enabled: true in group_vars once the CA public key is set.
+
+ssh_ca_enabled: false
+
+# PUBLIC CA key (safe to commit — it is a public key). REQUIRED when ssh_ca_enabled.
+# e.g. "ssh-ed25519 AAAA... fablab-ssh-ca". Generate the CA keypair OFFLINE / in the secret store:
+#   ssh-keygen -t ed25519 -f fablab_ssh_ca -C fablab-ssh-ca   (guard the PRIVATE half like a root key)
+ssh_ca_public_key: ""
+
+# Map each login account to the cert principals allowed to become it. A cert only works if one of
+# its principals matches a line in the target account's principals file (deny by default).
+# Mirrors the role_policy table in sign-ssh-cert.sh (ops->automation, maintainer->deploy).
+ssh_ca_principals:
+  automation: ["automation"]
+  deploy: ["deploy", "maintainer"]
+
+# Optional Key Revocation List content (paste `ssh-keygen -k`-built KRL or a list of serials/keys).
+# Empty = no KRL configured (rely on short TTLs for de-facto revocation).
+ssh_ca_krl_content: ""

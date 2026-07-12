@@ -24,7 +24,8 @@ step-by-step and executable by someone who didn't write it.
 - [ ] **deploy.md** — promote/release a site version (mostly automatic via Coolify; documents
       the manual/break-glass path).
 - [ ] **rollback.md** — roll a site back to a previous Coolify deployment.
-- [ ] **secret-rotation.md** — rotate webhook HMAC secrets, deploy tokens, Cloudflare/SSH keys.
+- [x] **secret-rotation.md** — rotate the SSH CA key + certs (KRL revoke), deploy/automation keys,
+      app/local secrets, and provider tokens; zero-downtime, revoke-first on compromise.
 - [ ] **backup-restore.md** — back up Coolify config + site data; **tested** restore drill.
 - [ ] **incident-response.md** — triage/contain/recover (esp. compromised webhook or build).
 - [ ] **add-new-site.md** — add a `lab-site/<new-site>/` and wire it as a Coolify application.

@@ -75,6 +75,18 @@ jobs:
           found=$(find lab-stack -name '*.sh' -not -name '*.j2' || true)
           if [ -n "$found" ]; then echo "$found" | xargs shellcheck; else echo "no plain .sh files yet"; fi
 
+  lab-stack-tests:
+    name: lab-stack script tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: lab-stack
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run script unit tests (bash + openssl + ssh-keygen; no VPS)
+        run: make test
+
   app:
     name: App build/test (lab-site/the-lab)
     needs: detect
