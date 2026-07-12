@@ -76,6 +76,27 @@ function tocFrom(html) {
   return items;
 }
 
+// Split the rendered body into ordered walkthrough sections at each <h2>. Content before the
+// first h2 (if any) becomes an "Overview" section. Each section's h2 is made focusable (tabindex
+// -1) so we can move focus to it on Next/Prev for screen-reader users.
+function splitSections(html) {
+  const parts = html.split(/(?=<h2 id=)/).filter((p) => p.trim());
+  const out = [];
+  for (const p of parts) {
+    const m = p.match(/^<h2 id="([^"]+)">([\s\S]*?)<\/h2>/);
+    if (m) {
+      out.push({
+        id: m[1],
+        title: m[2].replace(/<[^>]+>/g, "").trim(),
+        html: p.replace(/^<h2 id="([^"]+)">/, '<h2 id="$1" tabindex="-1">'),
+      });
+    } else {
+      out.push({ id: "overview", title: "Overview", html: `<h2 id="overview" tabindex="-1">Overview</h2>${p}` });
+    }
+  }
+  return out;
+}
+
 const CSS = `
 :root{--bg:#fff;--fg:#1a1d24;--muted:#5a6270;--card:#f6f7f9;--border:#d9dde3;--accent:#1f6feb;--ok:#1a7f37;--chip:#eaeef3}
 :root[data-theme=dark]{--bg:#0d1117;--fg:#e6edf3;--muted:#9aa4b2;--card:#161b22;--border:#30363d;--accent:#4c9aff;--ok:#3fb950;--chip:#21262d}
@@ -119,8 +140,15 @@ input:focus-visible,a:focus-visible,button:focus-visible,summary:focus-visible{o
 .card a{text-decoration:none}
 .card .summary{color:var(--muted);font-size:.92rem;flex:1}
 .card .prog{font-size:.82rem;color:var(--ok)}
+.walk{display:flex;gap:.5rem;align-items:center}
+.walk .rb-secpos{font-size:.88rem;color:var(--muted);min-width:9rem;text-align:center}
+nav.walk.bottom{justify-content:space-between;margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border)}
+.rb-section{scroll-margin-top:4.5rem}
+.rb-section h2[tabindex]:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+button:disabled{opacity:.45;cursor:not-allowed}
+[hidden]{display:none!important}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
-@media print{header.top,.controls,.skip,.toc summary::-webkit-details-marker{display:none!important}.toc[open]{border:0}button{display:none}a[href]::after{content:""}}
+@media print{header.top,.skip,nav.walk,.toc summary::-webkit-details-marker{display:none!important}.rb-section[hidden]{display:block!important}.toc[open]{border:0}button{display:none}a[href]::after{content:""}}
 `;
 
 const themeBtn = `<button id="rb-theme" type="button" aria-label="Toggle light/dark theme">◐ Theme</button>`;
@@ -143,17 +171,33 @@ ${main}
 
 function runbookPage(rb) {
   const toc = rb.toc.length
-    ? `<details class="toc" open><summary>On this page</summary><nav aria-label="Sections"><ul>${rb.toc
+    ? `<details class="toc" open><summary>Jump to section</summary><nav aria-label="Sections"><ul>${rb.toc
         .map((t) => `<li><a href="#${t.id}">${esc(t.text)}</a></li>`)
         .join("")}</ul></nav></details>`
     : "";
+  const sectionsHtml = rb.sections
+    .map(
+      (s, i) =>
+        `<section class="rb-section" id="sec-${i}" aria-labelledby="${s.id}" data-title="${esc(s.title)}"${
+          i > 0 ? " hidden" : ""
+        }>${s.html}</section>`
+    )
+    .join("");
+  const walkNav = (place) =>
+    `<nav class="walk ${place}" aria-label="Walkthrough navigation">
+    <button class="rb-prev" type="button">◀ Previous</button>
+    <span class="rb-secpos"${place === "top" ? ' role="status" aria-live="polite"' : ' aria-hidden="true"'}></span>
+    <button class="rb-next" type="button">Next ▶</button>
+  </nav>`;
   const main = `
 <header class="top"><div class="row">
   <a class="home" href="index.html">← All runbooks</a>
   <span class="grow"></span>
-  <span id="rb-progress" aria-hidden="true"></span>
-  <progress id="rb-meter" value="0" max="1" aria-label="Checklist progress"></progress>
+  ${walkNav("top")}
   <div class="controls">
+    <button id="rb-showall" type="button" aria-pressed="false">Show all</button>
+    <progress id="rb-meter" value="0" max="1" aria-label="Checklist progress"></progress>
+    <span id="rb-progress" aria-hidden="true"></span>
     <button id="rb-reset" type="button">Reset</button>
     <button type="button" onclick="print()">Print</button>
     ${themeBtn}
@@ -163,10 +207,13 @@ function runbookPage(rb) {
   <span class="chip">${esc(rb.category)}</span> <span class="chip">${esc(rb.usage)}</span>
   <h1>${esc(rb.title)}</h1>
   ${rb.summary ? `<p class="meta">${esc(rb.summary)}</p>` : ""}
-  <p class="meta">Source: <code>docs/runbooks/${esc(rb.file)}</code> · progress is saved in your browser only.</p>
+  <p class="meta">Guided walkthrough — one section at a time. Source: <code>docs/runbooks/${esc(
+    rb.file
+  )}</code> · progress &amp; position saved in your browser only.</p>
   ${toc}
   <div id="rb-live" role="status" aria-live="polite" class="skip"></div>
-  <main id="main">${rb.bodyHtml}</main>
+  <main id="main">${sectionsHtml}</main>
+  ${walkNav("bottom")}
 </div>
 <script>${PAGE_JS}</script>`;
   return shell({ title: rb.title, bodyClass: "runbook", dataAttrs: "", main: `<div data-slug="${esc(rb.slug)}">${main}</div>` });
@@ -174,7 +221,8 @@ function runbookPage(rb) {
 
 const PAGE_JS = `
 (function(){
-  var root=document.querySelector('[data-slug]'); var slug=root?root.dataset.slug:'rb'; var key='rb:'+slug;
+  var root=document.querySelector('[data-slug]'); var slug=root?root.dataset.slug:'rb'; var key='rb:'+slug; var seckey='rb-sec:'+slug;
+  // ---- checklist (persist per runbook) ----
   var boxes=[].slice.call(document.querySelectorAll('.rb-check, input.task-list-item-checkbox'));
   boxes.forEach(function(b,i){ b.disabled=false; b.dataset.i=i; if(!b.getAttribute('aria-label')){var li=b.closest('li'); b.setAttribute('aria-label',(li&&li.textContent?li.textContent.trim().slice(0,90):'item '+(i+1)));}});
   var saved={}; try{saved=JSON.parse(localStorage.getItem(key)||'{}')}catch(e){}
@@ -184,6 +232,32 @@ const PAGE_JS = `
   boxes.forEach(function(b){b.addEventListener('change',function(){saved[b.dataset.i]=b.checked;try{localStorage.setItem(key,JSON.stringify(saved))}catch(e){}upd(true);});});
   var r=document.getElementById('rb-reset'); if(r)r.addEventListener('click',function(){boxes.forEach(function(b){b.checked=false});saved={};try{localStorage.removeItem(key)}catch(e){}upd(true);});
   upd(false);
+  // ---- guided walkthrough (one section at a time; Prev/Next; position persisted) ----
+  var secs=[].slice.call(document.querySelectorAll('.rb-section'));
+  var prevBtns=[].slice.call(document.querySelectorAll('.rb-prev'));
+  var nextBtns=[].slice.call(document.querySelectorAll('.rb-next'));
+  var posEls=[].slice.call(document.querySelectorAll('.rb-secpos'));
+  var showAllBtn=document.getElementById('rb-showall');
+  var cur=0, showAll=false;
+  try{var v=parseInt(localStorage.getItem(seckey)||'0',10); if(v>=0&&v<secs.length)cur=v;}catch(e){}
+  function paint(focus){
+    if(showAll){ secs.forEach(function(s){s.hidden=false;}); prevBtns.concat(nextBtns).forEach(function(b){b.disabled=true;}); posEls.forEach(function(e){e.textContent='All sections';}); return; }
+    secs.forEach(function(s,i){ s.hidden=(i!==cur); });
+    prevBtns.forEach(function(b){b.disabled=cur<=0;}); nextBtns.forEach(function(b){b.disabled=cur>=secs.length-1;});
+    var title=secs[cur]?secs[cur].getAttribute('data-title'):''; var label=secs.length?('Section '+(cur+1)+' of '+secs.length+(title?' — '+title:'')):'';
+    posEls.forEach(function(e){e.textContent=label;});
+    try{localStorage.setItem(seckey,String(cur));}catch(e){}
+    if(focus&&secs[cur]){ var h=secs[cur].querySelector('h2'); if(h){try{h.focus();}catch(e){}} secs[cur].scrollIntoView({block:'start'}); }
+  }
+  function go(d){ if(showAll)return; var n=cur+d; if(n<0||n>=secs.length)return; cur=n; paint(true); }
+  prevBtns.forEach(function(b){b.addEventListener('click',function(){go(-1);});});
+  nextBtns.forEach(function(b){b.addEventListener('click',function(){go(1);});});
+  if(showAllBtn)showAllBtn.addEventListener('click',function(){ showAll=!showAll; showAllBtn.setAttribute('aria-pressed',String(showAll)); showAllBtn.textContent=showAll?'Guided':'Show all'; paint(false); });
+  document.addEventListener('keydown',function(e){ if(e.altKey||e.ctrlKey||e.metaKey)return; var tag=e.target&&e.target.tagName; if(tag&&/INPUT|TEXTAREA|SELECT|SUMMARY/.test(tag))return; if(e.key==='ArrowRight'){go(1);} else if(e.key==='ArrowLeft'){go(-1);} });
+  [].slice.call(document.querySelectorAll('.toc a[href^="#"]')).forEach(function(a){ a.addEventListener('click',function(e){ if(showAll)return; var id=a.getAttribute('href').slice(1); var t=-1; secs.forEach(function(s,i){ if(s.getAttribute('aria-labelledby')===id)t=i; }); if(t>=0){ e.preventDefault(); cur=t; paint(true); } }); });
+  window.addEventListener('beforeprint',function(){ secs.forEach(function(s){s.hidden=false;}); });
+  window.addEventListener('afterprint',function(){ if(!showAll) paint(false); });
+  paint(false);
   ${THEME_JS()}
 })();`;
 
@@ -267,6 +341,7 @@ function main() {
       order: data.order,
       bodyHtml,
       toc: tocFrom(bodyHtml),
+      sections: splitSections(bodyHtml),
       total,
     });
   }

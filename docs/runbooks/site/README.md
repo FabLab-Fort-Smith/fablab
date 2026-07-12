@@ -6,6 +6,11 @@ the checklists can never drift from the runbooks.
 
 ## What you get
 - **Catalog index** grouping every runbook by **category** and **usage** (cards with progress).
+- **Guided walkthrough** per runbook: sections are shown **one at a time, in order**, with
+  **Previous/Next** controls and a "Section X of N" indicator; ←/→ arrow keys navigate; the current
+  position is saved/restored (`localStorage`). A **Show all** toggle switches to the full page, and
+  printing always shows every section. Section changes move focus to the heading and announce via a
+  live region (keyboard/screen-reader friendly).
 - **Per-runbook pages** where numbered steps and `- [ ]` items become **interactive checkboxes**;
   progress is saved per-runbook in the browser (`localStorage`), with a progress meter, **Reset**,
   and **Print**.
@@ -23,6 +28,10 @@ npm run build      # -> dist/ (git-ignored)
 npm test           # structure + a11y basics + self-contained checks
 npm run serve      # 127.0.0.1:8577 (+ tailnet IP if `tailscale` is present) — never public
 ```
+`npm run serve` **hot-reloads** — it watches `docs/runbooks/*.md` + the generator, rebuilds on
+change, and live-reloads open browsers (the live-reload client is injected only at serve time, so
+`dist/` stays production-clean).
+
 Open `dist/index.html` directly, or `npm run serve` and browse from a tailnet device
 (`@rules/topic-tailnet-dev-access`). **Do not** publish it publicly — runbooks contain internal
 ops detail. CI (`.github/workflows/ci.yml` → *Runbook site*) builds + tests it on every change.

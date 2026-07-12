@@ -68,3 +68,22 @@ test("theme + reduced-motion honored in CSS", () => {
   assert.match(h, /prefers-reduced-motion:reduce/, "reduced motion");
   assert.match(h, /@media print/, "print styles");
 });
+
+test("runbook pages are a guided walkthrough: ordered sections + prev/next + show-all", () => {
+  for (const f of runbookPages) {
+    const h = read(f);
+    const secs = (h.match(/<section class="rb-section"/g) || []).length;
+    assert.ok(secs >= 2, `${f}: ≥2 walkthrough sections`);
+    // all sections after the first start hidden (one shown at a time)
+    assert.equal((h.match(/<section class="rb-section"[^>]*\shidden>/g) || []).length, secs - 1, `${f}: only first section visible`);
+    assert.match(h, /class="rb-prev"/, `${f}: Previous control`);
+    assert.match(h, /class="rb-next"/, `${f}: Next control`);
+    assert.match(h, /id="rb-showall"/, `${f}: Show-all toggle`);
+    assert.match(h, /class="rb-secpos"[^>]*aria-live="polite"/, `${f}: live section indicator`);
+    assert.match(h, /rb-sec:/, `${f}: persists walkthrough position`);
+    // section headings are focus targets for keyboard/AT navigation
+    assert.match(h, /<h2 id="[^"]+" tabindex="-1">/, `${f}: section heading focusable`);
+    // print reveals hidden sections
+    assert.match(h, /\.rb-section\[hidden\]\{display:block!important\}/, `${f}: print shows all sections`);
+  }
+});
