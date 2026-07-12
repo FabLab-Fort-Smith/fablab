@@ -18,6 +18,8 @@
 
   roles:
     - role: harden      # CIS-aligned: ssh, ufw (+ Cloudflare lock), fail2ban, auto-updates, sysctl
+    - role: tailscale   # join the owner's tailnet; admin/dev services reachable tailnet-only — topic-tailnet-dev-access
+      when: tailscale_enabled | default(false)
     - role: ssh_ca      # trust an SSH CA for short-lived, principal-scoped agent certs — ADR 0011
       when: ssh_ca_enabled | default(false)
     - role: deploy_account   # shared, non-custodial role account (broad, human-run) — ADR 0008

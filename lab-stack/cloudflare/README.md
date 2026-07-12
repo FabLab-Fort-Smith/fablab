@@ -24,7 +24,9 @@ the Cloudflare dashboard (or as code via the API/Terraform later); record settin
 - Cache static assets aggressively (hashed assets long TTL); **bypass cache** for authenticated
   / `Set-Cookie` / API responses (`@rules/topic-caching.md`).
 - WAF + rate limiting on abuse-prone paths (signup/login/checkout — `@rules/std-owasp-api.md`).
-- **Cloudflare Access** in front of `deploy.<domain>` (Coolify dashboard).
+- **Cloudflare Access** in front of `deploy.<domain>` (Coolify dashboard) — concrete policy
+  (maintainers-only + a scoped Bypass for the GitHub webhook path) in **`access-policy.md`**
+  (ADR 0012). Admin also/primarily reachable over the **tailnet** (`topic-tailnet-dev-access`).
 
 ## Wildcard TLS for previews
 - Coolify/Traefik issues the `*.preview.<domain>` cert via **DNS-01** — create a scoped

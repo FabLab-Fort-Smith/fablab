@@ -67,6 +67,15 @@ ssh_ca_principals:
   deploy: ["deploy", "maintainer"]
 ssh_ca_krl_content: ""  # optional Key Revocation List; empty = rely on short TTLs
 
+# --- Tailscale (tailnet-only admin/dev access — @rules/topic-tailnet-dev-access.md) ---
+# Join the VPS to your tailnet so the Coolify dashboard (and other admin/dev services) are reachable
+# over the private WireGuard mesh instead of the public internet. Set TAILSCALE_AUTHKEY in ../.env
+# (a key from the Tailscale admin console) and enable below. tailscale_allowed_ports lists the host
+# ports the tailnet may reach (8000 = Coolify UI; add 80/443 to serve the app/domain over the tailnet).
+tailscale_enabled: false
+tailscale_hostname: "fablab-prod"
+tailscale_allowed_ports: [8000]
+
 # --- Coolify ---
 coolify_install: true
 
