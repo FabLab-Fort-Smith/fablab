@@ -40,3 +40,10 @@ back up Coolify's own config/DB regularly so this is reproducible.
   DNS back to Vercel is also a rollback — ADR 0006).
 
 > Back up Coolify config (export) alongside the MongoDB backups; both are needed to rebuild.
+
+## Automated app config (config-as-code)
+- **`reconcile.sh`** — idempotent, API-driven reconciliation of the `the-lab-staging` application
+  (create/update, env sync, domains) over the tailnet API. `make coolify-plan` (dry-run) /
+  `make coolify-apply` (+`ARGS=--deploy`). Desired state is declared at the top of the script.
+- Runbooks: `docs/runbooks/deploy-app.md`, `redeploy-rollback.md`, `rebuild-coolify-from-code.md`.
+- Tailnet-first admin + Cloudflare-gated webhooks: **ADR 0012** + `../cloudflare/access-policy.md`.
