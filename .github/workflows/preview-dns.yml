@@ -1,0 +1,38 @@
+# Per-PR preview DNS — creates a PROXIED Cloudflare record so Coolify's per-PR preview
+# deployment (pr-<n>-preview.fablabfortsmith.org) is reachable through Cloudflare, then removes
+# it when the PR closes. Coolify builds/tears down the preview container itself (GitHub App);
+# this only manages the DNS record. See lab-stack/coolify/README.md (Preview deployments).
+name: PR preview DNS
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+# No repository permissions needed — this job only calls the Cloudflare API with a secret.
+permissions: {}
+
+concurrency:
+  group: preview-dns-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  preview-dns:
+    runs-on: ubuntu-latest
+    # Same-repo PRs only. Fork PRs don't receive secrets (GitHub withholds them from `pull_request`
+    # on forks) — so they get no preview DNS, which is the intended, safe behavior. We deliberately
+    # do NOT use `pull_request_target` (it would run with our secrets in an untrusted context).
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v7
+      - name: Upsert (open/sync) or delete (close) the preview DNS record
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}   # scoped Zone > DNS > Edit
+          LAB_VPS_HOST: ${{ secrets.LAB_VPS_HOST }}                    # VPS public IP (origin)
+          LAB_PRIMARY_DOMAIN: fablabfortsmith.org                      # public; zone auto-resolved
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "${{ github.event.action }}" = "closed" ]; then
+            bash lab-stack/cloudflare/preview-dns.sh delete "$PR_NUMBER"
+          else
+            bash lab-stack/cloudflare/preview-dns.sh upsert "$PR_NUMBER"
+          fi
