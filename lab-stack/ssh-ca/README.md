@@ -91,3 +91,13 @@ Put `ssh/config/ca`'s public key into `ssh_ca_public_key` and the machine side i
    maintainer-gated by construction. TTL: **1h default, 8h cap** (`SSHCA_DEFAULT_TTL`/`SSHCA_MAX_TTL`).
 
 > Revisit when adopting Vault (self-service changes #1/#2) or adding machines (#3).
+
+## Lifecycle & rotation (mandate: no key valid forever)
+- **Certs** auto-expire (1h default / 8h cap) — the primary control; nothing to rotate.
+- **Revoke a cert/key before expiry** via a KRL: build it (`ssh-keygen -k -f revoked.krl -s
+  fablab_ssh_ca.pub -z <serial>`), set `ssh_ca_krl_content` in `group_vars`, `make converge`.
+- **Rotate the CA key ≤ 12 months** (and on maintainer departure / suspected exposure), zero-downtime
+  via a dual-trust overlap (trust old + new → re-issue → drop old). **Confirmed compromise → revoke
+  first** (drop the CA, converge) then re-key.
+- Full step-by-step (incl. `deploy`/`automation` key rotation and provider tokens):
+  **`docs/runbooks/secret-rotation.md`**.

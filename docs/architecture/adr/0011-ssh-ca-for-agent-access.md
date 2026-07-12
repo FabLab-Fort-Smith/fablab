@@ -35,6 +35,13 @@ Adopt an **SSH certificate authority (CA)** for user authentication:
   unless the role grants it).
 - **The CA private key is the crown jewel** and is never in the repo, never on an agent. It lives
   offline / in the secret store, or inside a networked issuer that authenticates requesters.
+- **Key lifecycle (honors `@rules/workflow-secrets.md`, `@rules/std-zero-trust.md`, master §5):**
+  no key is valid forever. Certs auto-expire (1h/8h). The **CA key rotates ≤ 12 months** and on
+  maintainer departure / suspected exposure, zero-downtime via a **dual-trust overlap** (trust old +
+  new, re-issue, drop old). Certs can be **revoked before expiry via a KRL** (`ssh_ca_krl_content`);
+  the long-lived `deploy`/`automation` `authorized_keys` are reviewed quarterly and rotated on
+  offboard/exposure. On confirmed compromise: **revoke first**, then rotate. Full procedure:
+  `docs/runbooks/secret-rotation.md`.
 
 **Issuer backends (the trust model on machines is identical; only the issuer changes):**
 
