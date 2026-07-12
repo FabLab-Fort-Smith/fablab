@@ -8,8 +8,10 @@ on:
   pull_request:
     types: [opened, reopened, synchronize, closed]
 
-# No repository permissions needed — this job only calls the Cloudflare API with a secret.
-permissions: {}
+# Least privilege: only read access, needed by actions/checkout on this PRIVATE repo. The job
+# otherwise just calls the Cloudflare API with a secret — no write/PR/deployment scopes.
+permissions:
+  contents: read
 
 concurrency:
   group: preview-dns-${{ github.event.pull_request.number }}
