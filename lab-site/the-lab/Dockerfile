@@ -23,6 +23,7 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
+    HOSTNAME=0.0.0.0 \
     PORT=3000
 RUN apk add --no-cache curl && addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
 # Standalone output + the assets it does NOT bundle (static chunks, public/ incl. PWA sw).
@@ -34,4 +35,4 @@ EXPOSE 3000
 # Liveness: the server answers on the port (any HTTP response = up). Coolify may override.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)).then(()=>process.exit(0)).catch(()=>process.exit(1))"
-CMD ["node", "server.js"]
+CMD ["sh", "-c", "HOSTNAME=0.0.0.0 exec node server.js"]
