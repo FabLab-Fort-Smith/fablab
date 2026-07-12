@@ -1,0 +1,17 @@
+---
+# Backups (ADR 0007/0010: self-hosted MongoDB on the VPS = our responsibility).
+# The dump is encrypted at rest with age and shipped off-box with restic. Secrets/config come
+# from ../.env at converge (never group_vars — @rules/workflow-secrets.md); empty = feature off,
+# and the backup script falls back to LOCAL-ONLY with a loud warning (fail loud, not silent).
+backups_enabled: true
+backups_local_dir: "/var/backups/fablab"
+backups_schedule_hour: 3                 # daily mongodump at 03:00 UTC (monotonic-safe cron)
+backups_local_retention_days: 7          # local copies pruned after N days (off-box keeps longer)
+
+# Install the encryption/off-box tooling (also needed to RESTORE). Cheap; keep present.
+backups_install_tools: true
+
+# Off-box retention on the restic repo (independent of local retention).
+backups_restic_keep_daily: 7
+backups_restic_keep_weekly: 4
+backups_restic_keep_monthly: 6

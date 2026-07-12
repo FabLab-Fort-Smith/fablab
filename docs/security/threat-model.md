@@ -2,7 +2,9 @@
 
 STRIDE over the deploy pipeline **and** the migrated application's data flows, per
 `@rules/workflow-threat-model.md`. Done at design time; revisit when the design changes.
-Status: **initial draft** (pre-implementation/migration).
+Status: **staging implemented** (2026-07-12) — the deploy-pipeline controls are in place on the
+VPS (staging live). App-side items (R4/R9/R10) track The-Lab, and migration (R11) is deferred —
+both stay as they are until the production cutover. Revisit before cutover and the PCI production flip.
 
 ## Scope & assets
 
@@ -90,14 +92,14 @@ Public/low-value: website content and source (The-Lab is private today but inten
 
 | ID | Threat | Boundary | Severity | Status |
 |----|--------|----------|:--------:|--------|
-| R1 | Forged/unauthenticated webhook triggers deploy | B2 | High | Planned (HMAC verify) |
-| R2 | Malicious repo escapes build sandbox → host | B3/B4 | High | Planned (isolated builds) |
-| R3 | Coolify dashboard/API exposed | B2 | High | Planned (auth + Access/allow-list) |
-| R4 | NoSQL injection in app | B7 | High | Planned (typed validation) |
-| R5 | MongoDB exposed / data loss on single VPS | B7/Host | High | Planned (private net + backups/restore) |
+| R1 | Forged/unauthenticated webhook triggers deploy | B2 | High | Implemented (Coolify HMAC-verifies webhooks per source secret) |
+| R2 | Malicious repo escapes build sandbox → host | B3/B4 | High | Implemented by design (Coolify isolated/ephemeral container builds) |
+| R3 | Coolify dashboard/API exposed | B2 | High | Implemented (tailnet-only admin + Cloudflare Access maintainers+MFA — ADR 0012) |
+| R4 | NoSQL injection in app | B7 | High | Planned (app-side typed validation; app unchanged/on Vercel) |
+| R5 | MongoDB exposed / data loss on single VPS | B7/Host | High | Implemented (private-net-only, no host port; nightly backup + tested restore drill; age/restic off-box opt-in) |
 | R6 | Cardholder data mishandled | B9 | High | Mitigated by design (Square tokenized; no SAD stored) |
-| R7 | Direct-to-origin bypass of Cloudflare | B6 | Medium | Planned (origin firewall) |
-| R8 | Preview env reaches prod data/secrets | B3/B4 | Medium | Planned (isolation, no prod secrets) |
+| R7 | Direct-to-origin bypass of Cloudflare | B6 | Medium | Implemented (UFW allows only Cloudflare ranges to 80/443) |
+| R8 | Preview env reaches prod data/secrets | B3/B4 | Medium | Mitigated by design (per-PR previews inherit the staging/sandbox env; no prod secrets on this app — prod is Vercel; proxied per-PR CF record, no firewall relax). Re-verify at prod cutover |
 | R9 | Prompt injection / unsafe LLM output | B8 | Medium | Planned (untrusted output, injection tests) |
 | R10 | Forge account takeover → malicious deploy | B1 | Medium | Planned (MFA, branch protection, signing) |
 | R11 | Data migration loss/corruption (Vercel→VPS) | B7 | Medium | Planned (export+restore+reconcile — ADR 0006) |
