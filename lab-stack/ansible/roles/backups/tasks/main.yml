@@ -1,18 +1,89 @@
 ---
-# MongoDB backups (ADR 0007: the DB is on the VPS = our responsibility).
-# Encrypted dump + off-box copy + a restore script. An untested backup is not a backup —
-# schedule a restore drill (docs/runbooks/backup-restore.md, @rules/workflow-data-lifecycle.md).
+# MongoDB backups (ADR 0007/0010: the DB is on the VPS = our responsibility).
+# Dump -> encrypt at rest (age) -> ship off-box (restic) -> local retention, plus a restore
+# script. An untested backup is not a backup — drill it (lab-stack/scripts/mongo-restore-drill.sh,
+# docs/runbooks/backup-restore.md, @rules/workflow-data-lifecycle.md).
 #
-# STATUS: drafted — the off-box target (restic/S3) and the Mongo connection are wired via the
-# secret store, not committed. Validate end-to-end (dump + restore) before relying on it.
+# Encryption/off-box are OPT-IN via ../.env: with nothing configured the backup still runs but is
+# LOCAL-ONLY and warns loudly (fail loud). Set BACKUP_AGE_RECIPIENT + RESTIC_* to enable.
+
+- name: Capture backup config from ../.env (public recipient + off-box creds; never logged)
+  ansible.builtin.set_fact:
+    backups_age_recipient: "{{ lookup('ansible.builtin.env', 'BACKUP_AGE_RECIPIENT') }}"
+    backups_restic_repository: "{{ lookup('ansible.builtin.env', 'RESTIC_REPOSITORY') }}"
+    backups_restic_password: "{{ lookup('ansible.builtin.env', 'RESTIC_PASSWORD') }}"
+    backups_s3_access_key_id: "{{ lookup('ansible.builtin.env', 'BACKUP_S3_ACCESS_KEY_ID') }}"
+    backups_s3_secret_access_key: "{{ lookup('ansible.builtin.env', 'BACKUP_S3_SECRET_ACCESS_KEY') }}"
+  no_log: true
+
+- name: Fail closed if an off-box repo is configured without its password
+  ansible.builtin.assert:
+    that:
+      - not (backups_restic_repository | length > 0) or (backups_restic_password | length > 0)
+    fail_msg: "RESTIC_REPOSITORY is set but RESTIC_PASSWORD is empty — set both in ../.env or neither."
+  no_log: true
+
+- name: Install backup tooling (age + restic — also required to restore)
+  ansible.builtin.apt:
+    name:
+      - age
+      - restic
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: backups_install_tools | default(true)
 
 - name: Ensure backup dir exists (root-only)
   ansible.builtin.file:
-    path: "{{ backup_local_dir | default('/var/backups/fablab') }}"
+    path: "{{ backups_local_dir }}"
     state: directory
     owner: root
     group: root
     mode: "0700"
+
+- name: Ensure /etc/fablab exists (root-only)
+  ansible.builtin.file:
+    path: /etc/fablab
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Render backup encryption + off-box config (0600, root-only)
+  ansible.builtin.template:
+    src: backup.env.j2
+    dest: /etc/fablab/backup.env
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+# Initialize the restic repo on first use only (idempotent): `cat config` succeeds iff the repo
+# already exists; init otherwise. Skipped entirely when off-box isn't configured.
+- name: Check whether the restic repository is initialized
+  ansible.builtin.command: restic cat config
+  environment:
+    RESTIC_REPOSITORY: "{{ backups_restic_repository }}"
+    RESTIC_PASSWORD: "{{ backups_restic_password }}"
+    AWS_ACCESS_KEY_ID: "{{ backups_s3_access_key_id }}"
+    AWS_SECRET_ACCESS_KEY: "{{ backups_s3_secret_access_key }}"
+  register: backups_restic_cat
+  changed_when: false
+  failed_when: false
+  when: backups_restic_repository | length > 0
+  no_log: true
+
+- name: Initialize the restic repository if absent
+  ansible.builtin.command: restic init
+  environment:
+    RESTIC_REPOSITORY: "{{ backups_restic_repository }}"
+    RESTIC_PASSWORD: "{{ backups_restic_password }}"
+    AWS_ACCESS_KEY_ID: "{{ backups_s3_access_key_id }}"
+    AWS_SECRET_ACCESS_KEY: "{{ backups_s3_secret_access_key }}"
+  when:
+    - backups_restic_repository | length > 0
+    - backups_restic_cat.rc | default(1) != 0
+  no_log: true
 
 - name: Install backup script
   ansible.builtin.template:
@@ -22,10 +93,17 @@
     group: root
     mode: "0700"
 
-- name: Schedule daily encrypted backup
+- name: Schedule daily backup (dump -> age -> restic off-box)
   ansible.builtin.cron:
     name: fablab-mongo-backup
     user: root
     minute: "0"
-    hour: "{{ backup_schedule_hour | default(3) }}"
+    hour: "{{ backups_schedule_hour }}"
     job: "/usr/local/sbin/fablab-backup-mongo >> /var/log/fablab-backup.log 2>&1"
+
+- name: Warn when backups are local-only (encryption/off-box not configured)
+  ansible.builtin.debug:
+    msg:
+      - "Backups are LOCAL-ONLY and UNENCRYPTED at rest — set BACKUP_AGE_RECIPIENT + RESTIC_* in ../.env."
+      - "See docs/runbooks/backup-restore.md (Enabling encryption + off-box)."
+  when: backups_age_recipient | length == 0 or backups_restic_repository | length == 0

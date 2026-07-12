@@ -30,11 +30,42 @@ summary: Back up the self-hosted MongoDB and run a strict, automated restore dri
 ## How the backup works
 `/usr/local/sbin/fablab-backup-mongo` runs an ephemeral `mongo:7.0` container on the `fablab`
 network, `mongodump --uri="$MONGODB_URI" --archive --gzip` (URI from `/etc/fablab/mongo.env`), to
-a timestamped archive. **The app user must authenticate** for the dump to contain data — a broken
-app user yields a valid-looking but empty archive (see "Known failure" below).
+a timestamped archive, then: (2) **encrypts at rest with `age`** to `<archive>.age` and shreds the
+plaintext; (3) **ships off-box with `restic`** (its own repo encryption + dedup + integrity +
+retention); (4) prunes local copies after `backup_local_retention_days` (7). **The app user must
+authenticate** for the dump to contain data — a broken app user yields a valid-looking but empty
+archive (see "Known failure" below).
 
-> **TODO (tracked):** the archive is currently **unencrypted and on-box only**. Before production,
-> add age/`restic` encryption + off-box shipping (the SPOF mitigation in `lab-stack/CLAUDE.md`).
+Encryption/off-box are **opt-in** (config from `/etc/fablab/backup.env`, rendered from `../.env`).
+With nothing set, the backup still runs but is **local-only and unencrypted at rest**, and the
+script + a converge task **warn loudly**. Two independent controls, by design:
+- **age** — the recipient on the box is a **public** key; the private identity stays **offline**
+  with the maintainer, so the box **cannot decrypt its own backups** (a box compromise never
+  exposes backup contents). Key-to-encrypt ≠ creds-to-access (master §5).
+- **restic** — off-box copy (survives VPS loss), repo-level encryption, and retention
+  (`--keep-daily/weekly/monthly --prune`).
+
+### Enabling encryption + off-box (one-time, deliberate)
+1. **age identity (offline, on your workstation — NOT the box):** `age-keygen -o fablab-backup.key`
+   → note the `# public key: age1…` line. Store `fablab-backup.key` **securely offline** (it's the
+   only way to decrypt backups). Put the **public** key in `../.env` `BACKUP_AGE_RECIPIENT=age1…`.
+2. **restic off-box repo:** create a **backup-only** S3 bucket + a least-privilege key pair (NOT
+   the app's S3 creds). Set in `../.env`: `RESTIC_REPOSITORY=s3:<endpoint>/<bucket>/fablab-mongo`,
+   `RESTIC_PASSWORD=<strong, stored safely — unrecoverable if lost>`,
+   `BACKUP_S3_ACCESS_KEY_ID=…`, `BACKUP_S3_SECRET_ACCESS_KEY=…`.
+3. `make converge` — installs `age`+`restic`, writes `/etc/fablab/backup.env` (0600), and
+   **initializes the restic repo** (idempotent). Then run `sudo /usr/local/sbin/fablab-backup-mongo`
+   once and confirm `encrypted (age)` + `shipped off-box (restic)` in the output.
+
+### Decrypt / restore from off-box (restic)
+```bash
+# On the box (or anywhere restic + the repo creds + the age identity are available):
+export RESTIC_REPOSITORY=… RESTIC_PASSWORD=… AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=…
+restic snapshots --tag mongo                 # list off-box backups
+restic restore latest --tag mongo --target /tmp/restore   # pull the .age archive
+age -d -i fablab-backup.key -o mongo.archive.gz /tmp/restore/**/mongo-*.archive.gz  # decrypt (OFFLINE key)
+# …then mongorestore the .archive.gz as in "Real restore" below.
+```
 
 ## Restore drill (do this on a schedule)
 Automated + strict — fails loudly on any auth/backup/restore error, restores into a throwaway DB,
