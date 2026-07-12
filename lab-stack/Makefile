@@ -5,7 +5,7 @@
 .DEFAULT_GOAL := help
 ANSIBLE_DIR := ansible
 
-.PHONY: help setup secrets deps lint test ping converge converge-check ssh-ca-init ssh-ca-sign racknerd coolify-plan coolify-apply
+.PHONY: help setup secrets deps lint test ping converge converge-check ssh-ca-init ssh-ca-sign racknerd coolify-plan coolify-apply dns access
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -41,6 +41,9 @@ converge: ## GATED: apply host config (harden + docker + mongodb + coolify + bac
 
 dns: ## GATED: create/update Cloudflare DNS for the VPS (deploy/staging/preview; apex untouched)
 	bash cloudflare/dns.sh
+
+access: ## GATED: apply Cloudflare Access to the Coolify dashboard (webhooks bypass + maintainers-only). ARGS=--dry-run
+	bash cloudflare/access.sh $(ARGS)
 
 coolify: ## Validate the Coolify API + print the remaining (UI) setup steps
 	bash coolify/bootstrap.sh
