@@ -96,7 +96,19 @@ for k in "${REQUIRED_APP_PROVIDER_KEYS[@]}"; do printf '  %s %s\n' "$(kstat "$k"
 printf '\n'
 
 # --- 2. collect connection details -------------------------------------------
-ask LAB_VPS_HOST "VPS host / IP" "$(env_get "$ENV_FILE" LAB_VPS_HOST)"
+# Optional: if RackNerd SolusVM API creds are configured, auto-discover the VPS IP so it doesn't
+# have to be pasted by hand (control-plane only; falls back to the prompt on any failure).
+host_default="$(env_get "$ENV_FILE" LAB_VPS_HOST)"
+case "$host_default" in ""|CHANGEME_VPS_IP) host_default="" ;; esac
+if [ -z "$host_default" ] && { [ -n "${RACKNERD_API_KEY:-}" ] || [ -n "$(env_get "$ENV_FILE" RACKNERD_API_KEY)" ]; }; then
+  printf 'RackNerd API creds detected — looking up the VPS IP…\n'
+  if discovered="$(bash racknerd/api.sh ip 2>/dev/null)" && [ -n "$discovered" ]; then
+    info "✓ discovered VPS IP: $discovered"; host_default="$discovered"
+  else
+    warn "RackNerd IP lookup failed — enter the IP manually below"
+  fi
+fi
+ask LAB_VPS_HOST "VPS host / IP" "$host_default"
 case "$LAB_VPS_HOST" in ""|CHANGEME_VPS_IP) die "a real VPS host/IP is required to continue";; esac
 env_set "$ENV_FILE" LAB_VPS_HOST "$LAB_VPS_HOST"
 ask SSH_PORT "SSH port" "${SSH_PORT:-$(inv_get ansible_port)}"; SSH_PORT="${SSH_PORT:-22}"

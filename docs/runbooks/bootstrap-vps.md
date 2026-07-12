@@ -118,6 +118,13 @@ the Cloudflare Access policy. The detailed steps below explain each stage.
 1. RackNerd → order the 8 GB KVM VPS, OS = **Ubuntu 24.04**. Note the **public IP**.
 2. (Optional) set reverse DNS / hostname `fablab-prod`.
 
+> **Optional — RackNerd SolusVM API** (`lab-stack/racknerd/`): enable the API on the VPS (panel →
+> **API** tab), put the per-VPS `RACKNERD_API_KEY`/`RACKNERD_API_HASH` in `../.env`, and `make
+> setup` will **auto-discover the IP** (no manual paste) and `make provision` will report power
+> state. It's **control-plane only** — it can't create or reinstall the box (panel/WHMCS) and
+> isn't the config transport (Ansible uses SSH). Power ops (`make racknerd ARGS="reboot --yes"`)
+> are gated. See `lab-stack/racknerd/README.md`.
+
 ## 2. First-boot access (non-custodial — ADR 0008)
 Administration is **not** tied to one person: Ansible creates a shared **`deploy` role account**
 whose keys (`deploy_authorized_keys` in `group_vars` — one per maintainer + one for CI) are the

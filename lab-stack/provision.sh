@@ -26,6 +26,11 @@ preflight() {
   [ -f ansible/inventory.ini ]       || { echo "  ✖ ansible/inventory.ini missing (cp inventory.example.ini)"; exit 1; }
   [ -f ansible/group_vars/all.yml ]  || { echo "  ✖ ansible/group_vars/all.yml missing (cp all.example.yml)"; exit 1; }
   [ "$miss" -eq 0 ] || echo "  (install the missing tools before converge/dns)"
+  # Optional control-plane check: if RackNerd SolusVM API creds are set, report power state
+  # (read-only, non-fatal — SSH is the real gate below).
+  if [ -n "${RACKNERD_API_KEY:-}" ] || [ -n "$(sed -n 's/^RACKNERD_API_KEY=//p' ../.env 2>/dev/null | head -n1)" ]; then
+    if st="$(bash racknerd/api.sh status 2>/dev/null)"; then echo "  • RackNerd power state: $st"; else echo "  • RackNerd status check skipped (API error)"; fi
+  fi
   echo "  • checking SSH reachability…"
   (cd ansible && ansible lab_vps -m ping)
   echo "  ✓ preflight ok"

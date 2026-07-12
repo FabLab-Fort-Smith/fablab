@@ -5,7 +5,7 @@
 .DEFAULT_GOAL := help
 ANSIBLE_DIR := ansible
 
-.PHONY: help setup secrets deps lint test ping converge converge-check ssh-ca-init ssh-ca-sign
+.PHONY: help setup secrets deps lint test ping converge converge-check ssh-ca-init ssh-ca-sign racknerd
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -21,13 +21,14 @@ deps: ## Install Ansible Galaxy collections
 
 lint: ## Lint Ansible + all shell scripts (yamllint/ansible-lint/shellcheck if installed)
 	cd $(ANSIBLE_DIR) && ansible-lint || true
-	@command -v shellcheck >/dev/null && shellcheck provision.sh cloudflare/*.sh coolify/*.sh scripts/*.sh cloud-init/*.sh 2>/dev/null || echo "(shellcheck not installed — skipping)"
+	@command -v shellcheck >/dev/null && shellcheck provision.sh cloudflare/*.sh coolify/*.sh scripts/*.sh cloud-init/*.sh racknerd/*.sh 2>/dev/null || echo "(shellcheck not installed — skipping)"
 
 test: ## Run script unit tests (no network / no VPS needed)
 	bash scripts/collect-keys.test.sh
 	bash scripts/setup.test.sh
 	bash scripts/gen-secrets.test.sh
 	bash ssh-ca/sign-ssh-cert.test.sh
+	bash racknerd/api.test.sh
 
 ping: ## Verify SSH/connectivity to the VPS (inventory.ini required)
 	cd $(ANSIBLE_DIR) && ansible lab_vps -m ping
@@ -54,3 +55,6 @@ ssh-ca-init: ## Generate an OFFLINE SSH CA keypair (ssh-ca/fablab_ssh_ca[.pub]);
 
 ssh-ca-sign: ## Mint a short-lived cert: make ssh-ca-sign PUB=agent.pub ROLE=ops ID=agent:name [TTL=15m]
 	bash ssh-ca/sign-ssh-cert.sh --ca ssh-ca/fablab_ssh_ca --pubkey "$(PUB)" --role "$(ROLE)" --identity "$(ID)" $(if $(TTL),--ttl $(TTL),)
+
+racknerd: ## RackNerd SolusVM API (control-plane): make racknerd ARGS="ip|status|info|reboot --yes"
+	bash racknerd/api.sh $(ARGS)
