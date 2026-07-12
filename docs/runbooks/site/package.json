@@ -1,0 +1,17 @@
+{
+  "name": "fablab-runbooks-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Generates an interactive, accessible web catalog of the fablab runbooks from docs/runbooks/*.md. Source of truth stays the markdown; this only renders it.",
+  "scripts": {
+    "build": "node build.mjs",
+    "serve": "node serve.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "gray-matter": "4.0.3",
+    "markdown-it": "14.3.0",
+    "markdown-it-task-lists": "2.1.1"
+  }
+}

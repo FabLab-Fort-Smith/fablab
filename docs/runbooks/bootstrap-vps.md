@@ -1,3 +1,11 @@
+---
+title: Bootstrap the VPS
+category: Provisioning & Setup
+usage: One-time / rebuild
+order: 10
+summary: Stand up the deploy platform on a fresh VPS and run The-Lab alongside Vercel (no cutover yet).
+---
+
 # Runbook: Bootstrap the VPS (full setup & configuration)
 
 > Stand up the deploy platform on a fresh VPS and run **The-Lab** on it **in parallel with

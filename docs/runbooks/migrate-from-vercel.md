@@ -1,3 +1,11 @@
+---
+title: Migrate The-Lab from Vercel to Coolify
+category: Deploy & Release
+usage: Gated cutover (one-time)
+order: 20
+summary: The gated production cutover from Vercel to the self-hosted Coolify platform — do-not-break-Vercel guardrails.
+---
+
 # Runbook: Migrate The-Lab from Vercel to Coolify
 
 > Parallel-run → migrate data → validate → DNS cutover → decommission. Rules:

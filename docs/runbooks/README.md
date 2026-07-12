@@ -3,6 +3,12 @@
 Operational procedures for the deploy platform, per `@rules/workflow-runbooks.md`. Each is
 step-by-step and executable by someone who didn't write it.
 
+> **Interactive catalog:** these runbooks also render as an interactive, accessible **web
+> checklist catalog** (grouped by category & usage, with per-runbook progress) — build it from
+> `site/` (`cd site && npm ci && npm run build && npm run serve`, tailnet-only, never public).
+> Source stays the markdown here; see `site/README.md`. Add front-matter (`category`, `usage`,
+> `order`, `summary`) to a runbook to place it in the catalog.
+
 > **Status:** to be written once `lab-stack` is provisioned. Copy from the SSDLC templates in
 > `~/.claude/rules/runbooks/` and fill in real commands. An untested runbook is a hypothesis —
 > validate each in a drill.

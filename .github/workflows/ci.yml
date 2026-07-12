@@ -102,6 +102,29 @@ jobs:
       - name: SCA (dependency audit — block on high/critical)
         run: npm audit --audit-level=high
 
+  runbook-site:
+    name: Runbook site (build + tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: docs/runbooks/site
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: docs/runbooks/site/package-lock.json
+      - name: Install (clean, from lockfile)
+        run: npm ci
+      - name: Build the interactive runbook catalog
+        run: npm run build
+      - name: Test (structure + a11y basics + self-contained output)
+        run: npm test
+      - name: SCA (dependency audit — block on high/critical)
+        run: npm audit --audit-level=high
+
   sast:
     name: SAST (semgrep)
     needs: detect
