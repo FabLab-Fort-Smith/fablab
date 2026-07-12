@@ -18,6 +18,8 @@
 
   roles:
     - role: harden      # CIS-aligned: ssh, ufw (+ Cloudflare lock), fail2ban, auto-updates, sysctl
+    - role: ssh_ca      # trust an SSH CA for short-lived, principal-scoped agent certs — ADR 0011
+      when: ssh_ca_enabled | default(false)
     - role: deploy_account   # shared, non-custodial role account (broad, human-run) — ADR 0008
       when: manage_deploy_account | default(false)
     - role: automation_account   # scoped least-privilege CI/ops identity — ADR 0009

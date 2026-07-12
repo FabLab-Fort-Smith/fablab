@@ -5,7 +5,7 @@
 .DEFAULT_GOAL := help
 ANSIBLE_DIR := ansible
 
-.PHONY: help setup secrets deps lint test ping converge converge-check
+.PHONY: help setup secrets deps lint test ping converge converge-check ssh-ca-init ssh-ca-sign
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -45,3 +45,11 @@ coolify: ## Validate the Coolify API + print the remaining (UI) setup steps
 
 provision: ## GATED: run the whole pipeline — preflight -> converge -> dns -> coolify
 	bash provision.sh all
+
+ssh-ca-init: ## Generate an OFFLINE SSH CA keypair (ssh-ca/fablab_ssh_ca[.pub]); private key is git-ignored
+	@test -f ssh-ca/fablab_ssh_ca && { echo "CA key already exists — refusing to overwrite"; exit 1; } || true
+	ssh-keygen -t ed25519 -f ssh-ca/fablab_ssh_ca -C fablab-ssh-ca -N ""
+	@echo "CA public key (put in group_vars ssh_ca_public_key):" && cat ssh-ca/fablab_ssh_ca.pub
+
+ssh-ca-sign: ## Mint a short-lived cert: make ssh-ca-sign PUB=agent.pub ROLE=ops ID=agent:name [TTL=15m]
+	bash ssh-ca/sign-ssh-cert.sh --ca ssh-ca/fablab_ssh_ca --pubkey "$(PUB)" --role "$(ROLE)" --identity "$(ID)" $(if $(TTL),--ttl $(TTL),)
