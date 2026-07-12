@@ -112,7 +112,8 @@ app_payload(){
     '{project_uuid:$project_uuid, server_uuid:$server_uuid, environment_name:$environment_name,
       github_app_uuid:$github_app_uuid, git_repository:$git_repository, git_branch:$git_branch,
       build_pack:$build_pack, base_directory:$base_directory, dockerfile_location:$dockerfile_location,
-      ports_exposes:$ports_exposes, domains:$domains, name:$name, instant_deploy:false}'
+      ports_exposes:$ports_exposes, domains:$domains, name:$name, instant_deploy:false,
+      is_auto_deploy_enabled:true}'
 }
 
 if [ "$DRY" -eq 1 ]; then
@@ -138,7 +139,8 @@ if [ -z "$APP_UUID" ]; then
   info "created app $APP_UUID"
 else
   echo "== update application settings =="
-  resp="$(api PATCH "applications/$APP_UUID" "$(app_payload)")"
+  # PATCH rejects create-only fields (project/server/environment/github_app) with 422 — omit them.
+  resp="$(api PATCH "applications/$APP_UUID" "$(app_payload | jq 'del(.project_uuid,.server_uuid,.environment_name,.github_app_uuid)')")"
   ok2xx || warn "update returned HTTP $(code): $resp"
 fi
 
