@@ -1,0 +1,13 @@
+---
+# Auth key from the runtime environment (never committed/logged). Create one in the Tailscale
+# admin console (Settings > Keys): reusable or one-time, pre-approved, optionally tagged.
+# Do NOT use an EPHEMERAL key — this is a persistent server; ephemeral nodes are removed when offline.
+tailscale_authkey: "{{ lookup('ansible.builtin.env', 'TAILSCALE_AUTHKEY') }}"
+tailscale_hostname: "fablab-prod"
+tailscale_accept_dns: false          # don't let the tailnet override the VPS resolver
+# Ports on the host that tailnet devices may reach. Coolify dashboard = 8000. Add 80/443 to also
+# serve the app/domain over the tailnet. Least-privilege: only what you need.
+tailscale_allowed_ports: [8000]
+tailscale_src_ranges:
+  - "100.64.0.0/10"                  # Tailscale IPv4 (CGNAT) range
+  - "fd7a:115c:a1e0::/48"            # Tailscale IPv6 (ULA) range
