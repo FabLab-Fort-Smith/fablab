@@ -30,8 +30,15 @@ jobs:
           LAB_VPS_HOST: ${{ secrets.LAB_VPS_HOST }}                    # VPS public IP (origin)
           LAB_PRIMARY_DOMAIN: fablabfortsmith.org                      # public; zone auto-resolved
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          ACTION: ${{ github.event.action }}
         run: |
-          if [ "${{ github.event.action }}" = "closed" ]; then
+          # Skip cleanly until previews are enabled (secrets set) — so PRs aren't red pre-enablement.
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${LAB_VPS_HOST}" ]; then
+            echo "Preview DNS not configured (missing CLOUDFLARE_API_TOKEN / LAB_VPS_HOST secrets) — skipping."
+            echo "Enable per docs: lab-stack/coolify/README.md §6."
+            exit 0
+          fi
+          if [ "${ACTION}" = "closed" ]; then
             bash lab-stack/cloudflare/preview-dns.sh delete "$PR_NUMBER"
           else
             bash lab-stack/cloudflare/preview-dns.sh upsert "$PR_NUMBER"
