@@ -26,7 +26,9 @@ step-by-step and executable by someone who didn't write it.
 - [ ] **rollback.md** — roll a site back to a previous Coolify deployment.
 - [x] **secret-rotation.md** — rotate the SSH CA key + certs (KRL revoke), deploy/automation keys,
       app/local secrets, and provider tokens; zero-downtime, revoke-first on compromise.
-- [ ] **backup-restore.md** — back up Coolify config + site data; **tested** restore drill.
+- [x] **backup-restore.md** — back up the self-hosted MongoDB; **tested** restore drill (strict,
+      automated: `lab-stack/scripts/mongo-restore-drill.sh`). *(validated 2026-07-12 — caught + fixed
+      a missing app user)*
 - [ ] **incident-response.md** — triage/contain/recover (esp. compromised webhook or build).
 - [ ] **add-new-site.md** — add a `lab-site/<new-site>/` and wire it as a Coolify application.
 - [ ] **on-call.md** — alert response & escalation.

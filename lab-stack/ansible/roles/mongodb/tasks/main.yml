@@ -3,7 +3,9 @@
 # published host port). Root creds + a least-privilege app user/db are created from the
 # generated secrets in ../.env (ADR 0010). Idempotent; safe to re-run (ADR 0004).
 #
-# STATUS: drafted — validate on the real VPS (dump + connect from the app) before relying on it.
+# STATUS: validated on the real VPS (2026-07-12) — root auth, app-user reconcile, and a
+# backup + restore drill all pass. The app user is reconciled every converge (below); the
+# first-boot init script is a best-effort fast path, not the source of truth.
 
 - name: Require MongoDB secrets (from ../.env via `make converge`; generate with `make secrets`)
   ansible.builtin.assert:
@@ -64,6 +66,46 @@
   changed_when: >-
     ('Started' in mongodb_compose.stderr) or ('Created' in mongodb_compose.stderr)
     or ('Recreated' in mongodb_compose.stderr)
+
+# The init script (10-app-user.js) only runs on a first, empty-volume boot. If that never
+# fires (volume already existed, init errored, etc.) the app user is silently absent and the
+# app can't authenticate. So reconcile it every converge — authoritative, and it also
+# propagates an app-password rotation to the live user (@rules/topic-database.md).
+- name: Wait for MongoDB to accept root authentication
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -e RP={{ mongodb_root_pw | quote }} {{ mongodb_container_name }}
+      sh -c 'mongosh --quiet -u root -p "$RP" --authenticationDatabase admin
+      --eval "db.adminCommand({ping:1}).ok"'
+  register: mongodb_ping
+  until: mongodb_ping.rc == 0 and (mongodb_ping.stdout | trim) == '1'
+  retries: 20
+  delay: 3
+  changed_when: false
+  no_log: true
+
+- name: Reconcile the least-privilege app user (create-or-update; idempotent)
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -e RP={{ mongodb_root_pw | quote }} -e AP={{ mongodb_app_pw | quote }}
+      -e AU={{ mongodb_app_user | quote }} -e ADB={{ mongodb_app_db | quote }}
+      {{ mongodb_container_name }} sh -c 'mongosh --quiet -u root -p "$RP"
+      --authenticationDatabase admin --eval "
+      var adb=process.env.ADB, au=process.env.AU, ap=process.env.AP;
+      var d=db.getSiblingDB(adb);
+      if (d.getUsers().users.some(function(u){return u.user===au;})) {
+        d.changeUserPassword(au, ap);
+        d.updateUser(au, {roles:[{role:\"readWrite\", db:adb}]});
+        print(\"reconciled:updated\");
+      } else {
+        d.createUser({user:au, pwd:ap, roles:[{role:\"readWrite\", db:adb}]});
+        print(\"reconciled:created\");
+      }"'
+  register: mongodb_appuser
+  # The update path re-asserts the same password each run (a harmless no-op unless rotated);
+  # only report "changed" when the user was actually created.
+  changed_when: "'reconciled:created' in mongodb_appuser.stdout"
+  no_log: true
 
 - name: Ensure the backup env-file directory exists (root-only)
   ansible.builtin.file:
