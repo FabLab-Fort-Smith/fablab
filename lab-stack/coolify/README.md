@@ -11,19 +11,28 @@ back up Coolify's own config/DB regularly so this is reproducible.
 - Create a dedicated **API token for CI/automation** (revocable; not a human's session) — that's
   what `coolify/bootstrap.sh` and any scheduled ops use. Never share or commit it.
 - Put the dashboard (`deploy.<domain>`) behind **Cloudflare Access** or an IP allow-list; never
-  expose it openly (threat model R3).
+  expose it openly (threat model R3). *(Applied 2026-07-12 — `cloudflare/access.sh` gates the
+  dashboard to maintainers+MFA with a bypass for `/webhooks`; primary admin path is the tailnet
+  `http://fablab-prod:8000`, ADR 0012.)*
 
-## 2. MongoDB service (ADR 0007)
-- Add a **MongoDB** resource on Coolify's **private network only** (not publicly exposed).
-- Strong root credential + a **least-privilege app user/db**; enable TLS + at-rest encryption.
-- The app reads `MONGODB_URI` from the secret store — not committed.
-- Confirm `ansible/roles/backups` can reach it (dump + restore drill — `docs/runbooks/backup-restore.md`).
+## 2. MongoDB (ADR 0010 — Ansible-managed, NOT a Coolify service)
+- MongoDB is provisioned by `ansible/roles/mongodb` as a **standalone Docker container** on the
+  private `fablab` network — **do not add a Coolify database service** (this supersedes the
+  Coolify-managed service in ADR 0007). Root + a least-privilege app user/db are created and
+  **reconciled every converge**.
+- In Coolify, **attach the app to the `fablab` docker network** so it resolves `fablab-mongo`.
+- `MONGODB_URI` is written root-only to `/etc/fablab/mongo.env` on the VPS and set on the app via
+  the env sync (`reconcile.sh`) — not committed.
+- `ansible/roles/backups` dumps nightly with a tested restore drill
+  (`docs/runbooks/backup-restore.md`); age-at-rest + restic off-box are opt-in.
 
 ## 3. The app (`lab-site/the-lab`)
-- New application from the Git source (see step 4). Set **Base Directory = `lab-site/the-lab`**
-  (monorepo subdir — ADR 0005). Build via the app's **Dockerfile** (Next.js `output: 'standalone'`).
-- Environments → branches: **production = `main`**, **staging = `dev`**. Enable **PR preview
-  deployments** with wildcard domain `*.preview.<domain>` (step in ../cloudflare).
+- Created/reconciled from code by **`reconcile.sh`** (`make coolify-apply`, §"Automated app
+  config" below) — **Base Directory = `lab-site/the-lab`** (monorepo subdir — ADR 0005), built
+  via the app's **Dockerfile** (Next.js `output: 'standalone'`), on port 3000.
+- Environments → branches: **`dev` → staging is LIVE** (`https://staging.fablabfortsmith.org`,
+  auto-deploy on push). **`main` → production** is the cutover target (apex still on Vercel — ADR
+  0006). **PR preview deployments** (`*.preview.<domain>`) are the remaining feature to enable.
 - Inject all app env/secrets (Mongo URI, AUTH_SECRET, S3, SMTP, Square **sandbox first**,
   GenAI, reCAPTCHA — see `../../.env.example`). Preview envs get **no production secrets/data**.
 

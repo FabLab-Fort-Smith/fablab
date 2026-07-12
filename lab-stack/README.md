@@ -14,7 +14,7 @@ preview deployments — the self-hosted equivalent of "Vercel's infrastructure" 
 | Deploy engine | **Coolify** | git-push deploy, preview envs, build, rollback (ADR 0002) |
 | Reverse proxy | **Traefik** (Coolify-managed) | routing + Let's Encrypt TLS (incl. wildcard) |
 | App runtime | **Next.js** containers (`main`/`dev`/`pr-N`) | The-Lab, `output: 'standalone'` |
-| Database | **MongoDB** (Coolify service, private network) | the app's datastore (ADR 0007) |
+| Database | **MongoDB** (standalone, Ansible-managed Docker; private network) | the app's datastore (ADR 0007/0010) |
 | Edge | **Cloudflare** (free) | CDN cache, edge TLS, WAF/DDoS, DNS |
 | Host config | **cloud-init + Ansible** | OS hardening, Docker, Coolify install (ADR 0004) |
 | Source | **GitHub + GitLab** (mirrored) | webhooks → Coolify (ADR 0003) |
@@ -22,29 +22,32 @@ preview deployments — the self-hosted equivalent of "Vercel's infrastructure" 
 **External (not hosted here, ADR 0007):** S3-compatible object storage (`s3.crittercodes.dev`),
 SMTP email, Square payments, Google GenAI — the app connects out; treated as untrusted upstreams.
 
-## Directory layout (scaffolded — drafted, not yet applied)
+## Directory layout (applied — provisioned on the VPS, 2026-07-12)
 
 ```
 lab-stack/
 ├── README.md
 ├── CLAUDE.md
-├── Makefile              # task runner: deps / lint / ping / converge-check / converge
-├── cloud-init/
-│   └── user-data.yaml    # first-boot: deploy user, SSH hardening, UFW, fail2ban, auto-updates
+├── Makefile              # task runner: setup / secrets / lint / test / ping / converge / dns / access / coolify-*
+├── scripts/              # setup.sh, gen-secrets.sh, collect-keys.sh, mongo-restore-drill.sh (+ *.test.sh)
+├── cloud-init/           # first-boot: users, SSH hardening, UFW, fail2ban, auto-updates (+ manual-bootstrap.sh)
 ├── ansible/              # idempotent host convergence
 │   ├── ansible.cfg
 │   ├── requirements.yml  # galaxy collections (community.general, ansible.posix)
 │   ├── inventory.example.ini
 │   ├── group_vars/all.example.yml
-│   ├── playbook.yml      # harden → docker → coolify → backups
-│   └── roles/{harden,docker,coolify,backups}/
-├── coolify/README.md     # dashboard config: MongoDB service, app base-dir, webhooks, TLS
-└── cloudflare/README.md  # DNS (+ *.preview wildcard), origin lockdown, cache/WAF
+│   ├── playbook.yml      # harden → tailscale → ssh_ca → deploy_account → automation_account → docker → mongodb → coolify → backups
+│   └── roles/{harden,deploy_account,automation_account,docker,mongodb,coolify,backups,tailscale,ssh_ca}/
+├── coolify/              # reconcile.sh (API-driven app reconcile) + README (dashboard config)
+├── cloudflare/           # dns.sh, access.sh (Cloudflare Access as code) + README, access-policy.md
+├── racknerd/             # SolusVM control-plane API helper (api.sh)
+└── ssh-ca/               # offline SSH CA + sign-ssh-cert.sh (ADR 0011; present, not enabled)
 ```
 
-> **Drafted, not validated.** The Ansible roles and scripts are starter IaC to review and test
-> on the real VPS — applying them (`make converge`) is a **gated** action. `coolify/` and
-> `cloudflare/` are step-by-step guides for the dashboard config that isn't pure code.
+> **Provisioned + validated.** The VPS is converged from this code (`make converge`; `ok=60
+> changed=0` idempotent), MongoDB + nightly restore-drilled backups are live, and The-Lab serves
+> on staging. Applying changes to the real VPS is still a **gated** action. `coolify/` and
+> `cloudflare/` also carry step-by-step guides for the dashboard config that isn't pure code.
 
 ## Build sequence (high level — becomes `docs/runbooks/bootstrap-vps.md`)
 
@@ -54,9 +57,10 @@ lab-stack/
 3. **Ansible** converge: Docker, host hardening (CIS — `@rules/std-cis.md`), `fail2ban`, firewall
    (allow Cloudflare ranges → 80/443; SSH restricted), backup agent.
 4. **Install Coolify**; secure the dashboard (auth + MFA, behind Cloudflare Access/allow-list).
-5. **MongoDB service** in Coolify on the **private network** (not public): strong auth, TLS,
-   at-rest encryption, least-privilege app user; wire **automated encrypted off-box backups +
-   a tested restore** (ADR 0007, `@rules/workflow-data-lifecycle.md`).
+5. **MongoDB** — standalone Docker via the Ansible `mongodb` role (ADR 0010, not a Coolify
+   service) on the **private network** (not public): strong auth, least-privilege app user
+   (reconciled each converge); **automated backups + a tested restore drill**, with opt-in
+   age-at-rest + restic off-box (`roles/backups`, `@rules/workflow-data-lifecycle.md`).
 6. **Connect forges:** GitHub App + GitLab; webhook HMAC secrets in the secret store (ADR 0003).
 7. **Secrets:** recreate all app integrations in Coolify/secret store (Mongo URI, AUTH_SECRET,
    S3, SMTP, Square **sandbox first**, GenAI, reCAPTCHA — see `.env.example`).

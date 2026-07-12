@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Best-effort Coolify API helper. Coolify's first-run admin account + API token are one-time UI
 # steps; once you have a token this validates connectivity and prints the remaining setup. The
-# MongoDB service, the app (base dir lab-site/the-lab), env vars, domains, and PR previews are
-# created via the UI/API per lab-stack/coolify/README.md — the API surface is version-specific
-# (Coolify v4), so verify endpoints against your instance before automating those.
+# app (base dir lab-site/the-lab), env vars, and domains are created from code by
+# coolify/reconcile.sh (`make coolify-apply`). MongoDB is NOT a Coolify service — it's
+# Ansible-managed (roles/mongodb); the app just attaches to the `fablab` network. PR previews are
+# configured via the UI/API per lab-stack/coolify/README.md (version-specific — verify endpoints).
 set -euo pipefail
 IFS=$'\n\t'
 
@@ -24,15 +25,16 @@ fi
 cat <<'NEXT'
 
 Remaining Coolify setup (UI or API — see lab-stack/coolify/README.md):
-  1. MongoDB service on the PRIVATE network (strong root pw; least-priv app user/db).
-     → capture the connection string as MONGODB_URI.
+  1. MongoDB is Ansible-managed (roles/mongodb) — NOT a Coolify service. Ensure the app is
+     attached to the `fablab` docker network; MONGODB_URI lives in /etc/fablab/mongo.env.
   2. Add the scoped Cloudflare API token (for *.preview wildcard TLS via DNS-01).
-  3. Connect the GitHub App (FabLab-Fort-Smith); select repo: fablab.
-  4. Create application:
-       - Base Directory = lab-site/the-lab ; build = Dockerfile
-       - production = main branch → staging.<domain> (do NOT bind the apex yet)
-       - enable PR preview deployments (*.preview.<domain>)
-  5. Paste env secrets (Square = SANDBOX). Preview envs get NO production secrets.
-  6. Secure the dashboard: admin + MFA, behind Cloudflare Access / IP allow-list.
+  3. Connect the GitHub App (FabLab-Fort-Smith); select repo: fablab.  [DONE for staging]
+  4. Create the application from code: `make coolify-apply` (reconcile.sh):
+       - Base Directory = lab-site/the-lab ; build = Dockerfile ; port 3000
+       - dev branch → staging.<domain>  [LIVE]  ;  main → production is the later cutover
+       - PR preview deployments (*.preview.<domain>) — still to enable
+  5. Env secrets are synced by reconcile.sh from ../.env (Square = SANDBOX on staging). Preview
+     envs get NO production secrets.
+  6. Secure the dashboard: admin + MFA, behind Cloudflare Access.  [DONE — cloudflare/access.sh]
 NEXT
 echo "✓ Coolify reachable — complete the steps above, then verify per docs/runbooks/bootstrap-vps.md §7."

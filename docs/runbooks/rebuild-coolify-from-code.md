@@ -60,4 +60,4 @@ summary: Stand the whole platform + app back up from the repo after a wipe or on
   `secret-rotation.md`; ADR 0004/0006/0010/0012.
 
 ---
-_Last validated: never (draft — run a DR drill). Owner: platform._
+_Last validated: 2026-07-12 (reconcile.sh created the-lab-staging app + env from code against the live API). Owner: platform._

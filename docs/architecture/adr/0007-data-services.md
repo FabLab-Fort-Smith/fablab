@@ -1,6 +1,8 @@
 # ADR 0007 — Data services: self-hosted MongoDB; external object storage & email
 
-- **Status:** Accepted
+- **Status:** Accepted — the self-host/external **decisions** stand; the MongoDB **provisioning
+  method** (originally a Coolify-managed service) is **superseded by [ADR 0010](./0010-provision-mongodb-via-ansible.md)**
+  (standalone Docker via the Ansible `mongodb` role).
 - **Date:** 2026-06-03
 
 ## Context

@@ -9,21 +9,25 @@ step-by-step and executable by someone who didn't write it.
 > Source stays the markdown here; see `site/README.md`. Add front-matter (`category`, `usage`,
 > `order`, `summary`) to a runbook to place it in the catalog.
 
-> **Status:** to be written once `lab-stack` is provisioned. Copy from the SSDLC templates in
-> `~/.claude/rules/runbooks/` and fill in real commands. An untested runbook is a hypothesis —
-> validate each in a drill.
+> **Status:** the platform is provisioned and staging is live — the core runbooks below are
+> written and several are validated. An untested runbook is a hypothesis; each carries its own
+> `Last validated` line.
 
 ## Planned set (priority order for this platform)
 
 - [x] **bootstrap-vps.md** — **full setup & configuration guide**: order VPS → first-boot
       hardening (cloud-init or `manual-bootstrap.sh`) → Cloudflare DNS (staging/preview only) →
       Ansible converge → Coolify (MongoDB, GitHub App, app, previews, TLS) → backups → verify.
-      Parallel-run; apex stays on Vercel. *(validate on first run)*
+      Parallel-run; apex stays on Vercel. *(validated 2026-07-12 on the real VPS)*
 - [x] **migrate-from-vercel.md** — the parallel-run → data-migrate → validate → DNS-cutover →
-      decommission flow, incl. MongoDB export/restore/reconcile. *(drafted — rehearse on staging)*
-- [ ] **deploy.md** — promote/release a site version (mostly automatic via Coolify; documents
-      the manual/break-glass path).
-- [ ] **rollback.md** — roll a site back to a previous Coolify deployment.
+      decommission flow, incl. MongoDB export/restore/reconcile. *(drafted — rehearse before cutover)*
+- [x] **deploy-app.md** — deploy/promote a site version via the Coolify API (push-to-deploy is
+      automatic; documents the manual/break-glass path).
+- [x] **redeploy-rollback.md** — redeploy the current ref, force a clean rebuild, or roll back to a
+      previous Coolify deployment (with DB-migration + Vercel-rollback caveats).
+- [x] **rebuild-coolify-from-code.md** — recreate the Coolify app + env from code (`reconcile.sh`).
+- [x] **agent-ssh-access.md** — short-lived SSH certs for agents via the SSH CA (ADR 0011;
+      feature present, not yet enabled). *(scaffold — not yet drilled)*
 - [x] **secret-rotation.md** — rotate the SSH CA key + certs (KRL revoke), deploy/automation keys,
       app/local secrets, and provider tokens; zero-downtime, revoke-first on compromise.
 - [x] **backup-restore.md** — back up the self-hosted MongoDB; **tested** restore drill (strict,
