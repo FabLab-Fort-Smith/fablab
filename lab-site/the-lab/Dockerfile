@@ -7,7 +7,7 @@
 # ---- deps: install from a clean lockfile ----
 FROM node:22-alpine AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 
 # ---- builder: compile the standalone server bundle ----
