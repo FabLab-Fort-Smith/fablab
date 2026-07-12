@@ -28,8 +28,11 @@ environments** are the remaining Vercel feature to wire up. Decisions: [`adr/`](
 enforce tests/SAST/SCA/secret-scan as **merge-blocking CI gates** (`@rules/workflow-cicd.md`).
 
 **Live now (staging):** 1 (git-push deploy), 3 (atomic swap), 4 (rollback via Coolify history),
-5 (automatic HTTPS), 6 (Dockerfile build), 7 (Cloudflare edge). **Pending:** 2 (per-PR preview
-environments) and the production cutover off Vercel (ADR 0006).
+5 (automatic HTTPS), 6 (Dockerfile build), 7 (Cloudflare edge). **Feature 2 (per-PR previews) is
+wired** — Coolify preview template `pr-{{pr_id}}-preview.<domain>` + a GitHub Action that manages a
+proxied Cloudflare record per PR (`lab-stack/coolify/README.md` §6); it activates once the repo
+Actions secrets are set (enablement is a one-time deliberate step). **Pending:** the production
+cutover off Vercel (ADR 0006).
 
 ---
 

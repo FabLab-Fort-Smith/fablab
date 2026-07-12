@@ -5,7 +5,7 @@
 .DEFAULT_GOAL := help
 ANSIBLE_DIR := ansible
 
-.PHONY: help setup secrets deps lint test ping converge converge-check ssh-ca-init ssh-ca-sign racknerd coolify-plan coolify-apply dns access
+.PHONY: help setup secrets deps lint test ping converge converge-check ssh-ca-init ssh-ca-sign racknerd coolify-plan coolify-apply dns access preview-dns
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -44,6 +44,9 @@ dns: ## GATED: create/update Cloudflare DNS for the VPS (deploy/staging/preview;
 
 access: ## GATED: apply Cloudflare Access to the Coolify dashboard (webhooks bypass + maintainers-only). ARGS=--dry-run
 	bash cloudflare/access.sh $(ARGS)
+
+preview-dns: ## GATED: manually manage a per-PR preview DNS record. ARGS="upsert|delete <pr-number>"
+	if [ -f ../.env ]; then set -a; . ../.env; set +a; fi; bash cloudflare/preview-dns.sh $(ARGS)
 
 coolify: ## Validate the Coolify API + print the remaining (UI) setup steps
 	bash coolify/bootstrap.sh

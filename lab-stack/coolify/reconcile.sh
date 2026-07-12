@@ -47,6 +47,13 @@ BASE_DIRECTORY="/lab-site/the-lab"     # monorepo subdir (ADR 0005)
 DOCKERFILE_LOCATION="/Dockerfile"      # relative to BASE_DIRECTORY
 PORTS_EXPOSES="3000"                   # Next.js standalone (Dockerfile EXPOSE 3000)
 DOMAINS="https://staging.fablabfortsmith.org"
+PRIMARY_DOMAIN="fablabfortsmith.org"
+# Per-PR preview URL. SINGLE-label host under the apex so Cloudflare Universal SSL's
+# *.fablabfortsmith.org edge cert covers it (a 2-level *.preview.<domain> would need ACM/Enterprise).
+# A GitHub Action (.github/workflows/preview-dns.yml) creates a matching PROXIED CF record per PR,
+# so previews flow through Cloudflare (origin firewall stays Cloudflare-only) and Traefik gets an
+# LE cert via HTTP-01 through CF. {{pr_id}} is Coolify's PR-number token.
+PREVIEW_URL_TEMPLATE="pr-{{pr_id}}-preview.${PRIMARY_DOMAIN}"
 # App env keys to sync into Coolify (VALUES read from ../.env; empty ones are skipped + warned).
 # REQUIRED mirrors The-Lab's src/lib/env.js REQUIRED_ENV (the boot gate); keep in sync with it.
 APP_ENV_REQUIRED=(MONGODB_URI AUTH_SECRET JWT_SECRET ENCRYPTION_KEY INTERNAL_API_SECRET SOCKET_API_SECRET SQUARE_ACCESS_TOKEN SQUARE_WEBHOOK_SIGNATURE_KEY)
@@ -109,11 +116,12 @@ app_payload(){
     --arg build_pack "$BUILD_PACK" --arg base_directory "$BASE_DIRECTORY" \
     --arg dockerfile_location "$DOCKERFILE_LOCATION" --arg ports_exposes "$PORTS_EXPOSES" \
     --arg domains "$DOMAINS" --arg name "$APP_NAME" \
+    --arg preview_url_template "$PREVIEW_URL_TEMPLATE" \
     '{project_uuid:$project_uuid, server_uuid:$server_uuid, environment_name:$environment_name,
       github_app_uuid:$github_app_uuid, git_repository:$git_repository, git_branch:$git_branch,
       build_pack:$build_pack, base_directory:$base_directory, dockerfile_location:$dockerfile_location,
       ports_exposes:$ports_exposes, domains:$domains, name:$name, instant_deploy:false,
-      is_auto_deploy_enabled:true}'
+      is_auto_deploy_enabled:true, preview_url_template:$preview_url_template}'
 }
 
 if [ "$DRY" -eq 1 ]; then
@@ -166,4 +174,5 @@ fi
 
 echo "== done =="
 info "app: $APP_NAME ($APP_UUID)  env: $ENVIRONMENT_NAME  branch: $GIT_BRANCH  domain: $DOMAINS"
+info "preview URL template: $PREVIEW_URL_TEMPLATE (per-PR DNS via .github/workflows/preview-dns.yml)"
 [ "$DEPLOY" -eq 1 ] || info "(no deploy; re-run with --deploy, or use docs/runbooks/redeploy-rollback.md)"

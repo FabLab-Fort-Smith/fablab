@@ -32,9 +32,30 @@ back up Coolify's own config/DB regularly so this is reproducible.
   via the app's **Dockerfile** (Next.js `output: 'standalone'`), on port 3000.
 - Environments → branches: **`dev` → staging is LIVE** (`https://staging.fablabfortsmith.org`,
   auto-deploy on push). **`main` → production** is the cutover target (apex still on Vercel — ADR
-  0006). **PR preview deployments** (`*.preview.<domain>`) are the remaining feature to enable.
+  0006). **Per-PR previews** are wired (see §6).
 - Inject all app env/secrets (Mongo URI, AUTH_SECRET, S3, SMTP, Square **sandbox first**,
   GenAI, reCAPTCHA — see `../../.env.example`). Preview envs get **no production secrets/data**.
+
+## 6. Per-PR preview deployments (Vercel feature #2)
+Coolify creates an ephemeral preview container for each PR (via the GitHub App) and routes it by
+Host header; `reconcile.sh` sets the URL template to **`pr-{{pr_id}}-preview.fablabfortsmith.org`**.
+- **Why that hostname:** a *single* label under the apex, so Cloudflare **Universal SSL**
+  (`*.fablabfortsmith.org`) covers the edge cert — no ACM/Enterprise. (A 2-level
+  `*.preview.<domain>` would need a paid cert.)
+- **Reachability + TLS without weakening the origin:** a GitHub Action
+  (`.github/workflows/preview-dns.yml` → `../cloudflare/preview-dns.sh`) creates a **proxied** CF
+  A record per PR and deletes it on close. Because the host is proxied, user traffic **and**
+  Let's Encrypt HTTP-01 validation arrive via Cloudflare's IPs — so the Cloudflare-only origin
+  firewall stays intact and Traefik still gets a valid origin cert (Full-strict holds).
+- **Env / R8:** previews inherit the app's **staging (sandbox)** env — no production secrets exist
+  on this app (prod is Vercel). Known caveat: auth callback / absolute-URL flows may misbehave on a
+  preview host until a per-preview `NEXTAUTH_URL`/`APP_URL` is set (revisit at prod cutover).
+- **Enable (deliberate, one-time):**
+  1. `make coolify-apply` — pushes the preview URL template to Coolify.
+  2. Add GitHub **Actions secrets** on the repo: `CLOUDFLARE_API_TOKEN` (Zone > DNS > Edit) and
+     `LAB_VPS_HOST` (VPS public IP). Fork PRs get neither (safe: no preview DNS for forks).
+  3. Open a test PR → confirm the Action creates `pr-<n>-preview.fablabfortsmith.org`, Coolify
+     deploys the preview, and the URL serves over HTTPS; close it → record is removed.
 
 ## 4. Git source + webhooks (ADR 0003)
 - Connect the **GitHub App** (richest: PR previews + commit status) for `FabLab-Fort-Smith`.
@@ -43,8 +64,9 @@ back up Coolify's own config/DB regularly so this is reproducible.
   each secret in the secret store; rotate per `docs/runbooks/secret-rotation.md`.
 
 ## 5. TLS & rollback
-- Coolify/Traefik auto-provisions **Let's Encrypt** certs (per-app + wildcard for previews via
-  DNS-01). Verify HSTS is sent (the app also sets it).
+- Coolify/Traefik auto-provisions **Let's Encrypt** certs per host via HTTP-01 (validation
+  arrives through Cloudflare, so the origin firewall stays Cloudflare-only). Previews get their
+  own per-host cert the same way (§6). Verify HSTS is sent (the app also sets it).
 - Note the **rollback** path: redeploy a previous deployment from history (during migration,
   DNS back to Vercel is also a rollback — ADR 0006).
 
