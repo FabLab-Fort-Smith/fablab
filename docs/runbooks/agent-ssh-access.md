@@ -1,3 +1,11 @@
+---
+title: Grant an agent SSH access (SSH CA)
+category: Security
+usage: As needed
+order: 40
+summary: Mint a short-lived, principal-scoped SSH certificate so an agent/CI gets time-boxed access — no long-lived keys.
+---
+
 # Runbook: Grant an agent SSH access (SSH CA)
 
 > Give an agent (CI, cron, or an AI session) time-boxed, scoped access to a machine by minting a

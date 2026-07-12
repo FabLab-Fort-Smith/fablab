@@ -78,9 +78,16 @@ Put `ssh/config/ca`'s public key into `ssh_ca_public_key` and the machine side i
 - **Reach ≠ autonomy:** a valid cert lets an agent *connect*; converge/deploy/destructive actions
   remain human-gated per action (`@rules/workflow-gated-actions.md`).
 
-## Open decisions (confirm before enabling)
+## Decisions (finalized 2026-07-12)
 
-1. **Issuer backend** — OpenSSH baseline now, or stand up Vault immediately?
-2. **Where the CA key lives** — offline laptop, the VPS itself (weaker), a separate broker host, or Vault.
-3. **Scope** — just the RackNerd VPS, or a general "any machine" fleet (changes principal design).
-4. **Who may request `maintainer` (→ `deploy`) certs** vs. only `ops` (→ `automation`).
+1. **Issuer backend — OpenSSH CA baseline** (`sign-ssh-cert.sh`). Zero new infra; upgrade to the
+   Vault SSH engine (outline above) when more than a couple of agents need self-service issuance.
+2. **CA private key — offline maintainer machine** (passphrase-protected; `ssh-ca/*` private halves
+   are git-ignored). Never on the VPS, never on an agent, never in the repo.
+3. **Scope — the RackNerd VPS only** for now: single-machine principals (`automation`, `deploy`).
+   Generalize to fleet-wide principal naming if/when more hosts are added.
+4. **Policy — `ops` (→ `automation`) is the agent/CI path; broad `maintainer` (→ `deploy`) is
+   human-only.** With the offline CA key, only a maintainer can mint any cert, so `deploy` is
+   maintainer-gated by construction. TTL: **1h default, 8h cap** (`SSHCA_DEFAULT_TTL`/`SSHCA_MAX_TTL`).
+
+> Revisit when adopting Vault (self-service changes #1/#2) or adding machines (#3).

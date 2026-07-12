@@ -27,6 +27,7 @@ test: ## Run script unit tests (no network / no VPS needed)
 	bash scripts/collect-keys.test.sh
 	bash scripts/setup.test.sh
 	bash scripts/gen-secrets.test.sh
+	bash ssh-ca/sign-ssh-cert.test.sh
 
 ping: ## Verify SSH/connectivity to the VPS (inventory.ini required)
 	cd $(ANSIBLE_DIR) && ansible lab_vps -m ping
