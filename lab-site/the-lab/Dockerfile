@@ -24,7 +24,7 @@ WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000
-RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
+RUN apk add --no-cache curl && addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
 # Standalone output + the assets it does NOT bundle (static chunks, public/ incl. PWA sw).
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
