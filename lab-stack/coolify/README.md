@@ -68,8 +68,14 @@ value to use and manages everything else.)
   app's **Previews** tab, but Coolify's API cannot *create* the preview resource — so the **first**
   deploy of each PR must be the **Deploy** button on its card. After that, pushes to the PR
   auto-redeploy, and the API `GET /deploy?uuid=<app>&pr=<n>` works (before the resource exists it
-  returns *"Pull request N not found for this resource"*). For hands-off previews on **every** PR,
-  enable the app's **auto-deploy Pull Requests** toggle in the UI (no per-PR click needed).
+  returns *"Pull request N not found for this resource"*).
+- **Hands-off auto-deploy on every PR is a GitHub App setting, not a Coolify toggle** (there is no
+  such field in Coolify's API or app UI). On **github.com → Org → Settings → GitHub Apps →
+  `fab-lab-fort-smith`**: grant **Pull requests: Read & write**, subscribe to the **Pull request**
+  event, save, and accept the permission update on the installation. Then new PRs auto-deploy their
+  preview (PRs opened *before* this need Coolify's **"Load Pull Requests"** + a manual Deploy). Keep
+  Coolify **"Allow Public PR Deployments" off** — only members/collaborators trigger previews.
+  Ref: coolify.io/docs/applications/ci-cd/github/preview-deploy.
 
 ## 4. Git source + webhooks (ADR 0003)
 - Connect the **GitHub App** (richest: PR previews + commit status) for `FabLab-Fort-Smith`.
