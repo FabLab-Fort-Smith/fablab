@@ -7,8 +7,9 @@ our own VPS, and run the existing **The-Lab Next.js app** there (migrated off Ve
 Status: **staging live** (as of 2026-07-12). The platform is provisioned on the VPS as code and
 The-Lab deploys to **`https://staging.fablabfortsmith.org`** — push to `dev` → automatic
 build + zero-downtime deploy, fronted by Cloudflare, with the Coolify dashboard behind Cloudflare
-Access. **Production stays on Vercel** until a deliberate cutover (ADR 0006); **per-PR preview
-environments** are the remaining Vercel feature to wire up. Decisions: [`adr/`](./adr/).
+Access, and **per-PR preview deployments are live** (verified 2026-07-12). **Production stays on
+Vercel** until a deliberate cutover (ADR 0006) — that's the one remaining parity item. Decisions:
+[`adr/`](./adr/).
 
 ---
 
@@ -29,10 +30,10 @@ enforce tests/SAST/SCA/secret-scan as **merge-blocking CI gates** (`@rules/workf
 
 **Live now (staging):** 1 (git-push deploy), 3 (atomic swap), 4 (rollback via Coolify history),
 5 (automatic HTTPS), 6 (Dockerfile build), 7 (Cloudflare edge). **Feature 2 (per-PR previews) is
-wired** — Coolify preview template `pr-{{pr_id}}-preview.<domain>` + a GitHub Action that manages a
-proxied Cloudflare record per PR (`lab-stack/coolify/README.md` §6); it activates once the repo
-Actions secrets are set (enablement is a one-time deliberate step). **Pending:** the production
-cutover off Vercel (ADR 0006).
+live** — verified end-to-end 2026-07-12: Coolify preview template `pr-{{pr_id}}-preview.<domain>` +
+a GitHub Action that manages a proxied Cloudflare record per PR (`lab-stack/coolify/README.md` §6).
+One operational note: on v4.1.2 the *first* deploy of each PR is a UI click (or enable the
+auto-deploy-PRs toggle). **The one remaining item is the production cutover off Vercel (ADR 0006).**
 
 ---
 
