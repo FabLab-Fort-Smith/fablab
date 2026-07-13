@@ -37,6 +37,10 @@ back up Coolify's own config/DB regularly so this is reproducible.
   GenAI, reCAPTCHA — see `../../.env.example`). Preview envs get **no production secrets/data**.
 
 ## 6. Per-PR preview deployments (Vercel feature #2)
+> **Status: live — verified end-to-end 2026-07-12.** A test PR produced
+> `https://pr-<n>-preview.fablabfortsmith.org` serving the app over HTTPS through Cloudflare
+> (Universal SSL edge cert), with the per-PR DNS record created on open and removed on close.
+
 Coolify creates an ephemeral preview container for each PR (via the GitHub App) and routes it by
 Host header, using the app's **preview URL template** — set it to
 **`pr-{{pr_id}}-preview.fablabfortsmith.org`**. (Coolify v4.1.2's API rejects this field, so it's a
@@ -60,6 +64,12 @@ value to use and manages everything else.)
      `LAB_VPS_HOST` (VPS public IP). Fork PRs get neither (safe: no preview DNS for forks).
   3. Open a test PR → confirm the Action creates `pr-<n>-preview.fablabfortsmith.org`, Coolify
      deploys the preview, and the URL serves over HTTPS; close it → record is removed.
+- **First deploy per PR is a UI click (Coolify v4.1.2).** When a PR is opened it appears in the
+  app's **Previews** tab, but Coolify's API cannot *create* the preview resource — so the **first**
+  deploy of each PR must be the **Deploy** button on its card. After that, pushes to the PR
+  auto-redeploy, and the API `GET /deploy?uuid=<app>&pr=<n>` works (before the resource exists it
+  returns *"Pull request N not found for this resource"*). For hands-off previews on **every** PR,
+  enable the app's **auto-deploy Pull Requests** toggle in the UI (no per-PR click needed).
 
 ## 4. Git source + webhooks (ADR 0003)
 - Connect the **GitHub App** (richest: PR previews + commit status) for `FabLab-Fort-Smith`.
