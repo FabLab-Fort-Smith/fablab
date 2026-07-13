@@ -5,6 +5,7 @@ import UserService from "@/app/api/v1/users/service";
 import WalletService from "@/app/api/v1/wallet/service";
 import Constants from "@/lib/constants";
 import { db } from "@/lib/database";
+import { emitHook, CORE_EVENTS } from "@/lib/plugins/hooks";
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -134,6 +135,8 @@ export async function GET(request) {
         "Subscription Reward",
         "onboarding_reward_subscribe"
       ).catch(err => console.error("Failed to award subscribe stake:", err));
+      // Notify the plugin platform of the activation (best-effort).
+      await emitHook(CORE_EVENTS.MEMBERSHIP_ACTIVATED, { userID, type: "co-op" }).catch(() => {});
     }
 
     console.log(`✅ Access granted for user ${userID} (sub: ${subscription?.id || "pending"})`);

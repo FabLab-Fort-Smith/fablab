@@ -17,7 +17,7 @@ related:
 
 ## Overview
 
-The-Lab integrates five external services: **Square** (payments/subscriptions), **Discord** (OAuth, bot, role sync, DMs), **Google** (OAuth sign-in + reCAPTCHA), **AWS-compatible S3** (image uploads), and **Google Gemini** (`@google/genai`, badge-image generation). Each is wrapped behind a `src/lib`/`src/utils` adapter or a single route so SDK clients are not instantiated inside arbitrary handlers (per <a href="overview.md">the layering rules</a>).
+The-Lab integrates six external services: **Square** (payments/subscriptions), **Discord** (OAuth, bot, role sync, DMs), **Google** (OAuth sign-in + reCAPTCHA), **AWS-compatible S3** (image uploads), **Google Gemini** (`@google/genai`, badge-image generation), and **PurelyMail** (member mailbox provisioning — via the member-email plugin). Each is wrapped behind a `src/lib`/`src/utils` adapter or a single route so SDK clients are not instantiated inside arbitrary handlers (per <a href="overview.md">the layering rules</a>).
 
 This document is the per-service reference: what each integration is for, where it enters the codebase, the environment variables it needs, and how it behaves on failure or misconfiguration. All required secrets are env-only — there are **no hardcoded fallbacks** for secrets or endpoints (the lone remaining endpoint fallbacks live in CTF-adjacent code, noted below).
 
@@ -111,7 +111,35 @@ This document is the per-service reference: what each integration is for, where 
 - <a href="access-control-iot.md">Access control (IoT tier)</a> — the separate VPS integrations (socket-server, orchestrator).
 - <a href="../audit/06-security-standards.md">Security standards</a> — webhook, upload, and SSRF controls.
 
+## PurelyMail — member mailbox provisioning
+
+Provisions `@fablabfortsmith.org` mailboxes for members. Consumed **only** by the `member-email`
+plugin (see <a href="../features/member-email.md">the feature doc</a> and <a href="plugin-platform.md">the plugin platform</a>); disabled by default.
+
+- **Adapter (seam):** `src/lib/purelymail.js` — the single entry point for all PurelyMail calls
+  (mirrors `src/lib/square.js`). Named functions: `createMailbox`, `getMailbox`, `mailboxExists`,
+  `modifyMailbox`, `suspendMailbox`, `resetMailbox`, `deleteMailbox`, `listMailboxes`, `checkCredit`.
+- **API:** base `https://purelymail.com/api/v0/*` — a **fixed host constant** (never built from
+  input; SSRF-safe by construction). POST-only; header `Purelymail-Api-Token`; envelope
+  `{ type: "success", result }` | `{ type: "error", code, message }`. The adapter unwraps `result`,
+  throws a typed `PurelyMailError` on `type:error`, times out (10s), and retries network/5xx only.
+- **Configuration (env):**
+  - `PURELYMAIL_API_TOKEN` — API token (created in the PurelyMail account settings). **Secret.**
+  - `PURELYMAIL_DOMAIN` — the managed mail domain (e.g. `fablabfortsmith.org`).
+  - Both are read **fail-closed at call time** (a missing value throws `PurelyMailError("config")`).
+    They are intentionally **not** in `REQUIRED_ENV`: the plugin ships disabled, and a disabled
+    plugin must not be able to block app boot. `purelymailReady()` gates enabling/using the plugin
+    with a clear message when they're unset.
+- **Failure modes:** provider/network failure → member claim returns `502`/`503` and nothing is
+  persisted; a mailbox is created only after a successful PurelyMail call, and a persistence race
+  (unique-index collision) rolls the mailbox back. PurelyMail is **pay-as-you-go** — a
+  `checkCredit()` floor + a per-member cap bound spend.
+- **Security:** the token, mailbox passwords, and members' personal recovery emails are **never
+  logged**. `createMailbox` generates a random password that is immediately discarded — PurelyMail
+  owns the credential; the member sets it via the welcome/reset flow.
+
 ## Changelog
 | Date | Change | Author |
 |------|--------|--------|
 | 2026-05-29 | Initial version | app dev |
+| 2026-07-13 | Add PurelyMail (member-email plugin) | app dev |
