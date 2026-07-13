@@ -113,6 +113,7 @@ export default function MemberEmailPage() {
               value={name}
               onChange={(e) => setName(e.target.value.toLowerCase())}
               aria-describedby="avail-msg"
+              aria-invalid={avail && avail.available === false ? true : undefined}
               style={{ fontFamily: 'var(--mono)', fontSize: 14, flex: '0 1 220px' }}
             />
             <span style={{ fontFamily: 'var(--mono)', color: 'var(--text-dim)' }}>@fablabfortsmith.org</span>

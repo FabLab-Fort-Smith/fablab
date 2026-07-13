@@ -13,7 +13,8 @@ import AuthService from '../../auth/[...nextauth]/service.js';
 import DiscordService from "@/lib/discord";
 import NotificationService from "../notifications/service";
 import WalletService from "@/app/api/v1/wallet/service";
-import { emitHook, CORE_EVENTS } from "@/lib/plugins/hooks";
+import { CORE_EVENTS } from "@/lib/plugins/hooks";
+import { emitEvent } from "@/lib/plugins/registry";
 import { 
     sendApplicationReceivedEmail, 
     sendStatusChangeEmail, 
@@ -461,7 +462,7 @@ export default class UserService {
             // Notify the plugin platform so plugins can clean up (e.g. erase a
             // member's mailbox). Best-effort; never blocks deletion.
             if (query?.userID) {
-                await emitHook(CORE_EVENTS.MEMBER_DELETED, { userID: query.userID }).catch(() => {});
+                await emitEvent(CORE_EVENTS.MEMBER_DELETED, { userID: query.userID }).catch(() => {});
             }
             return deletionResult;
         } catch (error) {

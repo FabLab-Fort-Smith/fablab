@@ -8,7 +8,7 @@
 import { PLUGINS } from "@/plugins";
 import { defineManifest, defaultConfig } from "./manifest.schema";
 import { makeContext } from "./context";
-import { offPlugin } from "./hooks";
+import { offPlugin, emitHook } from "./hooks";
 import { getState, listStates } from "./model";
 import { auditLog } from "@/lib/audit";
 
@@ -162,6 +162,50 @@ export function listPlugins() {
 export function isEnabled(pluginId) {
   buildRegistry();
   return !!registry.get(pluginId)?.enabled;
+}
+
+/**
+ * Reconcile this instance's wiring against the DB (the durable source of truth):
+ * wire any plugin that is enabled-in-DB but not yet wired here, unwire any that
+ * was disabled elsewhere. Cheap DB read; called before emitting an event so a
+ * plugin enabled on a *different* instance still receives hooks here.
+ */
+export async function reconcile() {
+  await ensurePluginsInit();
+  let states;
+  try {
+    states = await listStates();
+  } catch {
+    return; // fail safe: keep current wiring if the DB is momentarily unreachable
+  }
+  for (const entry of registry.values()) {
+    const st = states[entry.manifest.id];
+    const enabled = st ? st.enabled : !!entry.manifest.enabledByDefault;
+    if (enabled && !entry.wired) {
+      entry.config = { ...defaultConfig(entry.manifest.configSchema), ...(st?.config || {}) };
+      entry.enabled = true;
+      await wire(entry);
+    } else if (!enabled && entry.wired) {
+      entry.enabled = false;
+      await unwire(entry);
+    }
+  }
+}
+
+/**
+ * Emit a core domain event to enabled plugins, reconciling wiring first so the
+ * event reaches subscribers even if this instance booted with the plugin
+ * disabled (fixes the cross-instance hook gap). Best-effort — never throws into
+ * the caller's transaction.
+ * @param {string} event @param {object} [payload]
+ */
+export async function emitEvent(event, payload = {}) {
+  try {
+    await reconcile();
+  } catch {
+    /* reconciliation failure must not block the core path */
+  }
+  return emitHook(event, payload);
 }
 
 /** Test helper: reset the whole registry. */

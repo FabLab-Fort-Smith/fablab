@@ -63,8 +63,8 @@ Spend floor: PurelyMail `checkCredit()` ≥ `minAccountCredit` before any create
 | **Spoofing** | claim/manage as another user | identity from session only; body/query `userID` ignored | `member-email-controller-authz.test.js` |
 | **Tampering** | Mongo-operator / field injection in `name`/config | strict local-part regex; `$`-key stripping; `configSchema` validation | `member-email-reserved`, `plugin-manifest` tests |
 | **Repudiation** | deny provisioning/suspension happened | `auditLog` on every provision/suspend/reset/delete + plugin enable/disable/config | audit calls in service |
-| **Info disclosure** | address enumeration; token/PII leak | availability is member-gated + rate-limited; token/recovery email/password never logged; generic client errors | service + adapter tests |
-| **DoS / spend abuse** | mass claims drain PurelyMail credit | active-member gate + per-member cap + credit floor + one-mailbox invariant | `member-email-service.test.js` (cap, spend) |
+| **Info disclosure** | address enumeration; token/PII leak | availability is member-gated + **per-user rate-limited** (`src/lib/rateLimit.js`, 20/min); token/recovery email/password never logged; generic client errors | rate-limit + service + adapter tests |
+| **DoS / spend abuse** | mass claims drain PurelyMail credit | active-member gate + **race-safe** per-member cap (post-insert recount + rollback) + credit floor + per-user claim throttle (5/min) | `member-email-service.test.js` (cap race, spend); `rate-limit.test.js` |
 | **Elevation** | non-admin runs admin ops; disabled-plugin surface | `assertPermission`/`isAdmin`; `requirePluginEnabled` → 404 when disabled | guard + service tests |
 | **SSRF** | server-side fetch to internal targets | adapter host is a fixed constant; domain from env | adapter test (fixed URL) |
 
@@ -76,8 +76,16 @@ low-credit→503, provider-fail→502, race→409+rollback, disabled→404, inje
 
 - **Prerequisite (one-time, human):** the domain is added + DNS-verified in the PurelyMail account
   and a PurelyMail API token is placed in the secret store. Then enable the plugin at
-  `/dashboard/admin/plugins`.
+  `/dashboard/admin/plugins`. Enabling is **gated on readiness** — the platform refuses to enable
+  the plugin (400) unless `PURELYMAIL_API_TOKEN` + `PURELYMAIL_DOMAIN` are set (`checkReady`).
 - **Suspend** semantics: PurelyMail has no native suspend — the adapter rotates the password,
-  disables reset, and requires 2FA (reversible by admin reset; mail retained).
-- **Follow-ups:** aliases/forwarding via PurelyMail routing rules; auto-suspend on
-  `membership.suspended` (event reserved, not yet emitted); a reconcile task via the `tasks` socket.
+  disables reset, and requires 2FA (reversible by admin reset; mail retained). Auto-suspend fires on
+  the `membership.suspended` event (emitted on Square cancel / non-active sync).
+- **Erasure integrity:** on `member.deleted` the local record is removed **only after** a confirmed
+  PurelyMail delete; a provider failure keeps the record and audits `email.mailbox.erase_failed` so
+  the orphan stays tracked for retry.
+- **Rate limiting** is **per server instance** (in-memory — `src/lib/rateLimit.js`); on a
+  multi-instance deploy the effective limit is per-instance. Back it with a shared store (Redis) for
+  a hard cross-instance guarantee (follow-up).
+- **Follow-ups:** aliases/forwarding via PurelyMail routing rules; a reconcile task via the `tasks`
+  socket; distributed rate limiting; a true DB-backed e2e claim test.

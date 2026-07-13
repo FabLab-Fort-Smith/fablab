@@ -4,6 +4,7 @@
 jest.mock("@/lib/purelymail", () => ({
   __esModule: true,
   fullAddress: (lp) => `${lp}@fablabfortsmith.org`,
+  purelymailReady: jest.fn(() => true),
   mailboxExists: jest.fn(),
   createMailbox: jest.fn(),
   deleteMailbox: jest.fn(),
@@ -17,7 +18,8 @@ jest.mock("@/plugins/member-email/model", () => ({
   __esModule: true,
   default: {
     findByUserID: jest.fn(), findByLocalPart: jest.fn(), insertMailbox: jest.fn(),
-    countActiveForUser: jest.fn(), setStatusByUserID: jest.fn(), removeByUserID: jest.fn(), listAll: jest.fn(),
+    countActiveForUser: jest.fn(), findActiveByUserSorted: jest.fn(), deleteByLocalPart: jest.fn(),
+    setStatusByUserID: jest.fn(), removeByUserID: jest.fn(), listAll: jest.fn(),
   },
 }));
 jest.mock("@/plugins/member-email/config", () => ({ __esModule: true, PERM_ADMIN: "member-email:admin", PLUGIN_ID: "member-email", resolveConfig: jest.fn() }));
@@ -36,8 +38,10 @@ beforeEach(() => {
   jest.clearAllMocks();
   UserService.getUserByQuery.mockResolvedValue(activeMember);
   Model.countActiveForUser.mockResolvedValue(0);
+  Model.findActiveByUserSorted.mockResolvedValue([{ localPart: "jdoe" }]); // idx 0, under cap
   Model.findByLocalPart.mockResolvedValue(null);
   Model.insertMailbox.mockImplementation(async (d) => d);
+  purelymail.purelymailReady.mockReturnValue(true);
   Model.findByUserID.mockResolvedValue([{ localPart: "jdoe", address: "jdoe@fablabfortsmith.org", status: "active" }]);
   purelymail.mailboxExists.mockResolvedValue(false);
   purelymail.checkCredit.mockResolvedValue(5);
@@ -109,5 +113,48 @@ describe("admin management authz", () => {
     await Service.adminSuspend("m1", { userID: "admin-1", role: "admin" });
     expect(purelymail.suspendMailbox).toHaveBeenCalledWith("jdoe");
     expect(Model.setStatusByUserID).toHaveBeenCalledWith("m1", "suspended");
+  });
+});
+
+describe("L6 readiness gate", () => {
+  test("claim and availability fail cleanly (503) when PurelyMail isn't configured", async () => {
+    purelymail.purelymailReady.mockReturnValue(false);
+    await expect(Service.claim({ localPart: "jdoe" }, MEMBER, CONFIG)).rejects.toMatchObject({ status: 503 });
+    await expect(Service.checkAvailability("jdoe", MEMBER, CONFIG)).rejects.toMatchObject({ status: 503 });
+    expect(purelymail.createMailbox).not.toHaveBeenCalled();
+  });
+});
+
+describe("M1 race-safe cap", () => {
+  test("a concurrent claim that pushes the member over the cap is rolled back (409 + mailbox deleted)", async () => {
+    // Pre-check passes (count 0), insert succeeds, but the post-insert recount
+    // shows OUR record is 2nd (idx 1) with cap 1 -> roll back ours.
+    Model.findActiveByUserSorted.mockResolvedValue([{ localPart: "earlier" }, { localPart: "jdoe" }]);
+    await expect(Service.claim({ localPart: "jdoe" }, MEMBER, CONFIG)).rejects.toMatchObject({ status: 409 });
+    expect(purelymail.deleteMailbox).toHaveBeenCalledWith("jdoe"); // orphan rolled back
+    expect(Model.deleteByLocalPart).toHaveBeenCalledWith("jdoe");
+  });
+
+  test("within the cap (our record is earliest) the claim stands", async () => {
+    Model.findActiveByUserSorted.mockResolvedValue([{ localPart: "jdoe" }]);
+    await expect(Service.claim({ localPart: "jdoe" }, MEMBER, CONFIG)).resolves.toMatchObject({ status: "active" });
+    expect(Model.deleteByLocalPart).not.toHaveBeenCalled();
+  });
+});
+
+describe("L5 erasure integrity (member.deleted hook)", () => {
+  test("local record removed only after a confirmed provider delete", async () => {
+    Model.findByUserID.mockResolvedValue([{ localPart: "jdoe", status: "active" }]);
+    purelymail.deleteMailbox.mockResolvedValue({});
+    await Service.onMemberDeleted({ userID: "m1" });
+    expect(purelymail.deleteMailbox).toHaveBeenCalledWith("jdoe");
+    expect(Model.deleteByLocalPart).toHaveBeenCalledWith("jdoe");
+  });
+
+  test("a provider-delete failure KEEPS the local record (tracked orphan, not dropped)", async () => {
+    Model.findByUserID.mockResolvedValue([{ localPart: "jdoe", status: "active" }]);
+    purelymail.deleteMailbox.mockRejectedValue(new Error("provider down"));
+    await Service.onMemberDeleted({ userID: "m1" });
+    expect(Model.deleteByLocalPart).not.toHaveBeenCalled();
   });
 });

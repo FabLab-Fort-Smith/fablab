@@ -49,6 +49,22 @@ export async function countActiveForUser(userID) {
   return col.countDocuments({ userID, status: { $ne: "revoked" } });
 }
 
+/**
+ * A member's non-revoked mailboxes, oldest first (deterministic tiebreak on _id).
+ * Used for race-safe cap enforcement: concurrent claims keep the earliest N.
+ * @param {string} userID
+ */
+export async function findActiveByUserSorted(userID) {
+  const col = await getCollection();
+  return col.find({ userID, status: { $ne: "revoked" } }).sort({ createdAt: 1, _id: 1 }).toArray();
+}
+
+/** Delete a single mailbox record by its (unique) local part. @param {string} localPart */
+export async function deleteByLocalPart(localPart) {
+  const col = await getCollection();
+  await col.deleteOne({ localPart });
+}
+
 /** @param {string} userID @param {string} status */
 export async function setStatusByUserID(userID, status) {
   const col = await getCollection();
@@ -78,6 +94,8 @@ export default {
   findByLocalPart,
   insertMailbox,
   countActiveForUser,
+  findActiveByUserSorted,
+  deleteByLocalPart,
   setStatusByUserID,
   removeByUserID,
   listAll,

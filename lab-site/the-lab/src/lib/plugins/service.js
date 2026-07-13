@@ -68,6 +68,12 @@ export async function setEnabled(pluginId, enabled, actor) {
   if (!isAdmin(actor)) throw forbidden();
   const entry = resolveEntry(pluginId);
   const next = !!enabled;
+  // A plugin may declare a readiness check (e.g. required integration config).
+  // Refuse to enable when it isn't satisfied, rather than enabling a broken feature.
+  if (next && typeof entry.module.checkReady === "function") {
+    const ready = await entry.module.checkReady();
+    if (ready && ready.ok === false) throw badRequest(`Cannot enable: ${ready.reason || "plugin not ready"}`);
+  }
   await PluginStateModel.setEnabled(entry.manifest.id, next, actor?.userID ?? null);
   if (next) await registry.applyEnable(entry.manifest.id);
   else await registry.applyDisable(entry.manifest.id);

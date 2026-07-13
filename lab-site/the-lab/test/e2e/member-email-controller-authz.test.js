@@ -19,6 +19,7 @@ jest.mock("@/plugins/member-email/service", () => ({
 import { auth } from "@/auth";
 import Controller from "@/plugins/member-email/controller";
 import Service from "@/plugins/member-email/service";
+import { _resetRateLimit } from "@/lib/rateLimit";
 
 const ANON = null;
 const MEMBER = { user: { userID: "member-1", role: "user" } };
@@ -29,6 +30,7 @@ const post = (url, body) => new Request(url, {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  _resetRateLimit(); // isolate the per-user throttle between tests
   Service.claim.mockResolvedValue({ address: "jdoe@fablabfortsmith.org", status: "active" });
   Service.checkAvailability.mockResolvedValue({ available: true });
   Service.adminSuspend.mockResolvedValue({ ok: true });
@@ -77,4 +79,22 @@ test("admin action by a non-admin is rejected 403 by the service", async () => {
   const e = new Error("Forbidden"); e.status = 403;
   Service.adminSuspend.mockRejectedValue(e);
   expect((await Controller.adminAction(post("http://x/admin", { action: "suspend", userID: "m1" }))).status).toBe(403);
+});
+
+test("M3: claim is rate-limited per user (6th within a minute -> 429)", async () => {
+  auth.mockResolvedValue(MEMBER);
+  for (let i = 0; i < 5; i++) {
+    expect((await Controller.claim(post("http://x/claim", { localPart: `n${i}` }))).status).toBe(201);
+  }
+  const blocked = await Controller.claim(post("http://x/claim", { localPart: "n6" }));
+  expect(blocked.status).toBe(429);
+  expect(blocked.headers.get("Retry-After")).toBeTruthy();
+});
+
+test("M3: availability throttle blocks after 20/min for a user", async () => {
+  auth.mockResolvedValue(MEMBER);
+  for (let i = 0; i < 20; i++) {
+    expect((await Controller.availability(new Request(`http://x/availability?name=n${i}`))).status).toBe(200);
+  }
+  expect((await Controller.availability(new Request("http://x/availability?name=n21"))).status).toBe(429);
 });

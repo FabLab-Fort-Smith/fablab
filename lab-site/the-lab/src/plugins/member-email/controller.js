@@ -4,12 +4,23 @@
 // from the session (never the body/query). Errors are mapped to safe responses.
 
 import { auth } from "@/auth";
+import { rateLimit } from "@/lib/rateLimit";
 import Service from "./service";
 import { resolveConfig } from "./config";
 
 const json = (body, status) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const unauthorized = () => json({ error: "Unauthorized" }, 401);
+
+/** Per-user throttle. Returns a 429 Response when over the limit, else null. */
+const throttle = (action, userID, limit) => {
+  const { allowed, retryAfterMs } = rateLimit(`member-email:${action}:${userID}`, { limit, windowMs: 60_000 });
+  if (allowed) return null;
+  return new Response(JSON.stringify({ error: "Too many requests" }), {
+    status: 429,
+    headers: { "content-type": "application/json", "Retry-After": String(Math.ceil(retryAfterMs / 1000)) },
+  });
+};
 
 const toActor = (session) => ({
   userID: session?.user?.userID ?? null,
@@ -28,6 +39,8 @@ export default class MemberEmailController {
     try {
       const session = await auth();
       if (!session?.user?.userID) return unauthorized();
+      const limited = throttle("availability", session.user.userID, 20);
+      if (limited) return limited;
       const name = new URL(req.url).searchParams.get("name") || "";
       const config = await resolveConfig();
       const result = await Service.checkAvailability(name, toActor(session), config);
@@ -42,6 +55,8 @@ export default class MemberEmailController {
     try {
       const session = await auth();
       if (!session?.user?.userID) return unauthorized();
+      const limited = throttle("claim", session.user.userID, 5);
+      if (limited) return limited;
       const body = await req.json().catch(() => ({}));
       const config = await resolveConfig();
       const result = await Service.claim({ localPart: body?.localPart }, toActor(session), config);

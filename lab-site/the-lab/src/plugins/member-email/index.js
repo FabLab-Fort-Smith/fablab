@@ -5,8 +5,20 @@
 import manifest from "./plugin.manifest";
 import Service from "./service";
 import { CORE_EVENTS } from "@/lib/plugins/hooks";
+import { purelymailReady } from "@/lib/purelymail";
 
 export { manifest };
+
+/**
+ * Readiness gate: the platform refuses to enable this plugin unless PurelyMail
+ * is configured (token + domain), so an admin can't turn on a broken feature.
+ * @returns {{ ok: boolean, reason?: string }}
+ */
+export function checkReady() {
+  return purelymailReady()
+    ? { ok: true }
+    : { ok: false, reason: "PURELYMAIL_API_TOKEN / PURELYMAIL_DOMAIN not set" };
+}
 
 /**
  * Wire hook subscriptions when the plugin is enabled. Handlers are best-effort

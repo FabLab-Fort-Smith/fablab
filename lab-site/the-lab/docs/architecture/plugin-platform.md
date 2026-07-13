@@ -60,8 +60,12 @@ Handlers are best-effort and isolated (a throw is audited, never breaks the emit
 |---|---|---|
 | `member.registered` | `AuthService.register` | `{ userID }` |
 | `membership.activated` | `memberships/confirm` (status→active) | `{ userID, type }` |
-| `membership.suspended` | *(reserved — not yet emitted)* | `{ userID }` |
+| `membership.suspended` | `memberships/subscription` (cancel / non-active sync) | `{ userID }` |
 | `member.deleted` | `UserService.deleteUser` | `{ userID }` |
+
+Core code emits via **`registry.emitEvent(event, payload)`** (not the raw bus): it **reconciles**
+this instance's wiring against the DB first, so an event still reaches a plugin that was enabled on a
+**different** server instance (the in-process bus alone would miss it). Handlers stay best-effort.
 
 ## Lifecycle & state
 
@@ -89,10 +93,16 @@ resolves to `isAdmin(actor)` (the app's one privileged role). **Group-ready seam
 groups later, extend the session in `auth.js` (`jwt` + `session` callbacks) to carry
 `permissions`/`groups` and change this one function — no plugin or route changes.
 
+## Readiness gate
+
+A plugin module may export **`checkReady()` → `{ ok, reason? }`**. The platform calls it in
+`setEnabled(true)` and **refuses to enable** (400) when `ok === false` — so an admin can't turn on a
+feature whose required config/integration is missing (e.g. member-email requires `PURELYMAIL_*`).
+
 ## Building a new plugin — checklist
 
 1. `src/plugins/<id>/plugin.manifest.js` — `defineManifest({...})`.
-2. `index.js` — export `{ manifest, register?, onEnable?, ... }`; wire hooks in `register(ctx)`.
+2. `index.js` — export `{ manifest, register?, onEnable?, checkReady?, ... }`; wire hooks in `register(ctx)`.
 3. Business layers per the app convention: `service.js`, `model.js` (owns `db`), `class.js`.
 4. API shims under `src/app/api/v1/plugins/<id>/**/route.js`: `requirePluginEnabled('<id>')` → delegate.
 5. Add the module to `src/plugins/index.js`.

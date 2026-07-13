@@ -50,6 +50,7 @@ async function currentMailbox(userID) {
  * @returns {Promise<{available:boolean, reason?:string}>}
  */
 export async function checkAvailability(rawName, actor, config) {
+  if (!purelymail.purelymailReady()) throw err(503, "Mail provisioning is not configured");
   const v = validateLocalPart(rawName, config.additionalReserved);
   if (!v.ok) return { available: false, reason: v.reason };
   if (await Model.findByLocalPart(v.localPart)) return { available: false, reason: "taken" };
@@ -65,6 +66,7 @@ export async function checkAvailability(rawName, actor, config) {
  * @returns {Promise<{address:string, status:string}>}
  */
 export async function claim(input, actor, config) {
+  if (!purelymail.purelymailReady()) throw err(503, "Mail provisioning is not configured");
   const v = validateLocalPart(input?.localPart, config.additionalReserved);
   if (!v.ok) throw err(400, `Invalid address (${v.reason})`);
 
@@ -124,6 +126,22 @@ export async function claim(input, actor, config) {
       throw err(409, "That address is not available");
     }
     throw e;
+  }
+
+  // Race-safe cap enforcement (the pre-check above is a fast path but not atomic):
+  // after insert, if concurrent claims pushed this member over the cap, keep the
+  // earliest N deterministically and roll back ours. CWE-362 / spend guard.
+  try {
+    const active = await Model.findActiveByUserSorted(actor.userID);
+    const idx = active.findIndex((b) => b.localPart === v.localPart);
+    if (idx >= 0 && idx >= config.maxMailboxesPerMember) {
+      try { await purelymail.deleteMailbox(v.localPart); } catch { /* best effort */ }
+      await Model.deleteByLocalPart(v.localPart);
+      throw err(409, "Mailbox limit reached for this member");
+    }
+  } catch (e) {
+    if (e?.status === 409) throw e;
+    // A failure of the recount itself must not void a mailbox we already created.
   }
 
   auditLog("email.mailbox.provisioned", {
@@ -193,16 +211,32 @@ export async function adminDelete(userID, actor) {
 
 // ── Hook handlers (server-side, no actor) ────────────────────────────────────
 
-/** Erasure hygiene: delete a member's mailbox(es) when the member is deleted. */
+/**
+ * Erasure hygiene: delete a member's mailbox(es) when the member is deleted.
+ * The local record is removed ONLY after a confirmed provider delete — on
+ * failure we KEEP the record and audit `erase_failed` so the orphaned mailbox
+ * (which holds the member's recovery email) stays tracked for retry, rather than
+ * silently dropping the pointer to it (GDPR erasure integrity).
+ */
 export async function onMemberDeleted({ userID }) {
   const boxes = await Model.findByUserID(userID);
   for (const box of boxes) {
-    if (box.status !== "revoked") {
-      try { await purelymail.deleteMailbox(box.localPart); } catch { /* best effort */ }
+    if (box.status === "revoked") {
+      await Model.deleteByLocalPart(box.localPart);
+      continue;
+    }
+    try {
+      await purelymail.deleteMailbox(box.localPart);
+      await Model.deleteByLocalPart(box.localPart);
+      auditLog("email.mailbox.erased", { target: { userID, localPart: box.localPart } });
+    } catch (e) {
+      auditLog("email.mailbox.erase_failed", {
+        target: { userID, localPart: box.localPart },
+        outcome: "error",
+        reason: purelymail.purelyMailErrorDetail(e),
+      });
     }
   }
-  await Model.removeByUserID(userID);
-  auditLog("email.mailbox.erased", { target: { userID } });
 }
 
 /** Auto-suspend a member's mailbox when their membership is suspended. */
