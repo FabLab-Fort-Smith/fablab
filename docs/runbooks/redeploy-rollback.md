@@ -61,4 +61,8 @@ Coolify keeps deployment history per app. To roll back:
   `lab-stack/coolify/reconcile.sh`.
 
 ---
-_Last validated: 2026-07-12 (redeploy + healthcheck-fail auto-rollback observed during staging bring-up); explicit roll-back-to-previous-deployment not yet drilled. Owner: platform._
+_Last validated: 2026-07-13 (staging rollback DRILL: pushed a marker commit → Coolify auto-deployed
+it → `git revert` → Coolify auto-redeployed the reverted state, **recovery ~117s push→healthy**,
+verified via deployment-history commit SHAs). Prior: 2026-07-12 redeploy + healthcheck-fail
+auto-rollback. NOT yet drilled: Coolify's previous-**image** rollback button (UI-only on v4.1.2) and
+the production DNS-cutover-revert-to-Vercel (gated — rehearse at cutover). Owner: platform._
