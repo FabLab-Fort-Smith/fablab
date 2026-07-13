@@ -7,6 +7,8 @@ import User from '../../v1/users/class';
 import UserModel from './model';
 import Constants from '@/lib/constants';
 import { sendVerificationEmail, sendInviteEmail } from '@/app/utils/email.util.js';
+import { CORE_EVENTS } from '@/lib/plugins/hooks';
+import { emitEvent } from '@/lib/plugins/registry';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRATION = '7d'; // Token expiration for JWT tokens
@@ -115,6 +117,8 @@ export default class AuthService {
         if (newUser.status === 'unverified') {
             await sendVerificationEmail(plainEmail, newUser.verificationToken);
         };
+        // Notify the plugin platform (best-effort; never blocks registration).
+        await emitEvent(CORE_EVENTS.MEMBER_REGISTERED, { userID: newUser.userID }).catch(() => {});
         return results;
     }
 

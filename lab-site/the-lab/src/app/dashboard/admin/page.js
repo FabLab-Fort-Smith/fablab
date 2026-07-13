@@ -1,5 +1,5 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -20,18 +20,39 @@ const ADMIN_LINKS = [
     { sym: '◉', label: 'membership plans', desc: 'manage square plans', path: '/dashboard/admin/plans', color: 'var(--cyan)' },
     { sym: '⟁', label: 'square txns', desc: 'payment history', path: '/dashboard/admin/square-transactions', color: 'var(--green)' },
     { sym: '%', label: 'coupons', desc: 'discount codes', path: '/dashboard/admin/coupons', color: 'var(--magenta)' },
+    { sym: '⧉', label: 'plugins', desc: 'enable / configure add-ons', path: '/dashboard/admin/plugins', color: 'var(--cyan)' },
 ];
 
 export default function AdminHomePage() {
     const { data: session, status } = useSession();
     const router = useRouter();
+    const [pluginNav, setPluginNav] = useState([]);
 
     useEffect(() => {
         if (status === 'unauthenticated') router.push('/auth/signin');
         else if (status === 'authenticated' && session.user.role !== 'admin') router.push('/dashboard');
     }, [status, session, router]);
 
+    // Enabled plugins that declare an admin.nav socket contribute a card here.
+    useEffect(() => {
+        if (status !== 'authenticated' || session.user.role !== 'admin') return;
+        let active = true;
+        fetch('/api/v1/admin/plugins')
+            .then((r) => (r.ok ? r.json() : { plugins: [] }))
+            .then((d) => {
+                if (!active) return;
+                const nav = (d.plugins || [])
+                    .filter((p) => p.enabled && p.sockets?.adminNav)
+                    .map((p) => ({ ...p.sockets.adminNav, color: p.sockets.adminNav.color || 'var(--cyan)', sym: p.sockets.adminNav.sym || '⧉' }));
+                setPluginNav(nav);
+            })
+            .catch(() => { });
+        return () => { active = false; };
+    }, [status, session]);
+
     if (status !== 'authenticated') return null;
+
+    const links = [...ADMIN_LINKS, ...pluginNav];
 
     return (
         <div style={{ padding: '20px 24px' }}>
@@ -48,7 +69,7 @@ export default function AdminHomePage() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
-                {ADMIN_LINKS.map(item => (
+                {links.map(item => (
                     <Link
                         key={item.path}
                         href={item.path}

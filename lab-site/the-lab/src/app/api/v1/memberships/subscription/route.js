@@ -6,6 +6,8 @@ import {
 } from "@/lib/square";
 import { db } from "@/lib/database";
 import UserService from "@/app/api/v1/users/service";
+import { CORE_EVENTS } from "@/lib/plugins/hooks";
+import { emitEvent } from "@/lib/plugins/registry";
 
 async function getAuthedUser(userID) {
     const session = await auth();
@@ -142,6 +144,9 @@ export async function POST(req) {
         }
 
         await UserService.updateUser(userID, updateData);
+        if (sub.status !== "ACTIVE") {
+            await emitEvent(CORE_EVENTS.MEMBERSHIP_SUSPENDED, { userID }).catch(() => {});
+        }
         return NextResponse.json({ success: true, subscriptionId: sub.id, status: sub.status });
     } catch (err) {
         return NextResponse.json({ error: err?.errors?.[0]?.detail || "Sync failed." }, { status: 500 });
@@ -168,6 +173,7 @@ export async function PATCH(req) {
                 "membership.status": "suspended",
                 "membership.accessKey.issued": false,
             });
+            await emitEvent(CORE_EVENTS.MEMBERSHIP_SUSPENDED, { userID }).catch(() => {});
             return NextResponse.json({ success: true, action: "canceled" });
         }
 
