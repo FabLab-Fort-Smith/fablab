@@ -28,7 +28,7 @@
     path: /etc/default/ufw
     regexp: '^DEFAULT_FORWARD_POLICY='
     line: 'DEFAULT_FORWARD_POLICY="ACCEPT"'
-  notify: reload ufw
+  notify: Reload ufw
 
 # The canonical chaifeng/ufw-docker block. Makes ufw own the DOCKER-USER chain:
 # container-originated traffic from private ranges is RETURNed (allowed — this is
@@ -68,8 +68,8 @@
       COMMIT
       # END UFW AND DOCKER
   notify:
-    - reload ufw
-    - restart docker
+    - Reload ufw
+    - Restart docker
 
 # Container->host (INPUT) path: allow the Docker bridge subnets to reach the host
 # on exactly the ports containers legitimately need (Coolify -> host :22 for the
@@ -82,4 +82,4 @@
     proto: tcp
     comment: "docker->host (ufw_docker role)"
   loop: "{{ ufw_docker_bridge_cidrs | product(ufw_docker_host_ports) | list }}"
-  notify: reload ufw
+  notify: Reload ufw

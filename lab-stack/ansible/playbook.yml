@@ -28,7 +28,7 @@
     - role: automation_account   # scoped least-privilege CI/ops identity — ADR 0009
       when: manage_automation_account | default(false)
     - role: docker      # Docker Engine from the official repo, non-root deploy access
-    - role: ufw_docker  # ufw+Docker coexistence: keep container->host reachable across reboots/ufw reloads (fixes Coolify host.docker.internal:22)
+    - role: ufw_docker  # ufw+Docker coexistence: container->host stays reachable across reboots/ufw reloads (Coolify)
     - role: mongodb     # standalone self-hosted MongoDB on a private docker network (ADR 0010)
       when: mongodb_manage | default(true)
     - role: coolify      # install Coolify (reviewed installer); dashboard secured manually after

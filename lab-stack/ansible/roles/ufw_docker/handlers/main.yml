@@ -2,11 +2,11 @@
 # Order matters: ufw reloads first (re-reads after.rules + DEFAULT_FORWARD_POLICY),
 # then Docker restarts so it re-inserts its per-bridge chains ON TOP of the
 # reloaded ufw ruleset. Handlers run in the order they are DEFINED here.
-- name: reload ufw
+- name: Reload ufw
   community.general.ufw:
     state: reloaded
 
-- name: restart docker
+- name: Restart docker
   ansible.builtin.service:
     name: docker
     state: restarted
