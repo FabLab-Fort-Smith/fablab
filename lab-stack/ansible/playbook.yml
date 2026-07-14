@@ -2,8 +2,8 @@
 # Converge the VPS to its desired state. Idempotent; safe to re-run (ADR 0004).
 # Usage (from lab-stack/): `make converge`  (or `ansible-playbook ansible/playbook.yml`)
 #
-# Order matters: harden first, then tailnet + SSH-CA, the role accounts, Docker, MongoDB,
-# Coolify, and backups last.
+# Order matters: harden first, then tailnet + SSH-CA, the role accounts, Docker,
+# ufw_docker (keep container->host reachable under ufw), MongoDB, Coolify, backups last.
 - name: Converge fablab VPS (harden + tailscale + ssh_ca + accounts + docker + mongodb + coolify + backups)
   hosts: lab_vps
   become: true
@@ -28,6 +28,7 @@
     - role: automation_account   # scoped least-privilege CI/ops identity — ADR 0009
       when: manage_automation_account | default(false)
     - role: docker      # Docker Engine from the official repo, non-root deploy access
+    - role: ufw_docker  # ufw+Docker coexistence: keep container->host reachable across reboots/ufw reloads (fixes Coolify host.docker.internal:22)
     - role: mongodb     # standalone self-hosted MongoDB on a private docker network (ADR 0010)
       when: mongodb_manage | default(true)
     - role: coolify      # install Coolify (reviewed installer); dashboard secured manually after

@@ -1,0 +1,14 @@
+---
+# Docker bridge subnets permitted to reach the host on ufw_docker_host_ports.
+# Coolify creates its networks under 10.0.0.0/8 on this host (observed: docker0
+# 10.0.0.0/24, Coolify app net 10.0.1.0/24); 172.16.0.0/12 covers Docker's other
+# default pool. These are private ranges only — never public.
+ufw_docker_bridge_cidrs:
+  - "10.0.0.0/8"
+  - "172.16.0.0/12"
+
+# Host ports containers legitimately need to reach on the host.
+# 22 = Coolify control plane SSHes to the host (its "localhost" server) via
+# host.docker.internal. Add more only with a documented reason.
+ufw_docker_host_ports:
+  - 22
