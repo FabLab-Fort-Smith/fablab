@@ -48,8 +48,10 @@ summary: Never single-path a change that can sever access (firewall/sshd/network
 ## Steps
 
 ### 1. Pre-flight (backup + arm auto-revert)
-Ensure `atd` is running (`sudo systemctl enable --now atd`). Use absolute paths in `at`/`nohup` jobs
-(minimal env).
+`at`/`atd` backs the auto-revert and is installed + enabled by the `harden` role. If it's somehow
+missing (`at: command not found`), either `sudo apt-get install -y at && sudo systemctl enable --now
+atd` or use the **`nohup` fallback below** (rehearsed working 2026-07-14). Use absolute paths in
+`at`/`nohup` jobs (minimal env).
 
 **Firewall change** — restores the ufw config *and* both IP families, then reloads (no container
 bounce):
@@ -124,4 +126,4 @@ for out-of-band recovery / snapshot restore.
   `runbooks/agent-ssh-access.md`; `lab-stack/racknerd/` (provider/console).
 
 ---
-_Last validated: not yet drilled — rehearse the auto-revert AND a real console login (with the password precondition) on a low-risk change before relying on this. Owner: platform._
+_Last validated: 2026-07-14 — dead-man's-switch auto-revert drilled (background-timer fallback: armed job fired unattended; a cancelled job did not — arm/cancel/fire all confirmed). Rehearsal caught that `at` was not installed → now added to the `harden` role. **Still to rehearse (human):** a real RackNerd console login after setting the local-password precondition. Owner: platform._
