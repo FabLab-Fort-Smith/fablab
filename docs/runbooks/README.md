@@ -33,6 +33,9 @@ step-by-step and executable by someone who didn't write it.
 - [x] **backup-restore.md** — back up the self-hosted MongoDB; **tested** restore drill (strict,
       automated: `lab-stack/scripts/mongo-restore-drill.sh`). *(validated 2026-07-12 — caught + fixed
       a missing app user)*
+- [x] **safe-remote-change.md** — safeguards before any lock-out-capable remote change
+      (firewall/sshd/network): keep a 2nd session, test before reload, arm a dead-man's-switch
+      auto-revert, and use the RackNerd console as break-glass. *(scaffold — rehearse the revert)*
 - [ ] **incident-response.md** — triage/contain/recover (esp. compromised webhook or build).
 - [ ] **add-new-site.md** — add a `lab-site/<new-site>/` and wire it as a Coolify application.
 - [ ] **on-call.md** — alert response & escalation.

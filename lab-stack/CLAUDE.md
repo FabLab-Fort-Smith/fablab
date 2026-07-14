@@ -37,6 +37,13 @@
 - **Builds are untrusted:** isolated, non-root, ephemeral; no prod secrets in build/preview envs.
 - **Zero-trust origin:** firewall the VPS to accept web traffic only from Cloudflare; TLS
   everywhere; never trust the network (`@rules/std-zero-trust.md`).
+- **Never single-path a lock-out-capable remote change.** Any change that could sever our own
+  access — ufw/iptables/firewall, sshd config, SSH keys, networking/routing — MUST follow
+  `docs/runbooks/safe-remote-change.md`: keep a **second live SSH session**, test before reload
+  (`sshd -t`, `iptables -C`), **arm a dead-man's-switch auto-revert before applying** (cancel only
+  after verifying access from a fresh login), snapshot the changed files, and know the **RackNerd
+  console** break-glass. Read-only diagnosis is always fine; mutating the firewall/sshd/network is
+  gated and needs the rollback + out-of-band plan surfaced for approval (`@rules/workflow-gated-actions.md`).
 - **MongoDB on the VPS:** private network only (never public), strong auth, TLS, at-rest
   encryption, least-privilege app user (`@rules/topic-database.md`); store **no PAN/SAD**
   (Square tokenized — `@rules/std-pci.md`, handled app-side).
