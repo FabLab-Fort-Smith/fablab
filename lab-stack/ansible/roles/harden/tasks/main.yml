@@ -3,9 +3,17 @@
 
 - name: Install baseline security packages
   ansible.builtin.apt:
-    name: [ufw, fail2ban, unattended-upgrades]
+    name: [ufw, fail2ban, unattended-upgrades, at]
     state: present
     update_cache: true
+
+# `at`/atd backs the dead-man's-switch auto-revert in runbooks/safe-remote-change.md
+# (a rehearsal on 2026-07-14 found it was NOT installed — keep it present + enabled).
+- name: Enable the atd scheduler
+  ansible.builtin.service:
+    name: atd
+    state: started
+    enabled: true
 
 - name: Enable unattended security upgrades
   ansible.builtin.copy:

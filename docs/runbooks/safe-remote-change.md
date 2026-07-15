@@ -39,17 +39,21 @@ summary: Never single-path a change that can sever access (firewall/sshd/network
    you've confirmed access + the service still work from the second session (step 3).
 5. **Snapshot/back up** the exact files you're changing, and take a **SolusVM snapshot** in the
    RackNerd panel where available.
-6. **Break-glass must actually work:** the RackNerd panel → **Console/VNC** logs in without SSH — but
-   this host is **key-only** (`PasswordAuthentication no`) and cloud images often ship with **locked
-   local passwords**, so the console getty may have no usable login. **Precondition:** set a
-   console password for a local account first (`sudo passwd b007ab1e`) and **rehearse a real console
-   login once** — otherwise this fallback is illusory.
+6. **Break-glass must actually work:** the RackNerd panel → **Console/VNC** logs in without SSH.
+   SSH is key-only (`PasswordAuthentication no`), but the **console getty uses the local Unix
+   password** — so **verify it's usable**: `sudo passwd -S <user>` → **`P`** = usable, **`L`** =
+   locked (if `L`, `sudo passwd <user>` to set one — note that also becomes the sudo password).
+   Confirmed **`P` for `b007ab1e` on `fablab-prod`** and a real console login was rehearsed
+   (2026-07-15: console login + `sudo ufw status` returned the full ruleset). Re-verify after any
+   rebuild/reimage. Console is raw VNC — no paste, possibly US keymap; type carefully.
 
 ## Steps
 
 ### 1. Pre-flight (backup + arm auto-revert)
-Ensure `atd` is running (`sudo systemctl enable --now atd`). Use absolute paths in `at`/`nohup` jobs
-(minimal env).
+`at`/`atd` backs the auto-revert and is installed + enabled by the `harden` role. If it's somehow
+missing (`at: command not found`), either `sudo apt-get install -y at && sudo systemctl enable --now
+atd` or use the **`nohup` fallback below** (rehearsed working 2026-07-14). Use absolute paths in
+`at`/`nohup` jobs (minimal env).
 
 **Firewall change** — restores the ufw config *and* both IP families, then reloads (no container
 bounce):
@@ -124,4 +128,4 @@ for out-of-band recovery / snapshot restore.
   `runbooks/agent-ssh-access.md`; `lab-stack/racknerd/` (provider/console).
 
 ---
-_Last validated: not yet drilled — rehearse the auto-revert AND a real console login (with the password precondition) on a low-risk change before relying on this. Owner: platform._
+_Last validated: 2026-07-15 — **fully drilled, both halves.** (1) Dead-man's-switch auto-revert: background-timer fallback confirmed (armed job fired unattended; a cancelled job did not — arm/cancel/fire all verified); the drill caught that `at` was not installed → now added to the `harden` role. (2) Console break-glass: real RackNerd console login (no SSH) + `sudo ufw status` returned the full ruleset; `passwd -S b007ab1e` = `P` (usable). Re-drill after any host rebuild. Owner: platform._
