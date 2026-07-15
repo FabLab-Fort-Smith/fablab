@@ -39,11 +39,13 @@ summary: Never single-path a change that can sever access (firewall/sshd/network
    you've confirmed access + the service still work from the second session (step 3).
 5. **Snapshot/back up** the exact files you're changing, and take a **SolusVM snapshot** in the
    RackNerd panel where available.
-6. **Break-glass must actually work:** the RackNerd panel → **Console/VNC** logs in without SSH — but
-   this host is **key-only** (`PasswordAuthentication no`) and cloud images often ship with **locked
-   local passwords**, so the console getty may have no usable login. **Precondition:** set a
-   console password for a local account first (`sudo passwd b007ab1e`) and **rehearse a real console
-   login once** — otherwise this fallback is illusory.
+6. **Break-glass must actually work:** the RackNerd panel → **Console/VNC** logs in without SSH.
+   SSH is key-only (`PasswordAuthentication no`), but the **console getty uses the local Unix
+   password** — so **verify it's usable**: `sudo passwd -S <user>` → **`P`** = usable, **`L`** =
+   locked (if `L`, `sudo passwd <user>` to set one — note that also becomes the sudo password).
+   Confirmed **`P` for `b007ab1e` on `fablab-prod`** and a real console login was rehearsed
+   (2026-07-15: console login + `sudo ufw status` returned the full ruleset). Re-verify after any
+   rebuild/reimage. Console is raw VNC — no paste, possibly US keymap; type carefully.
 
 ## Steps
 
@@ -126,4 +128,4 @@ for out-of-band recovery / snapshot restore.
   `runbooks/agent-ssh-access.md`; `lab-stack/racknerd/` (provider/console).
 
 ---
-_Last validated: 2026-07-14 — dead-man's-switch auto-revert drilled (background-timer fallback: armed job fired unattended; a cancelled job did not — arm/cancel/fire all confirmed). Rehearsal caught that `at` was not installed → now added to the `harden` role. **Still to rehearse (human):** a real RackNerd console login after setting the local-password precondition. Owner: platform._
+_Last validated: 2026-07-15 — **fully drilled, both halves.** (1) Dead-man's-switch auto-revert: background-timer fallback confirmed (armed job fired unattended; a cancelled job did not — arm/cancel/fire all verified); the drill caught that `at` was not installed → now added to the `harden` role. (2) Console break-glass: real RackNerd console login (no SSH) + `sudo ufw status` returned the full ruleset; `passwd -S b007ab1e` = `P` (usable). Re-drill after any host rebuild. Owner: platform._
