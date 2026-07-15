@@ -4,6 +4,14 @@
     name: ssh
     state: restarted
 
+# Config-only drop-in changes prefer reload (re-reads config without recycling the listener) —
+# the gentler option for the safe-remote-change posture. Restart is reserved for cases that
+# need the listener recycled.
+- name: Reload ssh
+  ansible.builtin.service:
+    name: ssh
+    state: reloaded
+
 - name: Restart fail2ban
   ansible.builtin.service:
     name: fail2ban

@@ -31,8 +31,13 @@ automation_sudo_commands:
 
 # Restrict SSH logins to these users. LEAVE EMPTY to avoid lockout (SSH stays key-only, no root,
 # no password regardless). If you later lock down, include EVERY maintainer + deploy + automation,
-# e.g. [deploy, automation, critter, b007ab1e].
+# e.g. [deploy, automation, critter, b007ab1e]. (The Coolify root-SSH Match block re-grants 'root'
+# within its Docker-scoped block, so 'root' need not be in this global list.)
 ssh_allow_users: []
+
+# Coolify's control plane SSHes to this host as root from its Docker networks — enable the scoped,
+# key-only root exception (global PermitRootLogin stays 'no'). See roles/harden/defaults/main.yml.
+harden_coolify_allow_root_ssh_from_docker: true
 
 # --- Domains (ADR 0002) ---
 primary_domain: "fablabfortsmith.org"
