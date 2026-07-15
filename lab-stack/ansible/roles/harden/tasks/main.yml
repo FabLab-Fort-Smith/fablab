@@ -35,7 +35,7 @@
 # Coolify's containerised control plane manages this host over SSH as root@host.docker.internal.
 # A Match block re-enables key-only root ONLY from the Docker bridges (never internet/tailnet);
 # the global default (10-fablab-hardening.conf) stays PermitRootLogin no. Opt-IN (default false)
-# because it expands a privilege — set coolify_allow_root_ssh_from_docker: true for the Coolify
+# because it expands a privilege — set harden_coolify_allow_root_ssh_from_docker: true for the Coolify
 # host. The companion task below REMOVES the drop-in when disabled, so the toggle actually
 # revokes the privilege (fail closed). The 20- prefix keeps global-first ordering by convention;
 # a Match overrides the global regardless of drop-in order.
@@ -45,14 +45,14 @@
     dest: /etc/ssh/sshd_config.d/20-coolify-root.conf
     mode: "0644"
     validate: "/usr/sbin/sshd -t -f %s"
-  when: coolify_allow_root_ssh_from_docker | default(false)
+  when: harden_coolify_allow_root_ssh_from_docker | default(false)
   notify: Reload ssh
 
 - name: Remove Coolify root SSH drop-in when disabled (fail closed — revoke the privilege)
   ansible.builtin.file:
     path: /etc/ssh/sshd_config.d/20-coolify-root.conf
     state: absent
-  when: not (coolify_allow_root_ssh_from_docker | default(false))
+  when: not (harden_coolify_allow_root_ssh_from_docker | default(false))
   notify: Reload ssh
 
 # --- Firewall: default-deny; SSH always; web only from Cloudflare (zero-trust origin) ---
@@ -129,7 +129,7 @@
       # as root from the Docker networks (10.0.0.0/8 = Coolify's default-address-pool). Without
       # this, a transient auth failure gets the Coolify container IP banned and knocks the
       # platform offline. Loopback is always ignored too. External sources stay protected.
-      ignoreip = 127.0.0.1/8 ::1 {{ coolify_docker_ssh_cidr | default('10.0.0.0/8') }}
+      ignoreip = 127.0.0.1/8 ::1 {{ harden_coolify_docker_ssh_cidr | default('10.0.0.0/8') }}
   notify: Restart fail2ban
 
 # --- Minimal kernel hardening ---

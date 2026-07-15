@@ -37,7 +37,7 @@ ssh_allow_users: []
 
 # Coolify's control plane SSHes to this host as root from its Docker networks — enable the scoped,
 # key-only root exception (global PermitRootLogin stays 'no'). See roles/harden/defaults/main.yml.
-coolify_allow_root_ssh_from_docker: true
+harden_coolify_allow_root_ssh_from_docker: true
 
 # --- Domains (ADR 0002) ---
 primary_domain: "fablabfortsmith.org"

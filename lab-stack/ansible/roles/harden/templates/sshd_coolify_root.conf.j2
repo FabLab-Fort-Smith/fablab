@@ -7,7 +7,7 @@
 # (100.64.0.0/10, outside 10/8). Source 10.x cannot be spoofed in from outside (it would
 # arrive on eth0 and be dropped by strict rp_filter). Terminated with `Match all` so the
 # conditional scope cannot leak into any later-included config.
-Match Address {{ coolify_docker_ssh_cidr | default('10.0.0.0/8') }}
+Match Address {{ harden_coolify_docker_ssh_cidr | default('10.0.0.0/8') }}
     PermitRootLogin prohibit-password
 {% if ssh_allow_users | default([]) | length > 0 %}
     # A global `AllowUsers` (emitted by 10-fablab-hardening.conf when ssh_allow_users is set)

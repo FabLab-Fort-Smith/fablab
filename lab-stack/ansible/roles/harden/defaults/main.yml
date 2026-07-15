@@ -3,11 +3,11 @@
 
 # Coolify's containerised control plane manages this host over SSH as root@host.docker.internal.
 # When true, a scoped sshd Match block re-enables KEY-ONLY root login ONLY from the Docker
-# bridge networks (see coolify_docker_ssh_cidr); global PermitRootLogin stays 'no'. Opt-IN
+# bridge networks (see harden_coolify_docker_ssh_cidr); global PermitRootLogin stays 'no'. Opt-IN
 # (default false) because it expands a privilege — enable it explicitly for the Coolify host.
 # When false, the drop-in is removed (privilege revoked).
-coolify_allow_root_ssh_from_docker: false
+harden_coolify_allow_root_ssh_from_docker: false
 
 # CIDR that Coolify's Docker networks live on (its default-address-pool). Used to scope both
 # the root-SSH Match block and the fail2ban ignoreip whitelist. 10.0.0.0/8 is Coolify's default.
-coolify_docker_ssh_cidr: "10.0.0.0/8"
+harden_coolify_docker_ssh_cidr: "10.0.0.0/8"
