@@ -1,0 +1,11 @@
+# Managed by Ansible (lab-stack/ansible/roles/harden). Do not edit by hand.
+# Coolify's control plane runs in a container and manages THIS host over SSH as
+# root@host.docker.internal. The global default stays PermitRootLogin no
+# (10-fablab-hardening.conf); this narrowly re-enables KEY-ONLY root login ONLY from the
+# internal Docker bridge networks (Coolify's default-address-pool is 10.0.0.0/8) — never
+# from the internet or the tailnet. Source 10.x cannot be spoofed in from outside (it would
+# arrive on eth0 and be dropped by rp_filter/martian filtering). Terminated with `Match all`
+# so the conditional scope cannot leak into any later-included config.
+Match Address {{ coolify_docker_ssh_cidr | default('10.0.0.0/8') }}
+    PermitRootLogin prohibit-password
+Match all
