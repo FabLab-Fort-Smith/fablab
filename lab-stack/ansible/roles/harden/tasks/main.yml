@@ -33,16 +33,27 @@
   notify: Restart ssh
 
 # Coolify's containerised control plane manages this host over SSH as root@host.docker.internal.
-# Global root login stays disabled; this re-enables key-only root ONLY from the Docker bridges
-# (never internet/tailnet). Sorts AFTER 10-fablab-hardening.conf so the Match takes effect.
+# A Match block re-enables key-only root ONLY from the Docker bridges (never internet/tailnet);
+# the global default (10-fablab-hardening.conf) stays PermitRootLogin no. Opt-IN (default false)
+# because it expands a privilege — set coolify_allow_root_ssh_from_docker: true for the Coolify
+# host. The companion task below REMOVES the drop-in when disabled, so the toggle actually
+# revokes the privilege (fail closed). The 20- prefix keeps global-first ordering by convention;
+# a Match overrides the global regardless of drop-in order.
 - name: Allow Coolify (Docker bridges) key-only root SSH — global root login stays disabled
   ansible.builtin.template:
     src: sshd_coolify_root.conf.j2
     dest: /etc/ssh/sshd_config.d/20-coolify-root.conf
     mode: "0644"
     validate: "/usr/sbin/sshd -t -f %s"
-  when: coolify_allow_root_ssh_from_docker | default(true)
-  notify: Restart ssh
+  when: coolify_allow_root_ssh_from_docker | default(false)
+  notify: Reload ssh
+
+- name: Remove Coolify root SSH drop-in when disabled (fail closed — revoke the privilege)
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d/20-coolify-root.conf
+    state: absent
+  when: not (coolify_allow_root_ssh_from_docker | default(false))
+  notify: Reload ssh
 
 # --- Firewall: default-deny; SSH always; web only from Cloudflare (zero-trust origin) ---
 - name: UFW default policies (deny in / allow out)
