@@ -24,11 +24,28 @@
     state: directory
     mode: "0755"
 
-- name: Add Tailscale GPG key
-  ansible.builtin.get_url:
-    url: "https://pkgs.tailscale.com/stable/ubuntu/{{ ansible_distribution_release }}.noarmor.gpg"
+# Signing key VENDORED + pinned (roles/tailscale/files/tailscale-archive-keyring.gpg) — NOT fetched
+# at runtime. Fetching an apt-authorizing key TOFU over HTTPS is a supply-chain gap (CWE-494 /
+# @rules/std-supplychain.md). One key across all codenames.
+# Fingerprint: 2596 A99E AAB3 3821 893C 0A79 458C A832 957F 5868 (Tailscale Inc. signing key).
+- name: Install the pinned Tailscale signing key
+  ansible.builtin.copy:
+    src: tailscale-archive-keyring.gpg
     dest: /etc/apt/keyrings/tailscale-archive-keyring.gpg
     mode: "0644"
+
+- name: Read the installed Tailscale key fingerprint
+  ansible.builtin.command: gpg --show-keys --with-colons /etc/apt/keyrings/tailscale-archive-keyring.gpg
+  register: tailscale_key
+  changed_when: false
+
+- name: Assert the Tailscale key matches the published signing key (fail closed on tamper)
+  ansible.builtin.assert:
+    that: "'2596A99EAAB33821893C0A79458CA832957F5868' in tailscale_key.stdout"
+    fail_msg: >-
+      Tailscale signing key fingerprint mismatch — refusing to add the repo (possible tamper).
+      Expected 2596A99EAAB33821893C0A79458CA832957F5868.
+    quiet: true
 
 - name: Add Tailscale APT repository
   ansible.builtin.apt_repository:
