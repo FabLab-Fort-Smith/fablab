@@ -7,7 +7,8 @@
 #
 # Requires an ACCESS-scoped token (NOT the DNS token): Account > Access: Apps and Policies > Edit.
 # Reads CF_ACCESS_TOKEN + (optional) CLOUDFLARE_ACCOUNT_ID from ../.env; resolves the account id
-# from the zone via CLOUDFLARE_API_TOKEN if not set. Idempotent: skips apps whose name exists.
+# from the zone via CLOUDFLARE_API_TOKEN if not set. Idempotent: creates each app, or UPDATES an
+# existing app's policy (so the allow-list / ACCESS_ALLOWED_EMAILS can be changed by re-running).
 # Usage:  bash cloudflare/access.sh [--dry-run]
 set -uo pipefail
 IFS=$'\n\t'
@@ -22,7 +23,10 @@ envval(){ [ -f "$ENVF" ] || return 0; sed -n "s/^$1=//p" "$ENVF" | head -1 | sed
 # ===== desired state =====
 APP_DOMAIN="deploy.fablabfortsmith.org"
 WEBHOOK_PATH="/webhooks"                               # Coolify webhook base; bypassed (HMAC-verified)
-ALLOWED_EMAILS="${ACCESS_ALLOWED_EMAILS:-john.annis@fablabfortsmith.org}"  # comma-sep maintainers
+# Allow-list of maintainer emails (comma-separated). Precedence: env var > ../.env > default.
+# Persist it in ../.env (git-ignored) as ACCESS_ALLOWED_EMAILS so re-runs keep the full list.
+ALLOWED_EMAILS="${ACCESS_ALLOWED_EMAILS:-$(envval ACCESS_ALLOWED_EMAILS)}"
+[ -n "$ALLOWED_EMAILS" ] || ALLOWED_EMAILS="john.annis@fablabfortsmith.org"
 SESSION_DURATION="24h"
 # =========================
 
@@ -59,22 +63,25 @@ existing(){ api GET "$CF/accounts/$ACCOUNT_ID/access/apps?per_page=100" | jq -r 
 # include rule: one {email:{email:..}} per address
 email_include(){ printf '%s' "$ALLOWED_EMAILS" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | jq -R '{email:{email:.}}' | jq -s '.'; }
 
-ensure_app(){ # ensure_app NAME DOMAIN DECISION [require_mfa]
-  local name="$1" domain="$2" decision="$3" mfa="${4:-}" id inc pol body
+ensure_app(){ # ensure_app NAME DOMAIN DECISION [require_mfa] — idempotent create-OR-update
+  local name="$1" domain="$2" decision="$3" mfa="${4:-}" id inc pol body method url verb
   id="$(existing "$name")"
-  if [ -n "$id" ]; then info "app '$name' exists ($id) — leaving as-is"; return 0; fi
   if [ "$decision" = bypass ]; then inc='[{"everyone":{}}]'; else inc="$(email_include)"; fi
   local req='[]'; [ "$mfa" = mfa ] && req='[{"auth_method":{"auth_method":"mfa"}}]'
   pol="$(jq -n --arg name "$name policy" --arg d "$decision" --argjson inc "$inc" --argjson req "$req" \
         '{name:$name, decision:$d, include:$inc, require:$req, precedence:1}')"
   body="$(jq -n --arg name "$name" --arg dom "$domain" --arg sd "$SESSION_DURATION" --argjson pol "[$pol]" \
         '{name:$name, domain:$dom, type:"self_hosted", session_duration:$sd, app_launcher_visible:false, policies:$pol}')"
-  if [ "$DRY" -eq 1 ]; then info "would CREATE Access app '$name' (domain=$domain decision=$decision)"; return 0; fi
-  local resp; resp="$(api POST "$CF/accounts/$ACCOUNT_ID/access/apps" "$body")"
+  # Upsert: PUT the existing app to reconcile its policy (so the allow-list can change), else POST to create.
+  if [ -n "$id" ]; then method=PUT; url="$CF/accounts/$ACCOUNT_ID/access/apps/$id"; verb="update"
+  else method=POST; url="$CF/accounts/$ACCOUNT_ID/access/apps"; verb="create"; fi
+  local shown; [ "$decision" = bypass ] && shown="everyone" || shown="$ALLOWED_EMAILS"
+  if [ "$DRY" -eq 1 ]; then info "would $verb Access app '$name' (domain=$domain decision=$decision allow=$shown)"; return 0; fi
+  local resp; resp="$(api "$method" "$url" "$body")"
   if printf '%s' "$resp" | jq -e '.success==true' >/dev/null 2>&1; then
-    info "created Access app '$name' ($(printf '%s' "$resp" | jq -r '.result.id'))"
+    info "${verb}d Access app '$name' ($(printf '%s' "$resp" | jq -r '.result.id'))  allow=$shown"
   else
-    die "create '$name' failed: $(printf '%s' "$resp" | jq -rc '.errors // .')"
+    die "$verb '$name' failed: $(printf '%s' "$resp" | jq -rc '.errors // .')"
   fi
 }
 
