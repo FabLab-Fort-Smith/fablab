@@ -27,11 +27,29 @@
     state: directory
     mode: "0755"
 
-- name: Fetch the ZeroTier package signing key (armored)
-  ansible.builtin.get_url:
-    url: "https://download.zerotier.com/contact%40zerotier.com.gpg"
+# The signing key is VENDORED (roles/zerotier/files/zerotier.asc), reviewed + pinned in-repo —
+# NOT fetched at runtime. Fetching an apt-authorizing key TOFU over HTTPS is a supply-chain gap
+# (CWE-494 / @rules/std-supplychain.md): a compromised mirror could swap key+repo → root-level
+# package execution. Pinning the key + verifying its fingerprint closes that.
+# Fingerprint: 74A5 E9C4 58E1 A431 F1DA 57A7 1657 1988 23E5 2A61 (ZeroTier, Inc. signing key).
+- name: Install the pinned ZeroTier signing key
+  ansible.builtin.copy:
+    src: zerotier.asc
     dest: /usr/share/keyrings/zerotier.asc
     mode: "0644"
+
+- name: Read the installed ZeroTier key fingerprint
+  ansible.builtin.command: gpg --show-keys --with-colons /usr/share/keyrings/zerotier.asc
+  register: zerotier_key
+  changed_when: false
+
+- name: Assert the ZeroTier key matches the published signing key (fail closed on tamper)
+  ansible.builtin.assert:
+    that: "'74A5E9C458E1A431F1DA57A71657198823E52A61' in zerotier_key.stdout"
+    fail_msg: >-
+      ZeroTier signing key fingerprint mismatch — refusing to add the repo (possible tamper).
+      Expected 74A5E9C458E1A431F1DA57A71657198823E52A61.
+    quiet: true
 
 - name: Dearmor the ZeroTier signing key
   ansible.builtin.command:
