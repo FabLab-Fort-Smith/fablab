@@ -94,7 +94,7 @@ Public/low-value: website content and source (The-Lab is private today but inten
 |----|--------|----------|:--------:|--------|
 | R1 | Forged/unauthenticated webhook triggers deploy | B2 | High | Implemented (Coolify HMAC-verifies webhooks per source secret) |
 | R2 | Malicious repo escapes build sandbox → host | B3/B4 | High | Implemented by design (Coolify isolated/ephemeral container builds) |
-| R3 | Coolify dashboard/API exposed | B2 | High | Implemented (tailnet-only admin + Cloudflare Access maintainers+MFA — ADR 0012) |
+| R3 | Coolify dashboard/API exposed | B2 | High | Implemented (admin reachable only over the Tailscale overlay — bound private, never public — plus Cloudflare Access maintainers+MFA on the public domain; ADR 0012. ZeroTier is outbound-only by default — vault reach, not an admin ingress; see R12) |
 | R4 | NoSQL injection in app | B7 | High | Planned (app-side typed validation; app unchanged/on Vercel) |
 | R5 | MongoDB exposed / data loss on single VPS | B7/Host | High | Implemented (private-net-only, no host port; nightly backup + tested restore drill; age/restic off-box opt-in) |
 | R6 | Cardholder data mishandled | B9 | High | Mitigated by design (Square tokenized; no SAD stored) |
@@ -103,6 +103,7 @@ Public/low-value: website content and source (The-Lab is private today but inten
 | R9 | Prompt injection / unsafe LLM output | B8 | Medium | Planned (untrusted output, injection tests) |
 | R10 | Forge account takeover → malicious deploy | B1 | Medium | Planned (MFA, branch protection, signing) |
 | R11 | Data migration loss/corruption (Vercel→VPS) | B7 | Medium | Planned (export+restore+reconcile — ADR 0006) |
+| R12 | Shared secret vault (Vaultwarden) compromise → all platform secrets | Host/B7 | High | **Partially mitigated — High until the exposed master password is rotated** (off-box over ZeroTier — not on the VPS it protects; per-person accounts + MFA; least-priv Infrastructure collection; `secrets-pull` writes source-safe, no injection at converge — `docs/runbooks/shared-custody.md`). **Open:** rotate the master password exposed during setup; grant the remaining custodians |
 
 ## Follow-ups (become security tests / runbooks)
 
