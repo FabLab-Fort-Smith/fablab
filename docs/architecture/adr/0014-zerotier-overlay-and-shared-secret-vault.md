@@ -39,7 +39,7 @@ to fix). ADR 0012 already put admin access on a **Tailscale** tailnet. The share
   before they get an overlay IP. The vault, the ZeroTier controller, and the domain-registrar/owner
   accounts become custody items in their own right (tracked in the shared-custody runbook).
 - **−** The vault's self-signed cert is trusted **TOFU** on first use unless `VAULT_CACERT` is pinned
-  (mitigated by the private ZeroTier overlay). Threat-model row **R10** covers vault compromise.
+  (mitigated by the private ZeroTier overlay). Threat-model row **R12** covers vault compromise.
 
 ## Alternatives considered
 
@@ -57,4 +57,4 @@ to fix). ADR 0012 already put admin access on a **Tailscale** tailnet. The share
 
 - ADR 0012 (tailnet-first admin + Cloudflare-gated webhooks); `docs/runbooks/shared-custody.md`;
   `lab-stack/ansible/roles/{zerotier,tailscale}`; `lab-stack/scripts/secrets-pull.sh`;
-  threat-model R3 (overlay-only admin) + R10 (vault compromise).
+  threat-model R3 (Tailscale-only admin) + R12 (vault compromise).
