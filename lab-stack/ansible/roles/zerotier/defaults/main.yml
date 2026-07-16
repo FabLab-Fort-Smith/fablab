@@ -1,0 +1,13 @@
+---
+# ZeroTier network to join (mesh overlay VPN; coexists with the tailscale role).
+# The 16-hex network ID is NOT a secret on its own — a node still has to be AUTHORIZED on the
+# ZeroTier controller (my.zerotier.com) after joining — so it lives in group_vars, not ../.env.
+# ZEROTIER_NETWORK_ID in the environment overrides it if set. Enable per host with zerotier_enabled.
+zerotier_network_id: "{{ lookup('ansible.builtin.env', 'ZEROTIER_NETWORK_ID') | default('', true) }}"
+
+# Optional inbound exposure to ZeroTier peers. Default = NONE (joining is for OUTBOUND reach, e.g.
+# to the shared Vaultwarden instance). To expose host ports to the ZT overlay, set both:
+#   zerotier_allowed_ports: [8000]         # host ports the ZT peers may reach
+#   zerotier_src_ranges:    ["10.121.16.0/24"]   # the ZT-managed subnet(s) of your network
+zerotier_allowed_ports: []
+zerotier_src_ranges: []

@@ -4,7 +4,7 @@
 #
 # Order matters: harden first, then tailnet + SSH-CA, the role accounts, Docker, MongoDB,
 # Coolify, and backups last.
-- name: Converge fablab VPS (harden + tailscale + ssh_ca + accounts + docker + mongodb + coolify + backups)
+- name: Converge fablab VPS (harden + tailscale + zerotier + ssh_ca + accounts + docker + mongodb + coolify + backups)
   hosts: lab_vps
   become: true
   gather_facts: true
@@ -21,6 +21,9 @@
     - role: harden      # CIS-aligned: ssh, ufw (+ Cloudflare lock), fail2ban, auto-updates, sysctl
     - role: tailscale   # join the owner's tailnet; admin/dev services reachable tailnet-only — topic-tailnet-dev-access
       when: tailscale_enabled | default(false)
+    - role: zerotier    # join the ZeroTier overlay (e.g. to reach the shared vault); coexists with tailscale
+      when: zerotier_enabled | default(false)
+      tags: [zerotier]
     - role: ssh_ca      # trust an SSH CA for short-lived, principal-scoped agent certs — ADR 0011
       when: ssh_ca_enabled | default(false)
     - role: deploy_account   # shared, non-custodial role account (broad, human-run) — ADR 0008
