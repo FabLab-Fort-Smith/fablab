@@ -36,6 +36,9 @@ step-by-step and executable by someone who didn't write it.
 - [x] **safe-remote-change.md** — safeguards before any lock-out-capable remote change
       (firewall/sshd/network): keep a 2nd session, test before reload, arm a dead-man's-switch
       auto-revert, and use the RackNerd console as break-glass. *(scaffold — rehearse the revert)*
+- [x] **shared-custody.md** — eliminate key-person risk: per-person identities, ≥2 custodians per
+      recovery credential, shared off-box secret vault, onboarding/offboarding checklist.
+      *(created — not yet drilled; validate via a second custodian)*
 - [ ] **incident-response.md** — triage/contain/recover (esp. compromised webhook or build).
 - [ ] **add-new-site.md** — add a `lab-site/<new-site>/` and wire it as a Coolify application.
 - [ ] **on-call.md** — alert response & escalation.
