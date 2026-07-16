@@ -81,6 +81,17 @@ tailscale_enabled: false
 tailscale_hostname: "fablab-prod"
 tailscale_allowed_ports: [8000]
 
+# --- ZeroTier (mesh overlay; coexists with Tailscale) ---
+# Join the VPS to a ZeroTier network — e.g. to reach the shared Vaultwarden secret store over the
+# overlay. The 16-hex network ID is NOT a secret (a node must still be AUTHORIZED on the controller
+# at my.zerotier.com after joining), so it lives here, not in ../.env. Default = no inbound exposure
+# (join is for outbound reach); to expose host ports to ZT peers set zerotier_allowed_ports +
+# zerotier_src_ranges (the ZT-managed subnet). After first converge, authorize the node in ZT Central.
+zerotier_enabled: false
+zerotier_network_id: ""              # e.g. "8056c2e21c000001" (16 hex chars)
+zerotier_allowed_ports: []
+zerotier_src_ranges: []
+
 # --- Coolify ---
 coolify_install: true
 
