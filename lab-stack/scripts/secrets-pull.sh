@@ -45,7 +45,7 @@ if [ -n "${VAULT_CACERT:-}" ] && [ -f "$VAULT_CACERT" ]; then
   export NODE_EXTRA_CA_CERTS="$VAULT_CACERT"
 elif [ -z "${BW_SESSION:-}" ]; then
   hp="${VAULT_URL#*://}"; hp="${hp%%/*}"
-  cf="$(mktemp)"
+  cf="$(mktemp)"; trap 'rm -f "$cf"' EXIT
   { echo | openssl s_client -connect "$hp" 2>/dev/null | openssl x509 >"$cf"; } 2>/dev/null || true
   if [ -s "$cf" ]; then
     export NODE_EXTRA_CA_CERTS="$cf"
@@ -67,15 +67,16 @@ if [ -z "${BW_SESSION:-}" ]; then
   export BW_SESSION
 fi
 [ -n "${BW_SESSION:-}" ] || die "could not unlock the vault."
-"$BW" sync --session "$BW_SESSION" >/dev/null 2>&1 || true
+export BW_SESSION   # bw reads it from the env — never pass the session key on argv (CWE-214)
+if ! "$BW" sync >/dev/null 2>&1; then info "warning: bw sync failed — using cached vault data"; fi
 
 # --- resolve the collection id by name ---
-CID="$("$BW" list collections --session "$BW_SESSION" 2>/dev/null \
+CID="$("$BW" list collections 2>/dev/null \
   | jq -r --arg n "$VAULT_COLLECTION" '.[] | select(.name==$n) | .id' | head -n1)"
 [ -n "$CID" ] || die "collection '$VAULT_COLLECTION' not found (or no access). Check VAULT_COLLECTION."
 
 # --- collect env-style secret fields (NAME=^[A-Z][A-Z0-9_]+$); value base64'd so any chars survive ---
-mapfile -t PAIRS < <("$BW" list items --collectionid "$CID" --session "$BW_SESSION" 2>/dev/null \
+mapfile -t PAIRS < <("$BW" list items --collectionid "$CID" 2>/dev/null \
   | jq -r '.[].fields[]?
            | select(.name | test("^[A-Z][A-Z0-9_]+$"))
            | select(.value != null and .value != "")
@@ -88,6 +89,7 @@ n=0
 for pair in "${PAIRS[@]}"; do
   k="${pair%% *}"
   v="$(printf '%s' "${pair#* }" | base64 -d)"
+  case "$v" in *$'\n'*) info "skip $k (multi-line value unsupported — store PEM/keys as vault attachments)"; continue ;; esac
   if [ "$DRY" -eq 1 ]; then info "would set $k (${#v} chars)"; else env_set "$ENVF" "$k" "$(shq "$v")"; info "set $k"; fi
   n=$((n + 1))
 done
