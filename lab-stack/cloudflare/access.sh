@@ -57,11 +57,19 @@ if [ -z "$ACCOUNT_ID" ]; then
 fi
 info "account=$ACCOUNT_ID  domain=$APP_DOMAIN  allow=$ALLOWED_EMAILS"
 
-# existing apps (idempotency by name)
-existing(){ api GET "$CF/accounts/$ACCOUNT_ID/access/apps?per_page=100" | jq -r --arg n "$1" '.result[]?|select(.name==$n)|.id' | head -1; }
+# existing apps (idempotency by name). Fail CLOSED on API error: if the list call did not
+# succeed we must NOT silently return empty (that would take the create branch and make a
+# DUPLICATE app instead of updating). die instead (@rules/topic-error-handling.md).
+existing(){
+  local resp; resp="$(api GET "$CF/accounts/$ACCOUNT_ID/access/apps?per_page=100")"
+  printf '%s' "$resp" | jq -e '.success==true' >/dev/null 2>&1 \
+    || die "listing Access apps failed (can't safely upsert): $(printf '%s' "$resp" | jq -rc '.errors // .')"
+  printf '%s' "$resp" | jq -r --arg n "$1" '.result[]?|select(.name==$n)|.id' | head -1
+}
 
-# include rule: one {email:{email:..}} per address
-email_include(){ printf '%s' "$ALLOWED_EMAILS" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | jq -R '{email:{email:.}}' | jq -s '.'; }
+# include rule: one {email:{email:..}} per address. Drop blank/invalid tokens so a stray comma
+# or trailing separator can't inject an empty-email entry into a security policy (CWE-20).
+email_include(){ printf '%s' "$ALLOWED_EMAILS" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | grep -E '.+@.+' | jq -R '{email:{email:.}}' | jq -s '.'; }
 
 ensure_app(){ # ensure_app NAME DOMAIN DECISION [require_mfa] — idempotent create-OR-update
   local name="$1" domain="$2" decision="$3" mfa="${4:-}" id inc pol body method url verb
