@@ -34,7 +34,9 @@ back up Coolify's own config/DB regularly so this is reproducible.
   auto-deploy on push). **`main` → production** is the cutover target (apex still on Vercel — ADR
   0006). **Per-PR previews** are wired (see §6).
 - Inject all app env/secrets (Mongo URI, AUTH_SECRET, S3, SMTP, Square **sandbox first**,
-  GenAI, reCAPTCHA — see `../../.env.example`). Preview envs get **no production secrets/data**.
+  GenAI, **Cloudflare Turnstile** — see `../../.env.example`). `NEXT_PUBLIC_*` keys (incl.
+  `NEXT_PUBLIC_TURNSTILE_SITE_KEY`) are synced as **build-time** vars so they're inlined into the
+  client bundle. Preview envs get **no production secrets/data**.
 
 ## 6. Per-PR preview deployments (Vercel feature #2)
 > **Status: live — verified end-to-end 2026-07-12.** A test PR produced
@@ -57,6 +59,11 @@ value to use and manages everything else.)
 - **Env / R8:** previews inherit the app's **staging (sandbox)** env — no production secrets exist
   on this app (prod is Vercel). Known caveat: auth callback / absolute-URL flows may misbehave on a
   preview host until a per-preview `NEXTAUTH_URL`/`APP_URL` is set (revisit at prod cutover).
+  - **Preview-scope env is manual:** `reconcile.sh` only syncs the non-preview (`is_preview:false`)
+    scope, so keys the *preview build* needs (esp. build-time `NEXT_PUBLIC_*` like
+    `NEXT_PUBLIC_TURNSTILE_SITE_KEY`) must also be set with **"Available at Preview Deployments"**
+    in the Coolify app UI (or POST the env with `is_preview:true` via the API). Without it a preview
+    fails closed — e.g. the register page shows "captcha unavailable" — rather than deploying insecurely.
 - **Enable (deliberate, one-time):**
   1. In the Coolify UI (over the tailnet), set the app's **Preview Deployments → URL template** to
      `pr-{{pr_id}}-preview.fablabfortsmith.org` (the API can't set this on v4.1.2).
