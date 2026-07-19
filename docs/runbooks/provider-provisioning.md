@@ -27,8 +27,11 @@ Needs a **scoped admin token** per provider (in `../.env` / vault). Writes resul
 - **Cloudflare Turnstile** (anti-bot; replaces reCAPTCHA — ADR 0015): `make provision-keys ARGS=turnstile`
   (`ARGS="turnstile --dry-run"` to preview). Requires `CF_TURNSTILE_TOKEN` with **Turnstile:Edit** +
   `CLOUDFLARE_ACCOUNT_ID`. Creates/ensures a widget for `TURNSTILE_DOMAINS`; writes
-  `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (BUILD var) + `TURNSTILE_SECRET_KEY` (runtime). Idempotent (reuses
-  an existing widget of the same name, rotating its secret to capture it).
+  `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (BUILD var) + `TURNSTILE_SECRET_KEY` (runtime). Idempotent: reuses
+  an existing widget of the same name; it rotates the secret **only if we don't already hold one**
+  (Cloudflare returns the secret only on create/rotate, and a rotate has a **2 h grace window** +
+  requires an app redeploy with the new secret — so re-running with the secret already stored is a
+  no-op, not a fresh rotation). To force a rotation, clear `TURNSTILE_SECRET_KEY` first.
 - **Planned** (registry entries, same pattern): Cloudflare scoped API tokens, Tailscale auth keys,
   ZeroTier member authorize, PurelyMail mailboxes (adapter exists), S3/object-store access keys.
 

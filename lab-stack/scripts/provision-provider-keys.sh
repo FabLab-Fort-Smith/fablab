@@ -26,8 +26,7 @@ CURL="${PROVISION_CURL:-curl}"
 CF="https://api.cloudflare.com/client/v4"
 info(){ printf '  %s\n' "$*"; }
 die(){ printf 'ERROR: %s\n' "$*" >&2; exit 1; }
-# single-quote for source-safe ../.env writes (matches secrets-pull.sh)
-shq(){ printf "'%s'" "${1//\'/\'\\\'\'}"; }
+# env_get (quote-tolerant read) + shq (source-safe single-quote write) come from _lib.sh.
 
 # --- registry (documents every provider + tier; `list` prints it) ---
 # name|tier|creates|output env keys|admin token env|status
@@ -57,13 +56,17 @@ cmd_list(){
 
 # token via -K stdin (off argv); JSON body via a temp file (off argv)
 cf_api(){ # cf_api TOKEN METHOD URL [JSON] -> body on stdout
-  local tok="$1" method="$2" url="$3" json="${4:-}" cfg bf out
-  cfg="$(mktemp)"; { printf 'header = "Authorization: Bearer %s"\n' "$tok"
+  local tok="$1" method="$2" url="$3" json="${4:-}" cfg bf="" out
+  cfg="$(mktemp)"
+  # `|| true`: never abort under `set -e` on a curl transport error (timeout/DNS/connect) — the
+  # temp cfg holds the token, so cleanup MUST run; the caller fails closed on the empty body.
+  trap 'rm -f "$cfg" "${bf:-}"' RETURN
+  { printf 'header = "Authorization: Bearer %s"\n' "$tok"
     printf 'header = "Content-Type: application/json"\n'; } > "$cfg"
   if [ -n "$json" ]; then bf="$(mktemp)"; printf '%s' "$json" > "$bf"
-    out="$("$CURL" -sS --max-time 30 -K "$cfg" -X "$method" --data-binary @"$bf" "$url")"; rm -f "$bf"
-  else out="$("$CURL" -sS --max-time 30 -K "$cfg" -X "$method" "$url")"; fi
-  rm -f "$cfg"; printf '%s' "$out"
+    out="$("$CURL" -sS --max-time 30 -K "$cfg" -X "$method" --data-binary @"$bf" "$url" || true)"
+  else out="$("$CURL" -sS --max-time 30 -K "$cfg" -X "$method" "$url" || true)"; fi
+  printf '%s' "$out"
 }
 
 cmd_turnstile(){
@@ -89,12 +92,19 @@ cmd_turnstile(){
   local list sitekey
   list="$(cf_api "$tok" GET "$CF/accounts/$aid/challenges/widgets?per_page=100")"
   printf '%s' "$list" | jq -e '.success==true' >/dev/null 2>&1 \
-    || die "listing Turnstile widgets failed: $(printf '%s' "$list" | jq -rc '.errors // .')"
+    || die "listing Turnstile widgets failed: $(printf '%s' "$list" | jq -rc '.errors')"
   sitekey="$(printf '%s' "$list" | jq -r --arg n "$name" '.result[]?|select(.name==$n)|.sitekey' | head -1)"
 
   local resp secret
   if [ -n "$sitekey" ]; then
-    info "widget '$name' already exists (sitekey ${sitekey:0:8}…); rotating its secret to capture it"
+    # The widget exists. Cloudflare only returns the secret on create/rotate (never on GET), and a
+    # rotate has a 2h grace window + forces an app redeploy with the new secret — so rotate ONLY if
+    # we don't already hold it. Re-running when we do is a genuine no-op (no gratuitous rotation).
+    if [ -n "$(env_get "$ENVF" TURNSTILE_SECRET_KEY)" ]; then
+      info "widget '$name' exists (sitekey ${sitekey:0:8}…) and TURNSTILE_SECRET_KEY is already stored — nothing to do."
+      return 0
+    fi
+    info "widget '$name' exists (sitekey ${sitekey:0:8}…) but no stored secret; rotating once to capture it (2h grace)"
     resp="$(cf_api "$tok" POST "$CF/accounts/$aid/challenges/widgets/$sitekey/rotate_secret" '{"invalidate_immediately":false}')"
   else
     info "creating Turnstile widget '$name'"
@@ -103,7 +113,7 @@ cmd_turnstile(){
     sitekey="$(printf '%s' "$resp" | jq -r '.result.sitekey // empty')"
   fi
   printf '%s' "$resp" | jq -e '.success==true' >/dev/null 2>&1 \
-    || die "Turnstile create/rotate failed: $(printf '%s' "$resp" | jq -rc '.errors // .')"
+    || die "Turnstile create/rotate failed: $(printf '%s' "$resp" | jq -rc '.errors')"
   [ -n "$sitekey" ] || sitekey="$(printf '%s' "$resp" | jq -r '.result.sitekey // empty')"
   secret="$(printf '%s' "$resp" | jq -r '.result.secret // empty')"
   if [ -z "$sitekey" ] || [ -z "$secret" ]; then die "did not receive both sitekey and secret from Cloudflare."; fi
@@ -111,7 +121,7 @@ cmd_turnstile(){
   [ -f "$ENVF" ] && { cp -a "$ENVF" "$ENVF.bak"; chmod 600 "$ENVF.bak"; }
   env_set "$ENVF" NEXT_PUBLIC_TURNSTILE_SITE_KEY "$(shq "$sitekey")"
   env_set "$ENVF" TURNSTILE_SECRET_KEY "$(shq "$secret")"
-  unset secret
+  unset resp secret
   info "wrote NEXT_PUBLIC_TURNSTILE_SITE_KEY (public, ${sitekey:0:8}…) + TURNSTILE_SECRET_KEY (hidden) to $ENVF"
   info "next: add both to the vault + the staging Coolify app (site key = BUILD var), rebuild; drop the reCAPTCHA vars."
 }

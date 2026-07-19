@@ -27,9 +27,7 @@ DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
 
 info() { printf '  %s\n' "$*"; }
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
-# shell-single-quote a value so `. ../.env` (Ansible converge sources it) is safe for ANY chars
-# (the Coolify Sanctum `id|secret` token, passwords with $ " | spaces, etc.). Embedded ' -> '\''.
-shq() { printf "'%s'" "${1//\'/\'\\\'\'}"; }
+# shq (source-safe single-quote) + env_get (quote-tolerant read) come from _lib.sh.
 
 VAULT_URL="${VAULT_URL:-$(env_get "$ENVF" VAULT_URL)}"
 VAULT_EMAIL="${VAULT_EMAIL:-$(env_get "$ENVF" VAULT_EMAIL)}"
