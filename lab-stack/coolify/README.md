@@ -59,6 +59,11 @@ value to use and manages everything else.)
 - **Env / R8:** previews inherit the app's **staging (sandbox)** env — no production secrets exist
   on this app (prod is Vercel). Known caveat: auth callback / absolute-URL flows may misbehave on a
   preview host until a per-preview `NEXTAUTH_URL`/`APP_URL` is set (revisit at prod cutover).
+  - **Preview-scope env is manual:** `reconcile.sh` only syncs the non-preview (`is_preview:false`)
+    scope, so keys the *preview build* needs (esp. build-time `NEXT_PUBLIC_*` like
+    `NEXT_PUBLIC_TURNSTILE_SITE_KEY`) must also be set with **"Available at Preview Deployments"**
+    in the Coolify app UI (or POST the env with `is_preview:true` via the API). Without it a preview
+    fails closed — e.g. the register page shows "captcha unavailable" — rather than deploying insecurely.
 - **Enable (deliberate, one-time):**
   1. In the Coolify UI (over the tailnet), set the app's **Preview Deployments → URL template** to
      `pr-{{pr_id}}-preview.fablabfortsmith.org` (the API can't set this on v4.1.2).
