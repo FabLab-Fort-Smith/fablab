@@ -2,8 +2,14 @@
 # Shared helpers for lab-stack scripts. SOURCE this ( . scripts/_lib.sh ), don't execute.
 # No secret VALUES are ever printed by these helpers.
 
-# env_get FILE KEY -> prints the value (empty if file/key absent).
-env_get() { [ -f "$1" ] || return 0; sed -n "s/^$2=//p" "$1" | head -n1; }
+# env_get FILE KEY -> prints the value (empty if file/key absent). Strips ONE matching pair of
+# surrounding quotes, so a value written source-safe by shq/env_set (e.g. TOKEN='abc') reads back
+# as the bare value (abc) — not with literal quotes that would break a Bearer header / URL path.
+env_get() { [ -f "$1" ] || return 0; sed -n "s/^$2=//p" "$1" | head -n1 | sed "s/^\(['\"]\)\(.*\)\1\$/\2/"; }
+
+# shq VAL -> single-quote VAL so `. FILE` (sourcing the .env) is safe for ANY chars (tokens with
+# $ " | spaces, the Coolify id|secret, etc.). Embedded ' becomes '\''. Pairs with env_get above.
+shq() { printf "'%s'" "${1//\'/\'\\\'\'}"; }
 
 # env_set FILE KEY VAL -> upsert KEY=VAL. VAL is passed to awk via the environment (not argv,
 # not a sed pattern) so arbitrary secret characters are safe and never appear in `ps`. Keeps the

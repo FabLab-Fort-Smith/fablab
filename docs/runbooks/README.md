@@ -39,6 +39,8 @@ step-by-step and executable by someone who didn't write it.
 - [x] **shared-custody.md** — eliminate key-person risk: per-person identities, ≥2 custodians per
       recovery credential, shared off-box secret vault, onboarding/offboarding checklist.
       *(created — not yet drilled; validate via a second custodian)*
+- [x] **provider-provisioning.md** — provision provider keys/tokens: Tier-2 API-automated
+      (`make provision-keys`, incl. Cloudflare Turnstile) vs. Tier-3 console-only checklist (ADR 0015).
 - [ ] **incident-response.md** — triage/contain/recover (esp. compromised webhook or build).
 - [ ] **add-new-site.md** — add a `lab-site/<new-site>/` and wire it as a Coolify application.
 - [ ] **on-call.md** — alert response & escalation.
