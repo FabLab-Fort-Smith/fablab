@@ -34,7 +34,9 @@ back up Coolify's own config/DB regularly so this is reproducible.
   auto-deploy on push). **`main` → production** is the cutover target (apex still on Vercel — ADR
   0006). **Per-PR previews** are wired (see §6).
 - Inject all app env/secrets (Mongo URI, AUTH_SECRET, S3, SMTP, Square **sandbox first**,
-  GenAI, reCAPTCHA — see `../../.env.example`). Preview envs get **no production secrets/data**.
+  GenAI, **Cloudflare Turnstile** — see `../../.env.example`). `NEXT_PUBLIC_*` keys (incl.
+  `NEXT_PUBLIC_TURNSTILE_SITE_KEY`) are synced as **build-time** vars so they're inlined into the
+  client bundle. Preview envs get **no production secrets/data**.
 
 ## 6. Per-PR preview deployments (Vercel feature #2)
 > **Status: live — verified end-to-end 2026-07-12.** A test PR produced

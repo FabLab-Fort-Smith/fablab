@@ -62,7 +62,7 @@ PREVIEW_URL_TEMPLATE="pr-{{pr_id}}-preview.${PRIMARY_DOMAIN}"
 APP_ENV_REQUIRED=(MONGODB_URI AUTH_SECRET JWT_SECRET ENCRYPTION_KEY INTERNAL_API_SECRET SOCKET_API_SECRET SQUARE_ACCESS_TOKEN SQUARE_WEBHOOK_SIGNATURE_KEY)
 # Feature/provider keys — synced if present, not boot-blocking. Names match The-Lab's actual
 # process.env usage (verified by grep of src/), NOT the older drifted .env.example names.
-APP_ENV_OPTIONAL=(SQUARE_ENVIRONMENT SQUARE_LOCATION_ID SQUARE_SDK_VERSION NEXT_PUBLIC_SQUARE_APP_ID NEXT_PUBLIC_SQUARE_LOCATION_ID MONGODB_NAME NEXTAUTH_URL APP_URL NEXT_PUBLIC_APP_URL NEXT_PUBLIC_BASE_URL NEXT_PUBLIC_URL ADMIN_EMAIL LOG_LEVEL S3_ENDPOINT S3_REGION S3_BUCKET_NAME S3_ACCESS_KEY S3_SECRET_KEY EMAIL_USER EMAIL_PASS GEMINI_API_KEY NEXT_PUBLIC_RECAPTCHA_SITE_KEY RECAPTCHA_SECRET_KEY)
+APP_ENV_OPTIONAL=(SQUARE_ENVIRONMENT SQUARE_LOCATION_ID SQUARE_SDK_VERSION NEXT_PUBLIC_SQUARE_APP_ID NEXT_PUBLIC_SQUARE_LOCATION_ID MONGODB_NAME NEXTAUTH_URL APP_URL NEXT_PUBLIC_APP_URL NEXT_PUBLIC_BASE_URL NEXT_PUBLIC_URL ADMIN_EMAIL LOG_LEVEL S3_ENDPOINT S3_REGION S3_BUCKET_NAME S3_ACCESS_KEY S3_SECRET_KEY EMAIL_USER EMAIL_PASS GEMINI_API_KEY NEXT_PUBLIC_TURNSTILE_SITE_KEY TURNSTILE_SECRET_KEY)
 # Managed CONSTANTS — fixed for the self-hosted deployment, NOT read from ../.env. Auth.js v5
 # auto-trusts the host only on Vercel; off-Vercel behind Cloudflare/Traefik, AUTH_TRUST_HOST=true
 # alone was NOT sufficient — Auth.js still resolved its base URL to the container bind
@@ -165,13 +165,20 @@ fi
 
 # --- sync env (bulk upsert; values from ../.env) ---
 echo "== sync env vars =="
+# NEXT_PUBLIC_* are read in the browser and must be INLINED at BUILD → they are build-time vars
+# (e.g. NEXT_PUBLIC_TURNSTILE_SITE_KEY: if it's runtime-only the Turnstile widget renders with no
+# key). Everything else is runtime-only. (Coolify's bulk endpoint takes is_build_time; the
+# single-env endpoint takes is_buildtime — different spellings, same concept.)
+bt_for(){ case "$1" in NEXT_PUBLIC_*) printf true ;; *) printf false ;; esac; }
 env_items="$(
   { for k in "${APP_ENV_REQUIRED[@]}" "${APP_ENV_OPTIONAL[@]}"; do
       v="$(envval "$k")"; [ -n "$v" ] || continue
-      jq -n --arg key "$k" --arg value "$v" '{key:$key, value:$value, is_preview:false, is_build_time:false}'
+      jq -n --arg key "$k" --arg value "$v" --argjson bt "$(bt_for "$k")" \
+        '{key:$key, value:$value, is_preview:false, is_build_time:$bt}'
     done
     for kv in "${APP_ENV_FIXED[@]}"; do
-      jq -n --arg key "${kv%%=*}" --arg value "${kv#*=}" '{key:$key, value:$value, is_preview:false, is_build_time:false}'
+      jq -n --arg key "${kv%%=*}" --arg value "${kv#*=}" --argjson bt "$(bt_for "${kv%%=*}")" \
+        '{key:$key, value:$value, is_preview:false, is_build_time:$bt}'
     done
   } | jq -s '{data: .}'
 )"
