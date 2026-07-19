@@ -257,7 +257,7 @@ paths:
     post:
       tags: [auth]
       summary: Register a new member (public)
-      description: Public sign-up. Verifies a Google reCAPTCHA token (RECAPTCHA_SECRET_KEY required; fails closed). The plaintext password is never logged.
+      description: Public sign-up. Verifies a Cloudflare Turnstile token (TURNSTILE_SECRET_KEY required; fails closed). The plaintext password is never logged.
       security: []
       requestBody:
         required: true
@@ -277,6 +277,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '409': { description: A user with this email already exists. }
         '500': { description: Captcha unavailable or registration failure. }
+        '503': { description: Captcha verification upstream error or timeout. }
 
   /api/auth/signin:
     post:

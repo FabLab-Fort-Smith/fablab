@@ -40,8 +40,10 @@ Encryption/off-box are **opt-in** (config from `/etc/fablab/backup.env`, rendere
 With nothing set, the backup still runs but is **local-only and unencrypted at rest**, and the
 script + a converge task **warn loudly**. Two independent controls, by design:
 - **age** — the recipient on the box is a **public** key; the private identity stays **offline**
-  with the maintainer, so the box **cannot decrypt its own backups** (a box compromise never
-  exposes backup contents). Key-to-encrypt ≠ creds-to-access (master §5).
+  and is held by **≥2 independent custodians** (never only on the box — it cannot decrypt its own
+  backups; a box compromise never exposes backup contents). On offboarding, re-key **forward** (a
+  new recipient for future backups) rather than rotating — old archives stay readable only via the
+  retained old identity. Key-to-encrypt ≠ creds-to-access (master §5, `shared-custody.md`).
 - **restic** — off-box copy (survives VPS loss), repo-level encryption, and retention
   (`--keep-daily/weekly/monthly --prune`).
 
@@ -51,7 +53,7 @@ script + a converge task **warn loudly**. Two independent controls, by design:
    only way to decrypt backups). Put the **public** key in `../.env` `BACKUP_AGE_RECIPIENT=age1…`.
 2. **restic off-box repo:** create a **backup-only** S3 bucket + a least-privilege key pair (NOT
    the app's S3 creds). Set in `../.env`: `RESTIC_REPOSITORY=s3:<endpoint>/<bucket>/fablab-mongo`,
-   `RESTIC_PASSWORD=<strong, stored safely — unrecoverable if lost>`,
+   `RESTIC_PASSWORD=<strong; store in the shared vault, held by ≥2 custodians — unrecoverable if lost>`,
    `BACKUP_S3_ACCESS_KEY_ID=…`, `BACKUP_S3_SECRET_ACCESS_KEY=…`.
 3. `make converge` — installs `age`+`restic`, writes `/etc/fablab/backup.env` (0600), and
    **initializes the restic repo** (idempotent). Then run `sudo /usr/local/sbin/fablab-backup-mongo`

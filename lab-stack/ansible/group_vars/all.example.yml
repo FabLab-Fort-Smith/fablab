@@ -31,8 +31,13 @@ automation_sudo_commands:
 
 # Restrict SSH logins to these users. LEAVE EMPTY to avoid lockout (SSH stays key-only, no root,
 # no password regardless). If you later lock down, include EVERY maintainer + deploy + automation,
-# e.g. [deploy, automation, critter, b007ab1e].
+# e.g. [deploy, automation, critter, b007ab1e]. (The Coolify root-SSH Match block re-grants 'root'
+# within its Docker-scoped block, so 'root' need not be in this global list.)
 ssh_allow_users: []
+
+# Coolify's control plane SSHes to this host as root from its Docker networks — enable the scoped,
+# key-only root exception (global PermitRootLogin stays 'no'). See roles/harden/defaults/main.yml.
+harden_coolify_allow_root_ssh_from_docker: true
 
 # --- Domains (ADR 0002) ---
 primary_domain: "fablabfortsmith.org"
@@ -75,6 +80,17 @@ ssh_ca_krl_content: ""  # optional Key Revocation List; empty = rely on short TT
 tailscale_enabled: false
 tailscale_hostname: "fablab-prod"
 tailscale_allowed_ports: [8000]
+
+# --- ZeroTier (mesh overlay; coexists with Tailscale) ---
+# Join the VPS to a ZeroTier network — e.g. to reach the shared Vaultwarden secret store over the
+# overlay. The 16-hex network ID is NOT a secret (a node must still be AUTHORIZED on the controller
+# at my.zerotier.com after joining), so it lives here, not in ../.env. Default = no inbound exposure
+# (join is for outbound reach); to expose host ports to ZT peers set zerotier_allowed_ports +
+# zerotier_src_ranges (the ZT-managed subnet). After first converge, authorize the node in ZT Central.
+zerotier_enabled: false
+zerotier_network_id: ""              # e.g. "8056c2e21c000001" (16 hex chars)
+zerotier_allowed_ports: []
+zerotier_src_ranges: []
 
 # --- Coolify ---
 coolify_install: true

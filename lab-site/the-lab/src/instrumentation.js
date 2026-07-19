@@ -7,5 +7,15 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { validateEnv } = await import("@/lib/env");
     validateEnv(); // throws in production when required secrets are missing
+
+    // Initialize the plugin platform: build the registry, hydrate enabled/config
+    // from the DB, and wire enabled plugins' hooks. Never blocks boot — plugins
+    // default disabled and init fails safe if the DB is unavailable.
+    try {
+      const { initPlugins } = await import("@/lib/plugins/registry");
+      await initPlugins();
+    } catch (err) {
+      console.error("⚠️ Plugin platform init failed (continuing):", err?.message);
+    }
   }
 }

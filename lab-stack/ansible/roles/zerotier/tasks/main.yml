@@ -1,0 +1,119 @@
+---
+# Join the host to the owner's ZeroTier network (a mesh-VPN overlay) so it can reach ZT-only
+# resources — e.g. the shared Vaultwarden secret store — over the private overlay, NOT the public
+# internet (@rules/std-zero-trust.md). Coexists with the tailscale role (both meshes can run).
+# The 16-hex network ID is not a secret; after joining, the node must still be AUTHORIZED on the
+# ZeroTier controller (my.zerotier.com) before it gets an overlay IP — see the summary task.
+
+- name: Assert a ZeroTier network ID is present (16 hex chars)
+  ansible.builtin.assert:
+    that:
+      - zerotier_network_id | length == 16
+      - zerotier_network_id is match('^[0-9a-fA-F]{16}$')
+    fail_msg: >-
+      zerotier_network_id must be the 16-hex ZeroTier network ID. Set it in group_vars/all.yml
+      (or ZEROTIER_NETWORK_ID in the environment) and run via `make converge`.
+    quiet: true
+
+- name: Install prerequisites
+  ansible.builtin.apt:
+    name: [ca-certificates, curl, gnupg]
+    state: present
+    update_cache: true
+
+- name: Create keyring dir
+  ansible.builtin.file:
+    path: /usr/share/keyrings
+    state: directory
+    mode: "0755"
+
+# The signing key is VENDORED (roles/zerotier/files/zerotier.asc), reviewed + pinned in-repo —
+# NOT fetched at runtime. Fetching an apt-authorizing key TOFU over HTTPS is a supply-chain gap
+# (CWE-494 / @rules/std-supplychain.md): a compromised mirror could swap key+repo → root-level
+# package execution. Pinning the key + verifying its fingerprint closes that.
+# Fingerprint: 74A5 E9C4 58E1 A431 F1DA 57A7 1657 1988 23E5 2A61 (ZeroTier, Inc. signing key).
+- name: Install the pinned ZeroTier signing key
+  ansible.builtin.copy:
+    src: zerotier.asc
+    dest: /usr/share/keyrings/zerotier.asc
+    mode: "0644"
+
+- name: Read the installed ZeroTier key fingerprint
+  ansible.builtin.command: gpg --show-keys --with-colons /usr/share/keyrings/zerotier.asc
+  register: zerotier_key
+  changed_when: false
+
+- name: Assert the ZeroTier key matches the published signing key (fail closed on tamper)
+  ansible.builtin.assert:
+    that: "'74A5E9C458E1A431F1DA57A71657198823E52A61' in zerotier_key.stdout"
+    fail_msg: >-
+      ZeroTier signing key fingerprint mismatch — refusing to add the repo (possible tamper).
+      Expected 74A5E9C458E1A431F1DA57A71657198823E52A61.
+    quiet: true
+
+- name: Dearmor the ZeroTier signing key
+  ansible.builtin.command:
+    cmd: >-
+      gpg --batch --yes --dearmor
+      -o /usr/share/keyrings/zerotier-debian-package-key.gpg
+      /usr/share/keyrings/zerotier.asc
+    creates: /usr/share/keyrings/zerotier-debian-package-key.gpg
+
+- name: Add the ZeroTier APT repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/usr/share/keyrings/zerotier-debian-package-key.gpg]
+      https://download.zerotier.com/debian/{{ ansible_distribution_release }}
+      {{ ansible_distribution_release }} main
+    filename: zerotier
+    state: present
+
+- name: Install zerotier-one
+  ansible.builtin.apt:
+    name: zerotier-one
+    state: present
+    update_cache: true
+
+- name: Ensure zerotier-one is running and enabled
+  ansible.builtin.service:
+    name: zerotier-one
+    state: started
+    enabled: true
+
+- name: List currently-joined ZeroTier networks
+  ansible.builtin.command: zerotier-cli -j listnetworks
+  register: zerotier_networks
+  changed_when: false
+  failed_when: false
+
+- name: Join the ZeroTier network (idempotent)
+  ansible.builtin.command: "zerotier-cli join {{ zerotier_network_id }}"
+  register: zerotier_join
+  changed_when: "'OK' in (zerotier_join.stdout | default(''))"
+  when: >-
+    zerotier_networks.rc != 0
+    or (zerotier_network_id not in (zerotier_networks.stdout | default('[]')))
+
+- name: Allow ZeroTier peers to reach the configured host ports (UFW) — opt-in
+  community.general.ufw:
+    rule: allow
+    src: "{{ item.0 }}"
+    port: "{{ item.1 | string }}"
+    proto: tcp
+  loop: "{{ zerotier_src_ranges | product(zerotier_allowed_ports) | list }}"
+  when:
+    - zerotier_allowed_ports | length > 0
+    - zerotier_src_ranges | length > 0
+
+- name: Read ZeroTier network status (for the summary)
+  ansible.builtin.command: "zerotier-cli get {{ zerotier_network_id }} status"
+  register: zerotier_state
+  changed_when: false
+  failed_when: false
+
+- name: ZeroTier join summary + next step
+  ansible.builtin.debug:
+    msg: >-
+      ZeroTier joined {{ zerotier_network_id }} — status: {{ zerotier_state.stdout | default('unknown') | trim }}.
+      If it is not 'OK' (e.g. ACCESS_DENIED / REQUESTING_CONFIGURATION), AUTHORIZE this node in the
+      ZeroTier controller (my.zerotier.com -> the network -> Members) so it gets an overlay IP.

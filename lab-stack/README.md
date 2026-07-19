@@ -28,16 +28,16 @@ SMTP email, Square payments, Google GenAI — the app connects out; treated as u
 lab-stack/
 ├── README.md
 ├── CLAUDE.md
-├── Makefile              # task runner: setup / secrets / lint / test / ping / converge / dns / access / coolify-*
-├── scripts/              # setup.sh, gen-secrets.sh, collect-keys.sh, mongo-restore-drill.sh (+ *.test.sh)
+├── Makefile              # task runner: setup / secrets / secrets-pull / lint / test / ping / converge / dns / access / coolify-*
+├── scripts/              # setup.sh, gen-secrets.sh, secrets-pull.sh, collect-keys.sh, mongo-restore-drill.sh (+ *.test.sh)
 ├── cloud-init/           # first-boot: users, SSH hardening, UFW, fail2ban, auto-updates (+ manual-bootstrap.sh)
 ├── ansible/              # idempotent host convergence
 │   ├── ansible.cfg
 │   ├── requirements.yml  # galaxy collections (community.general, ansible.posix)
 │   ├── inventory.example.ini
 │   ├── group_vars/all.example.yml
-│   ├── playbook.yml      # harden → tailscale → ssh_ca → deploy_account → automation_account → docker → mongodb → coolify → backups
-│   └── roles/{harden,deploy_account,automation_account,docker,mongodb,coolify,backups,tailscale,ssh_ca}/
+│   ├── playbook.yml      # harden → tailscale → zerotier → ssh_ca → deploy_account → automation_account → docker → mongodb → coolify → backups
+│   └── roles/{harden,deploy_account,automation_account,docker,mongodb,coolify,backups,tailscale,zerotier,ssh_ca}/
 ├── coolify/              # reconcile.sh (API-driven app reconcile) + README (dashboard config)
 ├── cloudflare/           # dns.sh, access.sh (Cloudflare Access as code) + README, access-policy.md
 ├── racknerd/             # SolusVM control-plane API helper (api.sh)
@@ -84,6 +84,9 @@ lab-stack/
 
 ## Status
 
-🟡 **IaC scaffolded, not applied.** cloud-init + Ansible roles + Coolify/Cloudflare guides +
-runbooks exist as drafts. Nothing provisioned — `make converge` and DNS cutover are **gated**
-and need the VPS, secrets, and the open decisions (domain, primary forge) settled first.
+🟢 **Provisioned + live.** The VPS is converged from this code (idempotent `make converge`),
+self-hosted MongoDB + nightly restore-drilled backups run, and The-Lab serves on **staging** with
+push-to-deploy + per-PR previews. The host is on **both** the Tailscale and ZeroTier meshes
+(admin + shared-vault access is overlay-only, never public); platform secrets live in a shared
+**Vaultwarden** vault, pulled into `.env` with `make secrets-pull`. Applying changes to the real
+VPS remains a **gated** action. Remaining: prod (apex) cutover from Vercel (ADR 0006, deliberate).

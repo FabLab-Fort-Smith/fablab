@@ -3,7 +3,11 @@ import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
-import ReCAPTCHA from 'react-google-recaptcha';
+import { Turnstile } from '@marsidev/react-turnstile';
+
+// Public site key, inlined at build. NO hardcoded fallback — a shipped default is exactly the
+// test-key leak SEC-21 guards against; the widget fails closed (below) if it's unset.
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 const STEPS = [
   { num: '01', title: 'submit_application', desc: 'Complete this form. Takes about 2 minutes.' },
@@ -18,7 +22,8 @@ export default function RegisterPage() {
   const [form, setForm] = useState({ firstName: '', lastName: '', username: '', email: '', password: '', phoneNumber: '' });
   const [error, setError] = useState('');
   const [status, setStatus] = useState('idle');
-  const recaptchaRef = useRef(null);
+  const [captchaToken, setCaptchaToken] = useState('');
+  const turnstileRef = useRef(null);
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
 
@@ -27,7 +32,6 @@ export default function RegisterPage() {
   const handleSubmit = async e => {
     e.preventDefault();
     setError('');
-    const captchaToken = recaptchaRef.current?.getValue();
     if (!captchaToken) { setError('Please complete the captcha.'); return; }
     setStatus('submitting');
     try {
@@ -41,12 +45,15 @@ export default function RegisterPage() {
       } else {
         const data = await res.json();
         setError(data.message || 'Registration failed.');
-        recaptchaRef.current?.reset();
+        // a Turnstile token is single-use — reset the widget after any failed attempt.
+        turnstileRef.current?.reset();
+        setCaptchaToken('');
         setStatus('idle');
       }
     } catch {
       setError('Something went wrong. Please try again.');
-      recaptchaRef.current?.reset();
+      turnstileRef.current?.reset();
+      setCaptchaToken('');
       setStatus('idle');
     }
   };
@@ -125,11 +132,20 @@ export default function RegisterPage() {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
-                <ReCAPTCHA
-                  ref={recaptchaRef}
-                  sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI'}
-                  theme="dark"
-                />
+                {TURNSTILE_SITE_KEY ? (
+                  <Turnstile
+                    ref={turnstileRef}
+                    siteKey={TURNSTILE_SITE_KEY}
+                    options={{ theme: 'dark' }}
+                    onSuccess={token => setCaptchaToken(token)}
+                    onError={() => setCaptchaToken('')}
+                    onExpire={() => setCaptchaToken('')}
+                  />
+                ) : (
+                  <div role="alert" style={{ fontSize: 10, color: 'var(--red)', letterSpacing: '0.1em', textAlign: 'center' }}>
+                    [CONFIG] captcha unavailable — NEXT_PUBLIC_TURNSTILE_SITE_KEY is not set.
+                  </div>
+                )}
               </div>
 
               <button

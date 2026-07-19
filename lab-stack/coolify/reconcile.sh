@@ -63,6 +63,14 @@ APP_ENV_REQUIRED=(MONGODB_URI AUTH_SECRET JWT_SECRET ENCRYPTION_KEY INTERNAL_API
 # Feature/provider keys — synced if present, not boot-blocking. Names match The-Lab's actual
 # process.env usage (verified by grep of src/), NOT the older drifted .env.example names.
 APP_ENV_OPTIONAL=(SQUARE_ENVIRONMENT SQUARE_LOCATION_ID SQUARE_SDK_VERSION NEXT_PUBLIC_SQUARE_APP_ID NEXT_PUBLIC_SQUARE_LOCATION_ID MONGODB_NAME NEXTAUTH_URL APP_URL NEXT_PUBLIC_APP_URL NEXT_PUBLIC_BASE_URL NEXT_PUBLIC_URL ADMIN_EMAIL LOG_LEVEL S3_ENDPOINT S3_REGION S3_BUCKET_NAME S3_ACCESS_KEY S3_SECRET_KEY EMAIL_USER EMAIL_PASS GEMINI_API_KEY NEXT_PUBLIC_RECAPTCHA_SITE_KEY RECAPTCHA_SECRET_KEY)
+# Managed CONSTANTS — fixed for the self-hosted deployment, NOT read from ../.env. Auth.js v5
+# auto-trusts the host only on Vercel; off-Vercel behind Cloudflare/Traefik, AUTH_TRUST_HOST=true
+# alone was NOT sufficient — Auth.js still resolved its base URL to the container bind
+# (`https://0.0.0.0:3000`, from the Dockerfile HOSTNAME=0.0.0.0 healthcheck fix), so every OAuth
+# signin/callback URL was wrong and SSO could not complete. Pin AUTH_URL to the public staging
+# domain so callbacks/redirects are correct (@rules/topic-authn-authz.md). Each entry is "KEY=value".
+# NOTE: single-env API validation wants `is_buildtime`/`is_runtime` (not `is_build_time`).
+APP_ENV_FIXED=(AUTH_TRUST_HOST=true AUTH_URL=https://staging.fablabfortsmith.org)
 # =======================================================================================
 
 # --- API helper: token via -K stdin (off argv); body via a 0600 temp file (off argv).
@@ -133,6 +141,7 @@ if [ "$DRY" -eq 1 ]; then
   for k in "${APP_ENV_REQUIRED[@]}" "${APP_ENV_OPTIONAL[@]}"; do
     printf '      %-28s %s\n' "$k" "$([ -n "$(envval "$k")" ] && echo set || echo EMPTY)"
   done
+  for kv in "${APP_ENV_FIXED[@]}"; do printf '      %-28s %s\n' "${kv%%=*}" "fixed=${kv#*=}"; done
   [ "${#missing[@]}" -gt 0 ] && warn "required env EMPTY: ${missing[*]}"
   [ "$DEPLOY" -eq 1 ] && info "would then trigger a deploy"
   echo "== dry-run only; no changes made =="
@@ -157,10 +166,14 @@ fi
 # --- sync env (bulk upsert; values from ../.env) ---
 echo "== sync env vars =="
 env_items="$(
-  for k in "${APP_ENV_REQUIRED[@]}" "${APP_ENV_OPTIONAL[@]}"; do
-    v="$(envval "$k")"; [ -n "$v" ] || continue
-    jq -n --arg key "$k" --arg value "$v" '{key:$key, value:$value, is_preview:false, is_build_time:false}'
-  done | jq -s '{data: .}'
+  { for k in "${APP_ENV_REQUIRED[@]}" "${APP_ENV_OPTIONAL[@]}"; do
+      v="$(envval "$k")"; [ -n "$v" ] || continue
+      jq -n --arg key "$k" --arg value "$v" '{key:$key, value:$value, is_preview:false, is_build_time:false}'
+    done
+    for kv in "${APP_ENV_FIXED[@]}"; do
+      jq -n --arg key "${kv%%=*}" --arg value "${kv#*=}" '{key:$key, value:$value, is_preview:false, is_build_time:false}'
+    done
+  } | jq -s '{data: .}'
 )"
 n="$(printf '%s' "$env_items" | jq '.data|length')"
 resp="$(api PATCH "applications/$APP_UUID/envs/bulk" "$env_items")"

@@ -5,7 +5,7 @@
 .DEFAULT_GOAL := help
 ANSIBLE_DIR := ansible
 
-.PHONY: help setup secrets deps lint test ping converge converge-check ssh-ca-init ssh-ca-sign racknerd coolify-plan coolify-apply dns access preview-dns
+.PHONY: help setup secrets secrets-pull provision-keys deps lint test ping converge converge-check ssh-ca-init ssh-ca-sign racknerd coolify-plan coolify-apply dns access preview-dns
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -15,6 +15,12 @@ setup: ## Interactive connectivity+config; auto-generates local secrets (ARGS=-r
 
 secrets: ## Generate/ensure local service+app secrets in ../.env (non-destructive; ARGS=--force to rotate)
 	bash scripts/gen-secrets.sh $(ARGS)
+
+secrets-pull: ## Pull secrets from the shared Vaultwarden vault into ../.env (vault = source of truth). ARGS=--dry-run
+	bash scripts/secrets-pull.sh $(ARGS)
+
+provision-keys: ## Provision Tier-2 provider creds via API (ADR 0015). ARGS="list | turnstile [--dry-run]"
+	bash scripts/provision-provider-keys.sh $(ARGS)
 
 deps: ## Install Ansible Galaxy collections
 	cd $(ANSIBLE_DIR) && ansible-galaxy collection install -r requirements.yml
@@ -27,6 +33,8 @@ test: ## Run script unit tests (no network / no VPS needed)
 	bash scripts/collect-keys.test.sh
 	bash scripts/setup.test.sh
 	bash scripts/gen-secrets.test.sh
+	bash scripts/secrets-pull.test.sh
+	bash scripts/provision-provider-keys.test.sh
 	bash ssh-ca/sign-ssh-cert.test.sh
 	bash racknerd/api.test.sh
 

@@ -108,25 +108,30 @@ shape security scope and the deploy stack:
 
 ## Status
 
-🟡 **Planning & documentation.** No infrastructure provisioned; `The-Lab` source has **not**
-been moved yet (that's an execution step — see Next steps).
+🟢 **Provisioned + live (staging).** The platform is converged from `lab-stack/` (idempotent
+`make converge`); `The-Lab` is consolidated into `lab-site/the-lab/` and serves on **staging** via
+Coolify with push-to-deploy + per-PR previews; self-hosted MongoDB + nightly restore-drilled backups
+run; admin is tailnet-only behind Cloudflare Access; platform secrets live in a shared Vaultwarden
+vault (`make secrets-pull`). Applying changes to the real VPS is a **gated** action. Remaining:
+production (apex) cutover from Vercel — deliberate, ADR 0006.
 
 ## Open decisions
 
 - [x] **Primary domain** — `fablabfortsmith.org` (previews at `*.preview.fablabfortsmith.org`).
 - [x] **Primary forge** — **GitHub** (`FabLab-Fort-Smith`); GitLab is the mirror (ADR 0003).
-- [ ] **Consolidation method** for The-Lab → `lab-site/the-lab`: `git subtree` (preserves history,
-      recommended) vs. plain copy; and whether this monorepo becomes the new origin (with
-      The-Lab archived) — see ADR 0005.
+- [x] **Consolidation method** for The-Lab → `lab-site/the-lab`: **`git subtree`** (history
+      preserved); this monorepo is the origin (ADR 0005/0006). Done — The-Lab is consolidated and
+      serves on staging.
 - [ ] **Licensing** — internal infra vs. the app may differ per folder; none asserted yet.
 - [ ] **Monorepo tooling** if more sites arrive (npm/pnpm workspaces) — defer until needed.
 
 ## Next steps
 
-1. Review this plan + ADRs.
-2. (Gated) Initialize remote / push, then **consolidate** The-Lab into `lab-site/the-lab`.
-3. Build `lab-stack`: cloud-init + Ansible host config, Coolify, MongoDB service, Cloudflare,
-   forge webhooks — then **parallel-run** alongside Vercel before cutover (ADR 0006).
+The platform is built and running on **staging** (see Status). What remains:
+1. **Production cutover** (gated, deliberate — ADR 0006): parallel-run, then move the apex from
+   Vercel to the VPS. Until then the apex stays on Vercel.
+2. **Shared-custody follow-ups** (`docs/runbooks/shared-custody.md`): rotate the exposed vault
+   master password, grant the remaining custodians, and fill the DR crown-jewel + owner-login items.
 
 ## Quickstart (for now)
 
