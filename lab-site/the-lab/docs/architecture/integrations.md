@@ -17,7 +17,7 @@ related:
 
 ## Overview
 
-The-Lab integrates six external services: **Square** (payments/subscriptions), **Discord** (OAuth, bot, role sync, DMs), **Google** (OAuth sign-in + reCAPTCHA), **AWS-compatible S3** (image uploads), **Google Gemini** (`@google/genai`, badge-image generation), and **PurelyMail** (member mailbox provisioning — via the member-email plugin). Each is wrapped behind a `src/lib`/`src/utils` adapter or a single route so SDK clients are not instantiated inside arbitrary handlers (per <a href="overview.md">the layering rules</a>).
+The-Lab integrates seven external services: **Square** (payments/subscriptions), **Discord** (OAuth, bot, role sync, DMs), **Google** (OAuth sign-in), **Cloudflare Turnstile** (anti-bot captcha on registration), **AWS-compatible S3** (image uploads), **Google Gemini** (`@google/genai`, badge-image generation), and **PurelyMail** (member mailbox provisioning — via the member-email plugin). Each is wrapped behind a `src/lib`/`src/utils` adapter or a single route so SDK clients are not instantiated inside arbitrary handlers (per <a href="overview.md">the layering rules</a>).
 
 This document is the per-service reference: what each integration is for, where it enters the codebase, the environment variables it needs, and how it behaves on failure or misconfiguration. All required secrets are env-only — there are **no hardcoded fallbacks** for secrets or endpoints (the lone remaining endpoint fallbacks live in CTF-adjacent code, noted below).
 
@@ -51,17 +51,28 @@ This document is the per-service reference: what each integration is for, where 
 
 **Failure modes.** `DiscordService` is defensive: if `DISCORD_BOT_TOKEN` is unset, `request()` warns and returns `null` (no throw); guild/role/channel helpers no-op when `GUILD_ID` is missing. API errors are logged and return `null`/`false` rather than throwing, so a Discord outage degrades features (role sync, showcase posts) without breaking the core request.
 
-## Google — OAuth sign-in & reCAPTCHA
+## Google — OAuth sign-in
 
-**Purpose.** Google OAuth sign-in, and reCAPTCHA verification on the public registration endpoint to deter automated sign-ups.
+**Purpose.** Google OAuth sign-in.
 
 **Entry points.**
 - `auth.js` — the `GoogleProvider`; its `profile()` looks up the user by email (then `googleId`), creating the account on first sign-in via `AuthController.register`.
-- `src/app/api/auth/register/route.js` — verifies the reCAPTCHA token against `https://www.google.com/recaptcha/api/siteverify` before registering.
 
-**Required env vars.** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (OAuth); `RECAPTCHA_SECRET_KEY` (server-side verification).
+**Required env vars.** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (OAuth).
 
-**Failure modes.** Registration **fails closed** on captcha: a missing token returns 400, a missing `RECAPTCHA_SECRET_KEY` returns 500 ("Captcha verification is unavailable" — it does not silently pass), and an unsuccessful verification returns 400 (SEC-21). Google OAuth `profile()` errors are caught and surfaced as a generic auth failure.
+**Failure modes.** Google OAuth `profile()` errors are caught and surfaced as a generic auth failure.
+
+## Cloudflare Turnstile — anti-bot captcha
+
+**Purpose.** Captcha verification on the public registration endpoint to deter automated sign-ups.
+
+**Entry points.**
+- `src/app/auth/register/page.js` — renders the Turnstile widget (`@marsidev/react-turnstile`) using the public site key. With no site key set the widget shows a "[CONFIG] captcha unavailable" notice and submission stays blocked.
+- `src/app/api/auth/register/route.js` — verifies the Turnstile token against `https://challenges.cloudflare.com/turnstile/v0/siteverify`, sending `secret` + `response` as a POST form body (`URLSearchParams`), before registering. The request is bounded by a 5s `AbortSignal.timeout`.
+
+**Required env vars.** `TURNSTILE_SECRET_KEY` (server-side verification); `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (public client-side widget). Both are minted via `make provision-keys ARGS=turnstile` (ADR 0015) — there is **no hardcoded fallback** site key (SEC-21).
+
+**Failure modes.** Registration **fails closed** on captcha: a missing token returns 400, a missing `TURNSTILE_SECRET_KEY` returns 500 ("Captcha verification is unavailable" — it does not silently pass), an unsuccessful verification returns 400, and a network error/timeout against the Turnstile upstream returns 503 (SEC-21).
 
 ## AWS-compatible S3 — image uploads
 
@@ -100,7 +111,7 @@ This document is the per-service reference: what each integration is for, where 
 | Discord (OAuth) | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | `auth.js` |
 | Discord (bot) | `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID` | `src/lib/discord.js` |
 | Google (OAuth) | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `auth.js` |
-| Google (reCAPTCHA) | `RECAPTCHA_SECRET_KEY` | `src/app/api/auth/register/route.js` |
+| Cloudflare Turnstile | `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | `src/app/api/auth/register/route.js`, `src/app/auth/register/page.js` |
 | S3 | `S3_BUCKET_NAME`, `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION` | `src/app/api/v1/upload/route.js`, `src/utils/s3.util.js` |
 | Gemini | `GEMINI_API_KEY` (+ S3 vars) | `src/app/api/v1/holodeck/generate-badge-images/route.js` |
 

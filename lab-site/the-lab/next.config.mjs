@@ -15,7 +15,7 @@ const withPWA = withPWAInit({
 // SEC-25: HTTP security headers / transport hardening. The headers below are
 // enforced (they don't affect rendering). The Content-Security-Policy is shipped
 // **Report-Only** because a strict enforced CSP can break the app (Next's inline
-// bootstrap scripts, Square Web Payments, reCAPTCHA) and must be validated
+// bootstrap scripts, Square Web Payments, Cloudflare Turnstile) and must be validated
 // against staging (§7 DAST) before flipping to the enforcing header.
 const securityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
@@ -27,7 +27,7 @@ const securityHeaders = [
 ];
 
 // Baseline CSP reflecting the app's real sources (S3 uploads, OAuth avatar CDNs,
-// Square Web Payments, Google reCAPTCHA). Shipped as Report-Only; tune from
+// Square Web Payments, Cloudflare Turnstile). Shipped as Report-Only; tune from
 // staging violation reports, then promote to `Content-Security-Policy`.
 const contentSecurityPolicyReportOnly = [
   "default-src 'self'",
@@ -37,11 +37,12 @@ const contentSecurityPolicyReportOnly = [
   "form-action 'self'",
   "img-src 'self' data: blob: https://s3.crittercodes.dev https://cdn.discordapp.com https://*.googleusercontent.com https://images.unsplash.com",
   // 'unsafe-inline' is required until Next is configured with per-request nonces.
-  "script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com https://*.squarecdn.com",
+  // challenges.cloudflare.com: Turnstile widget script + challenge iframe (ADR 0015).
+  "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://*.squarecdn.com",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
-  "connect-src 'self' https://connect.squareup.com https://pci-connect.squareup.com https://*.squarecdn.com https://www.google.com",
-  "frame-src 'self' https://www.google.com https://*.squarecdn.com",
+  "connect-src 'self' https://connect.squareup.com https://pci-connect.squareup.com https://*.squarecdn.com",
+  "frame-src 'self' https://challenges.cloudflare.com https://*.squarecdn.com",
   "upgrade-insecure-requests",
 ].join("; ");
 

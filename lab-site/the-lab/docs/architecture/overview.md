@@ -52,7 +52,8 @@ flowchart TB
 
   subgraph External
     Square["Square<br/>payments + webhooks"]
-    Google["Google OAuth + reCAPTCHA"]
+    Google["Google OAuth"]
+    Turnstile["Cloudflare Turnstile<br/>anti-bot captcha"]
     Discord["Discord OAuth + bot"]
     S3["AWS-compatible S3<br/>uploads"]
     Gemini["Google Gemini<br/>image generation"]
@@ -66,6 +67,7 @@ flowchart TB
   API -->|spawn mission| Orch
   API <-->|checkout, webhooks| Square
   API --> Google
+  API --> Turnstile
   API --> S3
   API --> Gemini
 ```
@@ -151,7 +153,8 @@ The `vps/` tier is self-hosted on a VPS, separate from the Vercel-deployed web a
 |---|---|---|
 | **Square** | Payments, subscriptions, webhooks | `src/lib/square.js`, `v1/square/*`, `v1/memberships/*`, `v1/donations/*` |
 | **Discord** | OAuth, bot interactions, role sync, DMs | `auth.js`, `src/lib/discord.js`, `api/discord/interactions` |
-| **Google** | OAuth sign-in, reCAPTCHA on register | `auth.js`, `api/auth/register` |
+| **Google** | OAuth sign-in | `auth.js` |
+| **Cloudflare Turnstile** | Anti-bot captcha on register | `api/auth/register` |
 | **AWS/S3** | Image uploads (server-keyed, validated) | `src/app/api/v1/upload/route.js`, `src/utils/s3.util.js` |
 | **Gemini** (`@google/genai`) | Badge image generation | `v1/holodeck/generate-badge-images` |
 

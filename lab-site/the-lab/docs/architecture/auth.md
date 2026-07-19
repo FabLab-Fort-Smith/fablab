@@ -76,7 +76,7 @@ sequenceDiagram
 
 ### Google (OAuth)
 
-`GoogleProvider` (env: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`). Its `profile()` looks the user up by email, then falls back to `googleId` (`profile.sub`) so a changed email never creates a duplicate. New users are created via `AuthController.register`; existing users get backfilled provider/`googleId`/`image`. Registration through the public form additionally enforces reCAPTCHA — see <a href="integrations.md">Integrations</a>.
+`GoogleProvider` (env: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`). Its `profile()` looks the user up by email, then falls back to `googleId` (`profile.sub`) so a changed email never creates a duplicate. New users are created via `AuthController.register`; existing users get backfilled provider/`googleId`/`image`. Registration through the public form additionally enforces a Cloudflare Turnstile captcha — see <a href="integrations.md">Integrations</a>.
 
 ### Discord (OAuth)
 
@@ -115,7 +115,7 @@ Auth secrets are env-only with **no fallbacks**: `AUTH_SECRET` (next-auth), `JWT
 
 - <a href="overview.md">Architecture Overview</a> — the layered request lifecycle and trust boundaries.
 - <a href="data-model.md">Data model</a> — the `users` record, `role`, and `membership` shape.
-- <a href="integrations.md">Integrations</a> — Google/Discord OAuth and reCAPTCHA configuration.
+- <a href="integrations.md">Integrations</a> — Google/Discord OAuth and Cloudflare Turnstile configuration.
 - <a href="../migrations/sec-23-pii-encryption-gcm-blind-index.md">SEC-23 PII-encryption migration plan</a> — email/phone encryption hardening.
 
 ## Changelog

@@ -17,7 +17,7 @@ related:
 
 ## Overview
 
-This document describes how a person becomes an authenticated, onboarded member of The-Lab: the three sign-in providers, the reCAPTCHA-gated email/password registration, the email-verification flow, and the membership-status state machine that carries a member from `registered` all the way to `active` (door access issued).
+This document describes how a person becomes an authenticated, onboarded member of The-Lab: the three sign-in providers, the Turnstile-gated email/password registration, the email-verification flow, and the membership-status state machine that carries a member from `registered` all the way to `active` (door access issued).
 
 Authentication is **next-auth v5** with **JWT sessions**, configured at the repo root in `auth.js` and `auth.config.js` (next-auth's required location). The custom registration/verification endpoints live under `src/app/api/auth/*` and follow the layered `route → controller → service → model` pattern. Identity always derives from the **session**, never from a client-supplied field. See the <a href="../architecture/overview.md">Architecture Overview</a> for the request lifecycle.
 
@@ -41,11 +41,11 @@ On Discord sign-in, the `signIn` callback calls `DiscordService.addMemberToGuild
 
 ### Email/password registration (`POST /api/auth/register`)
 
-The route handler (`src/app/api/auth/register/route.js`) is **public** and enforces a reCAPTCHA gate before touching the database:
+The route handler (`src/app/api/auth/register/route.js`) is **public** and enforces a Cloudflare Turnstile gate before touching the database:
 
 1. Require a `captchaToken` in the body (400 if missing).
-2. Require `process.env.RECAPTCHA_SECRET_KEY` — there is **no hardcoded fallback** (SEC-21). If unset, the route fails closed with a 500 ("Captcha verification is unavailable").
-3. Verify the token against Google's `siteverify` endpoint; reject with 400 on failure.
+2. Require `process.env.TURNSTILE_SECRET_KEY` — there is **no hardcoded fallback** (SEC-21). If unset, the route fails closed with a 500 ("Captcha verification is unavailable").
+3. Verify the token against Cloudflare's `https://challenges.cloudflare.com/turnstile/v0/siteverify` endpoint (`secret` + `response` sent as a POST form body, bounded by a 5s timeout); reject with 400 on failure, or 503 if the Turnstile upstream errors or times out.
 4. Delegate to `AuthController.register(data)` → `AuthService.register(...)`.
 
 `AuthService.register` (`src/app/api/auth/[...nextauth]/service.js`) encrypts the email (and phone, if present), rejects duplicate email/username, bcrypt-hashes the password (cost 12 via `bcrypt.hash(password, 10)` rounds), constructs a `User`, seeds the `REGISTER` onboarding reward (`Constants.ONBOARDING_REWARDS.REGISTER` = 10 stake), and — for locally-registered (`unverified`) users — sends a verification email. The registration body and the verification token are **never logged** (SEC-20/SEC-24).
@@ -67,8 +67,8 @@ Local registrations are created with `status: 'unverified'` and a JWT `verificat
 
 ```mermaid
 flowchart TD
-  A["POST /api/auth/register"] --> B{"reCAPTCHA valid?"}
-  B -- no --> R["400 / 500 (fail closed)"]
+  A["POST /api/auth/register"] --> B{"Turnstile valid?"}
+  B -- no --> R["400 / 500 / 503 (fail closed)"]
   B -- yes --> C["Create user (status: unverified)<br/>+REGISTER stake"]
   C --> D["Send verification email"]
   D --> E["GET /api/auth/verify-email?token"]

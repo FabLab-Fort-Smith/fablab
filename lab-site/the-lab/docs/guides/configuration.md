@@ -92,14 +92,14 @@ flowchart TB
 | `DISCORD_GUILD_ID` | Target Discord server/guild id. | Feature | `src/lib/discord.js` | No |
 | `DISCORD_BOUNTY_CHANNEL_ID` | Channel for bounty announcements. | Feature | `src/app/api/v1/bounties/service.js` | No |
 
-## Google / reCAPTCHA / Gemini
+## Google / Turnstile / Gemini
 
 | Variable | Purpose | Status | Used in | Secret |
 |---|---|---|---|---|
 | `GOOGLE_CLIENT_ID` | Google OAuth client id. | Feature | `auth.config.js` / auth | No |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret. | Feature | `auth.config.js` / auth | Yes |
-| `RECAPTCHA_SECRET_KEY` | Server-side reCAPTCHA verification on registration. | Feature | `src/app/api/auth/register/route.js` | Yes |
-| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | reCAPTCHA site key (client-side widget). | Feature | register UI | No (public) |
+| `TURNSTILE_SECRET_KEY` | Server-side Cloudflare Turnstile verification on registration. Minted via `make provision-keys ARGS=turnstile` (ADR 0015) — not a console-fetched value. | Feature | `src/app/api/auth/register/route.js` | Yes |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Public Cloudflare Turnstile site key (client-side widget). Minted via `make provision-keys ARGS=turnstile` (ADR 0015). | Feature | register UI | No (public) |
 | `GEMINI_API_KEY` | Google Gemini (`@google/genai`) badge image generation. | Feature | `v1/holodeck/generate-badge-images`, `v1/holodeck/ghost` | Yes |
 
 ## IoT / access-control tier
