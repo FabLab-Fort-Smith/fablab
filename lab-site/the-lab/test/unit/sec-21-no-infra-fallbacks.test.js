@@ -15,7 +15,10 @@ describe("SEC-21 — no hardcoded infra/secret fallbacks", () => {
         ["src/app/api/admin/pair-card/route.js", [/socket\.crittercodes\.dev/, /WS_SERVER_URL\s*\|\|/, /SOCKET_API_SECRET\s*\|\|/]],
         ["src/app/api/v1/memberships/pair-key/route.js", [/socket\.crittercodes\.dev/, /WS_SERVER_URL\s*\|\|/]],
         ["src/app/api/discord/interactions/route.js", [/FabLabFS/, /WIFI_PASSWORD\s*\|\|/]],
-        ["src/app/api/auth/register/route.js", [/RECAPTCHA_SECRET_KEY\s*\|\|/, /6LeIxAcTAAAA/]],
+        ["src/app/api/auth/register/route.js", [/TURNSTILE_SECRET_KEY\s*\|\|/, /RECAPTCHA_SECRET_KEY/, /6LeIxAcTAAAA/]],
+        // captcha site key is public (NEXT_PUBLIC) but a hardcoded fallback is how the reCAPTCHA
+        // test key leaked to staging — forbid any literal fallback + the known test keys.
+        ["src/app/auth/register/page.js", [/NEXT_PUBLIC_TURNSTILE_SITE_KEY\s*\|\|/, /6LeIxAcTAAAA/, /1x0{20}AA/]],
         ["src/app/api/v1/holodeck/generate-badge-images/route.js", [/s3\.crittercodes\.dev/, /fablab-bounties/, /S3_ENDPOINT\s*\|\|\s*['"]/, /S3_BUCKET_NAME\s*\|\|\s*['"]/]],
     ])("REGRESSION: %s has no literal fallback", (file, patterns) => {
         const src = read(file);
