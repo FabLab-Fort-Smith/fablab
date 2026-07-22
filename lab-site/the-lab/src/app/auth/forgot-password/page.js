@@ -9,8 +9,19 @@ export default function ForgotPasswordPage() {
   const handleSubmit = async e => {
     e.preventDefault();
     setStatus('sending');
-    // Password reset API not yet implemented — show a contact prompt
-    setTimeout(() => setStatus('sent'), 800);
+    // #73 — POST to the request endpoint. The server ALWAYS returns a generic
+    // success (no account enumeration), so we show the same "if that email
+    // exists…" message regardless of the outcome — including on a network error.
+    try {
+      await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+    } catch {
+      // Swallow — never reveal whether the request reached/matched an account.
+    }
+    setStatus('sent');
   };
 
   return (

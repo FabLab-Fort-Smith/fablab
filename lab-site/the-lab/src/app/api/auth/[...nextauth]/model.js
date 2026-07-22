@@ -154,4 +154,55 @@ export default class UserModel {
         );
         return result.modifiedCount > 0;
     }
+
+    /**
+     * ✅ Store a hashed, time-boxed password-reset token on a user (#73).
+     * Mirrors the verificationToken field style but persists only the SHA-256
+     * HASH of the token — never the plaintext — plus its expiry. Overwrites any
+     * prior pending token (issuing a new one invalidates the old one).
+     * @param {string} userID
+     * @param {string} tokenHash - sha-256 hex of the raw reset token
+     * @param {Date} expiresAt
+     * @returns {boolean} whether a document was modified
+     */
+    static async setPasswordResetToken(userID, tokenHash, expiresAt) {
+        const dbInstance = await db.connect();
+        const result = await dbInstance.collection("users").updateOne(
+            { userID },
+            { $set: { passwordResetTokenHash: tokenHash, passwordResetExpires: expiresAt, updatedAt: new Date() } }
+        );
+        return result.modifiedCount > 0;
+    }
+
+    /**
+     * ✅ Find a user by the HASH of their password-reset token (#73).
+     * Exact match on the stored sha-256 hex (no regex — the value is a secret
+     * digest, so it must match byte-for-byte and never be treated as a pattern).
+     * @param {string} tokenHash
+     * @returns {Object | null}
+     */
+    static async findByPasswordResetTokenHash(tokenHash) {
+        if (!tokenHash) return null;
+        const dbInstance = await db.connect();
+        return await dbInstance.collection("users").findOne({ passwordResetTokenHash: tokenHash });
+    }
+
+    /**
+     * ✅ Set a new password and consume (clear) the reset token in one write (#73).
+     * Single-use: the token fields are $unset so the same link can't be replayed.
+     * @param {string} userID
+     * @param {string} hashedPassword - bcrypt hash of the new password
+     * @returns {boolean} whether a document was modified
+     */
+    static async completePasswordReset(userID, hashedPassword) {
+        const dbInstance = await db.connect();
+        const result = await dbInstance.collection("users").updateOne(
+            { userID },
+            {
+                $set: { password: hashedPassword, updatedAt: new Date() },
+                $unset: { passwordResetTokenHash: "", passwordResetExpires: "" },
+            }
+        );
+        return result.modifiedCount > 0;
+    }
 }

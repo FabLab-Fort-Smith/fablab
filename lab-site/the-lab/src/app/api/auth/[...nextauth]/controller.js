@@ -65,6 +65,23 @@ export default class AuthController {
     }
 
     /**
+     * ✅ Request a password reset (#73). Never reveals whether the account
+     * exists — always resolves; the route returns a generic success.
+     */
+    static async requestPasswordReset(email) {
+        await AuthService.requestPasswordReset(email);
+        return { ok: true };
+    }
+
+    /**
+     * ✅ Complete a password reset with a token + new password (#73).
+     * Throws generic errors on invalid/expired token or bad password.
+     */
+    static async resetPassword(token, newPassword) {
+        return await AuthService.resetPassword(token, newPassword);
+    }
+
+    /**
      * ✅ Logout logic is token-based with NextAuth (no controller needed)
      */
     static async logout() {
