@@ -1,12 +1,19 @@
 // src/app/api/auth/email.util.js
 import nodemailer from 'nodemailer';
 
+// Transactional mailer. Defaults to PurelyMail SMTP (our own mail infra — smtp.purelymail.com),
+// overridable via EMAIL_HOST / EMAIL_PORT. Auth is a dedicated sending mailbox: EMAIL_USER = the
+// full address (e.g. noreply@fablabfortsmith.org), EMAIL_PASS = its password / app password.
+// Port 465 = implicit TLS (secure=true); 587 = STARTTLS (secure=false).
+const EMAIL_PORT = Number(process.env.EMAIL_PORT) || 465;
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // Change this if using a different service (e.g., SendGrid, Outlook)
+    host: process.env.EMAIL_HOST || 'smtp.purelymail.com',
+    port: EMAIL_PORT,
+    secure: EMAIL_PORT === 465,
     auth: {
-        user: process.env.EMAIL_USER, // Your email address from environment variables
-        pass: process.env.EMAIL_PASS  // Your email app password from environment variables
-    }
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+    },
 });
 
 /**
@@ -49,7 +56,10 @@ export async function sendVerificationEmail(email, token) {
  * @param {string} token - The password reset token
  */
 export async function sendPasswordResetEmail(email, token) {
-    const resetLink = `${process.env.APP_URL}/reset-password?token=${token}`;
+    // Mirror sendVerificationEmail: use NEXT_PUBLIC_URL (the app's canonical base)
+    // and the App Router page path (/auth/reset-password), not the old
+    // APP_URL/reset-password which never matched a real route (#73).
+    const resetLink = `${process.env.NEXT_PUBLIC_URL}/auth/reset-password?token=${token}`;
 
     const mailOptions = {
         from: `"The Lab" <${process.env.EMAIL_USER}>`,
@@ -58,13 +68,15 @@ export async function sendPasswordResetEmail(email, token) {
         html: `
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #00ff00;">Password Reset Request</h2>
-                <p>Click the link below to reset your password:</p>
+                <p>Click the link below to reset your password. This link expires in 30 minutes and can be used once.</p>
                 <a href="${resetLink}" target="_blank" style="color: #00ff00; text-decoration: none; border: 1px solid #00ff00; padding: 10px 20px; border-radius: 8px;">Reset Password</a>
-                <p>If you did not request a password reset, please ignore this message.</p>
+                <p>If you did not request a password reset, you can safely ignore this message.</p>
             </div>
         `
     };
 
+    // SEC-24: never log mailOptions / resetLink / token — the reset link is a
+    // direct account-takeover vector.
     try {
         const info = await transporter.sendMail(mailOptions);
         console.log('Password reset email sent:', info.response);

@@ -37,8 +37,14 @@ export async function POST(req) {
         // 3. Hash new password
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-        // 4. Update user
-        const updatedUser = await UserModel.updateUser(userID, { password: hashedPassword });
+        // 4. Update user. Also clear any pending password-reset token (#73): a
+        //    deliberate password change must invalidate an outstanding reset link
+        //    so a previously-requested token can't later take over the account.
+        const updatedUser = await UserModel.updateUser(userID, {
+            password: hashedPassword,
+            passwordResetTokenHash: null,
+            passwordResetExpires: null,
+        });
 
         if (!updatedUser) {
             return NextResponse.json({ error: "Failed to update password." }, { status: 500 });

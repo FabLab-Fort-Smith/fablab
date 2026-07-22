@@ -221,7 +221,7 @@ export default function Sidebar({ session, open, onClose, isMobile }) {
       {/* Build info footer */}
       <div style={{ padding: 12, borderTop: '1px solid var(--bd-1)', fontSize: 10.5, color: 'var(--text-mid)', fontFamily: 'var(--mono)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>build</span><span className="green">{process.env.NEXT_PUBLIC_BUILD_HASH || 'dev'}</span></div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>env</span><span className="amber">{process.env.NODE_ENV || 'dev'}</span></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>env</span><span className="amber">{process.env.NEXT_PUBLIC_APP_ENV || process.env.NODE_ENV || 'dev'}</span></div>
         <div style={{ marginTop: 6, fontSize: 9.5, color: 'var(--text-dim)' }}>⌘K · search · run</div>
       </div>
     </aside>
