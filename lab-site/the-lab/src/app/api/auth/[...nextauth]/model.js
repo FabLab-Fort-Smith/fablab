@@ -154,4 +154,60 @@ export default class UserModel {
         );
         return result.modifiedCount > 0;
     }
+
+    /**
+     * ✅ Store a hashed, time-boxed password-reset token on a user (#73).
+     * Mirrors the verificationToken field style but persists only the SHA-256
+     * HASH of the token — never the plaintext — plus its expiry. Overwrites any
+     * prior pending token (issuing a new one invalidates the old one).
+     * @param {string} userID
+     * @param {string} tokenHash - sha-256 hex of the raw reset token
+     * @param {Date} expiresAt
+     * @returns {boolean} whether a document was modified
+     */
+    static async setPasswordResetToken(userID, tokenHash, expiresAt) {
+        const dbInstance = await db.connect();
+        const result = await dbInstance.collection("users").updateOne(
+            { userID },
+            { $set: { passwordResetTokenHash: tokenHash, passwordResetExpires: expiresAt, updatedAt: new Date() } }
+        );
+        return result.modifiedCount > 0;
+    }
+
+    /**
+     * ✅ Find a user by the HASH of their password-reset token (#73).
+     * Exact match on the stored sha-256 hex (no regex — the value is a secret
+     * digest, so it must match byte-for-byte and never be treated as a pattern).
+     * @param {string} tokenHash
+     * @returns {Object | null}
+     */
+    static async findByPasswordResetTokenHash(tokenHash) {
+        if (!tokenHash) return null;
+        const dbInstance = await db.connect();
+        return await dbInstance.collection("users").findOne({ passwordResetTokenHash: tokenHash });
+    }
+
+    /**
+     * ✅ Set a new password and consume (clear) the reset token in one ATOMIC
+     * write (#73). The filter matches BOTH the userID and the current token hash,
+     * so the update is conditional on the token still being present — two
+     * concurrent submits can't both consume it (TOCTOU, CWE-367). Single-use:
+     * the token fields are $unset so the same link can't be replayed.
+     * @param {string} userID
+     * @param {string} tokenHash - the sha-256 hex the caller validated against
+     * @param {string} hashedPassword - bcrypt hash of the new password
+     * @returns {boolean} true only if THIS call consumed the token
+     */
+    static async completePasswordReset(userID, tokenHash, hashedPassword) {
+        if (!tokenHash) return false;
+        const dbInstance = await db.connect();
+        const result = await dbInstance.collection("users").updateOne(
+            { userID, passwordResetTokenHash: tokenHash },
+            {
+                $set: { password: hashedPassword, updatedAt: new Date() },
+                $unset: { passwordResetTokenHash: "", passwordResetExpires: "" },
+            }
+        );
+        return result.modifiedCount > 0;
+    }
 }
