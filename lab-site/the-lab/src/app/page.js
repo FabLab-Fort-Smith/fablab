@@ -149,7 +149,7 @@ function HeroBoot({ memberCount }) {
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <Link href="/auth/register" className="btn btn--filled" style={{ fontSize: 11 }}>$ ./join --now</Link>
             <a href="#about" className="btn btn--ghost" style={{ fontSize: 11 }}>$ ./tour</a>
-            <a href="https://discord.gg/fablab" target="_blank" rel="noopener noreferrer" className="btn btn--ghost" style={{ fontSize: 11, borderColor: 'var(--magenta)', color: 'var(--magenta)' }}>$ ./discord</a>
+            <a href="https://discord.gg/bcHSubHKQ" target="_blank" rel="noopener noreferrer" className="btn btn--ghost" style={{ fontSize: 11, borderColor: 'var(--magenta)', color: 'var(--magenta)' }}>$ ./discord</a>
           </div>
         </div>
         {/* Right: boot card */}
