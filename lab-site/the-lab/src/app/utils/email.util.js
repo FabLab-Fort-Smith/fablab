@@ -1,12 +1,19 @@
 // src/app/api/auth/email.util.js
 import nodemailer from 'nodemailer';
 
+// Transactional mailer. Defaults to PurelyMail SMTP (our own mail infra — smtp.purelymail.com),
+// overridable via EMAIL_HOST / EMAIL_PORT. Auth is a dedicated sending mailbox: EMAIL_USER = the
+// full address (e.g. noreply@fablabfortsmith.org), EMAIL_PASS = its password / app password.
+// Port 465 = implicit TLS (secure=true); 587 = STARTTLS (secure=false).
+const EMAIL_PORT = Number(process.env.EMAIL_PORT) || 465;
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // Change this if using a different service (e.g., SendGrid, Outlook)
+    host: process.env.EMAIL_HOST || 'smtp.purelymail.com',
+    port: EMAIL_PORT,
+    secure: EMAIL_PORT === 465,
     auth: {
-        user: process.env.EMAIL_USER, // Your email address from environment variables
-        pass: process.env.EMAIL_PASS  // Your email app password from environment variables
-    }
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+    },
 });
 
 /**
