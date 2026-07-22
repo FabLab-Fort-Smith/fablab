@@ -66,7 +66,7 @@ export async function POST(req) {
             return NextResponse.json({ error: error.message }, { status: 400 });
         }
         // Unexpected: fail closed, log server-side only (no token/body), generic 500.
-        console.error("Reset-password error:", error?.message || "error");
+        console.error("Account-recovery completion error:", error?.message || "error");
         return NextResponse.json({ error: "Internal server error." }, { status: 500 });
     }
 }

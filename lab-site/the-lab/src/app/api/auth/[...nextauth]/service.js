@@ -310,7 +310,7 @@ export default class AuthService {
         // token write above is minor). The token/link is never logged (SEC-24);
         // a mail failure is caught so it can't surface or reject unhandled.
         sendPasswordResetEmail(plainEmail, rawToken).catch((err) => {
-            console.error('Failed to send password reset email:', err?.message || 'send error');
+            console.error('Failed to send account-recovery email:', err?.message || 'send error');
         });
     }
 

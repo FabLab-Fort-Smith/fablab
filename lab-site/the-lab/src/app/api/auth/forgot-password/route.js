@@ -72,7 +72,7 @@ export async function POST(req) {
         return NextResponse.json(GENERIC_OK, { status: 200 });
     } catch (error) {
         // Fail closed but never leak internals; still generic to the client.
-        console.error("Forgot-password error:", error?.message || "error");
+        console.error("Account-recovery request error:", error?.message || "error");
         return NextResponse.json(GENERIC_OK, { status: 200 });
     }
 }
