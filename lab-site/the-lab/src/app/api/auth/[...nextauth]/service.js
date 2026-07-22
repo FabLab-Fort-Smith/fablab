@@ -302,9 +302,14 @@ export default class AuthService {
         const { rawToken, tokenHash, expires } = this.generatePasswordResetToken();
         await UserModel.setPasswordResetToken(user.userID, tokenHash, expires);
 
-        // Best-effort send; a mail failure must not 500 or leak. The token/link
-        // is never logged (SEC-24).
-        await sendPasswordResetEmail(plainEmail, rawToken).catch((err) => {
+        // FIRE-AND-FORGET the email — do NOT await it. Awaiting the SMTP round
+        // trip only when the account exists leaks account existence via response
+        // timing (enumeration, CWE-208) and would let an attacker sidestep the
+        // per-IP limit by measuring latency. Returning immediately keeps the
+        // found/not-found paths ~indistinguishable (the residual delta from the
+        // token write above is minor). The token/link is never logged (SEC-24);
+        // a mail failure is caught so it can't surface or reject unhandled.
+        sendPasswordResetEmail(plainEmail, rawToken).catch((err) => {
             console.error('Failed to send password reset email:', err?.message || 'send error');
         });
     }
@@ -353,7 +358,13 @@ export default class AuthService {
         }
 
         const hashedPassword = await bcrypt.hash(newPassword, 10);
-        await UserModel.completePasswordReset(user.userID, hashedPassword);
+        // Consume ATOMICALLY: the update matches on { userID, tokenHash }, so two
+        // concurrent submits can't both succeed (TOCTOU, CWE-367). The loser sees
+        // the token already cleared -> modifiedCount 0 -> generic invalid error.
+        const consumed = await UserModel.completePasswordReset(user.userID, tokenHash, hashedPassword);
+        if (!consumed) {
+            throw new Error('Invalid or expired reset token.');
+        }
         return { message: 'Password has been reset.' };
     }
 

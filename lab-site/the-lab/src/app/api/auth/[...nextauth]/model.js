@@ -188,16 +188,21 @@ export default class UserModel {
     }
 
     /**
-     * ✅ Set a new password and consume (clear) the reset token in one write (#73).
-     * Single-use: the token fields are $unset so the same link can't be replayed.
+     * ✅ Set a new password and consume (clear) the reset token in one ATOMIC
+     * write (#73). The filter matches BOTH the userID and the current token hash,
+     * so the update is conditional on the token still being present — two
+     * concurrent submits can't both consume it (TOCTOU, CWE-367). Single-use:
+     * the token fields are $unset so the same link can't be replayed.
      * @param {string} userID
+     * @param {string} tokenHash - the sha-256 hex the caller validated against
      * @param {string} hashedPassword - bcrypt hash of the new password
-     * @returns {boolean} whether a document was modified
+     * @returns {boolean} true only if THIS call consumed the token
      */
-    static async completePasswordReset(userID, hashedPassword) {
+    static async completePasswordReset(userID, tokenHash, hashedPassword) {
+        if (!tokenHash) return false;
         const dbInstance = await db.connect();
         const result = await dbInstance.collection("users").updateOne(
-            { userID },
+            { userID, passwordResetTokenHash: tokenHash },
             {
                 $set: { password: hashedPassword, updatedAt: new Date() },
                 $unset: { passwordResetTokenHash: "", passwordResetExpires: "" },

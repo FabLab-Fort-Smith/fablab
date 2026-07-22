@@ -111,6 +111,19 @@ describe("#73 requestPasswordReset — no account enumeration", () => {
     mockSendReset.mockRejectedValue(new Error("smtp down"));
     await expect(AuthService.requestPasswordReset("x@example.com")).resolves.toBeUndefined();
   });
+
+  test("does NOT block on the email send — no timing enumeration (fire-and-forget)", async () => {
+    // A slow/hanging SMTP call must not delay the response for a KNOWN account,
+    // else response latency leaks account existence vs the unknown-account path.
+    mockFindByEmail.mockResolvedValue({ userID: "user-slow", email: "enc" });
+    let release;
+    mockSendReset.mockReturnValue(new Promise((resolve) => { release = resolve; })); // never settles during the test
+
+    // Resolves even though the send is still pending; the call was dispatched.
+    await expect(AuthService.requestPasswordReset("slow@example.com")).resolves.toBeUndefined();
+    expect(mockSendReset).toHaveBeenCalledTimes(1);
+    release(); // let the dangling promise settle so no open handle lingers
+  });
 });
 
 describe("#73 resetPassword — validation, single-use, OAuth-only", () => {
@@ -160,10 +173,26 @@ describe("#73 resetPassword — validation, single-use, OAuth-only", () => {
     const res = await AuthService.resetPassword(raw, validPw);
     expect(res).toEqual({ message: "Password has been reset." });
     expect(mockComplete).toHaveBeenCalledTimes(1);
-    const [userID, hashed] = mockComplete.mock.calls[0];
+    const [userID, passedHash, hashed] = mockComplete.mock.calls[0];
     expect(userID).toBe("user-2");
+    expect(passedHash).toBe(sha256(raw)); // atomic consume is scoped to this token hash
     expect(hashed).toMatch(/^\$2[aby]\$/); // bcrypt hash, not plaintext
     expect(hashed).not.toBe(validPw);
+  });
+
+  test("concurrent double-consume: a lost race (modifiedCount 0) -> generic invalid", async () => {
+    // completePasswordReset returns false when the atomic { userID, tokenHash }
+    // filter no longer matches (another submit already consumed it, CWE-367).
+    const raw = "d".repeat(64);
+    mockFindByHash.mockResolvedValue({
+      userID: "user-race",
+      passwordResetTokenHash: sha256(raw),
+      passwordResetExpires: new Date(Date.now() + 60_000),
+    });
+    mockComplete.mockResolvedValue(false); // this call lost the race
+    await expect(AuthService.resetPassword(raw, validPw)).rejects.toThrow(
+      "Invalid or expired reset token.",
+    );
   });
 
   test("OAuth-only account (password 'no password') CAN set a password — no old-password gate", async () => {
@@ -177,6 +206,10 @@ describe("#73 resetPassword — validation, single-use, OAuth-only", () => {
     await expect(AuthService.resetPassword(raw, validPw)).resolves.toEqual({
       message: "Password has been reset.",
     });
-    expect(mockComplete).toHaveBeenCalledWith("user-oauth", expect.stringMatching(/^\$2[aby]\$/));
+    expect(mockComplete).toHaveBeenCalledWith(
+      "user-oauth",
+      sha256(raw),
+      expect.stringMatching(/^\$2[aby]\$/),
+    );
   });
 });
