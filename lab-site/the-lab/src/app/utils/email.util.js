@@ -508,6 +508,63 @@ export async function sendContactEmail(name, email, message) {
 }
 
 /**
+ * ✅ Send the Google-sign-in retirement notice to a Google-only account
+ *
+ * Transactional account notice, NOT marketing: the recipient loses the ability to
+ * sign in if they do nothing, so it is sent regardless of notification
+ * preferences and carries no unsubscribe (docs/analysis/google-oauth-removal-impact.md §6).
+ *
+ * Contains no token and no secret — it links to the normal recovery + settings
+ * pages, so it is safe if forwarded.
+ *
+ * @param {string} email - The member's email address (already decrypted)
+ * @param {string} firstName - The member's first name (for the greeting)
+ * @param {string} deadline - Human-readable retirement date, e.g. "August 31, 2026"
+ * @returns {Promise<void>} resolves when SMTP accepted the message
+ * @throws {Error} when sending fails, so the caller can retry and not mark it sent
+ */
+export async function sendGoogleRetirementEmail(email, firstName, deadline) {
+    const setPasswordLink = `${process.env.NEXT_PUBLIC_URL}/auth/forgot-password`;
+
+    const mailOptions = {
+        from: `"The Lab" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: `Action needed: Google sign-in retires ${deadline}`,
+        html: `
+            <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
+                <h2 style="color: #00ff00;">Google sign-in is being retired</h2>
+                <p>Hi ${firstName || 'there'},</p>
+                <p>We are retiring "Sign in with Google" on <strong>${deadline}</strong>. Right now,
+                Google is the <strong>only</strong> way you can sign in to The Lab — so you need to
+                add a second way to get in before that date, or you will be locked out.</p>
+
+                <div style="border: 1px solid #333; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                    <p><strong>Pick either option — both take about a minute:</strong></p>
+                    <p><strong>1. Set a password.</strong> Use the link below, enter this email address,
+                    and we will send you a link to choose a password.</p>
+                    <p><strong>2. Link your Discord account.</strong> Sign in with Google one last time,
+                    then open Profile &rarr; Settings &rarr; Connections and link Discord.</p>
+                </div>
+
+                <a href="${setPasswordLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">Set a password</a>
+
+                <p style="margin-top: 20px;">Your account, membership, and history are not changing —
+                only the way you sign in. If you need help, just reply to this email.</p>
+                <p style="color: #666; font-size: 12px;">— The Lab Team</p>
+            </div>
+        `
+    };
+
+    // SEC-24: never log mailOptions or the recipient — this is member PII.
+    try {
+        await transporter.sendMail(mailOptions);
+    } catch (error) {
+        console.error('Error sending Google retirement notice:', error);
+        throw new Error('Failed to send Google retirement notice');
+    }
+}
+
+/**
  * ✅ Send an invite email for admin-created clients
  * @param {string} email - The invited user's email address
  * @param {string} token - The invitation token

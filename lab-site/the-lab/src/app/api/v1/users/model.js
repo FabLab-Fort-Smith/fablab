@@ -63,6 +63,30 @@ export default class UserModel {
     }
 
     /**
+     * ✅ Get accounts that have a Google identity — candidates for the Google-OAuth
+     * retirement campaign (docs/analysis/google-oauth-removal-impact.md §6).
+     *
+     * Returns candidates, NOT the final cohort: the caller narrows them with
+     * authMethodsOf() (`@/lib/authMethods`) so the "googleOnly" rule lives in exactly
+     * one place. Projected to the minimum fields needed to classify and contact
+     * (PII minimisation — CLAUDE.md §3); `email` is still encrypted at rest here.
+     *
+     * @returns {Promise<Array<Object>>} candidate users (empty array on error)
+     */
+    static getGoogleIdentityUsers = async () => {
+        try {
+            const dbUsers = await db.dbUsers();
+            return await dbUsers.find(
+                { googleId: { $nin: [null, ""] } },
+                { projection: { userID: 1, email: 1, firstName: 1, googleId: 1, discordId: 1, password: 1, googleRetirementNoticeSentAt: 1, _id: 0 } }
+            ).toArray();
+        } catch (error) {
+            console.error("Error getting Google-identity users:", error);
+            return [];
+        }
+    }
+
+    /**
      * ✅ Get a single user by any query parameter
      * @param {Object} query - Query object to search for a user
      * @returns {Object|null} - The found user or null if not found
