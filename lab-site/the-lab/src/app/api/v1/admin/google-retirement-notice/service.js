@@ -3,12 +3,8 @@ import AuthService from '@/app/api/auth/[...nextauth]/service';
 import { authMethodsOf } from '@/lib/authMethods';
 import { sendGoogleRetirementEmail } from '@/app/utils/email.util';
 import logger from '@/lib/logger';
+import { retirementDeadline } from '@/lib/googleRetirement';
 
-/**
- * Default retirement date shown in the notice. Overridable per run so the date can
- * move without a deploy; non-secret.
- */
-export const DEFAULT_DEADLINE = process.env.GOOGLE_RETIRES_ON || 'the announced date';
 
 /**
  * Send (or preview) the Google-sign-in retirement notice to the Google-only cohort.
@@ -26,60 +22,88 @@ export const DEFAULT_DEADLINE = process.env.GOOGLE_RETIRES_ON || 'the announced 
  *   function (CLAUDE.md §5 no-data-leakage; §3 PII minimisation).
  * - Sends **sequentially** to stay gentle on the SMTP relay.
  *
+ * Two limits worth knowing before running it:
+ * - `sentButUnstamped` counts members who WERE emailed but whose stamp write failed. A
+ *   blanket re-run would mail them twice, so handle those individually (or with `limit`)
+ *   rather than re-running the whole cohort.
+ * - There is no run lock: two concurrent `send:true` calls both read the pre-stamp cohort
+ *   and would both mail everyone. Mitigated by the route's rate limit and a single admin
+ *   operator, not by atomic claiming — chosen deliberately, since claim-before-send
+ *   inverts the failure mode into "claimed but never sent" (a silent miss, which is worse
+ *   here than a rare duplicate).
+ *
  * @param {Object} [options]
  * @param {boolean} [options.send=false] - actually send; false = dry run
  * @param {string} [options.deadline] - human-readable retirement date for the copy
  * @param {boolean} [options.force=false] - re-send to accounts already notified (reminder pass)
  * @param {number} [options.limit=0] - cap the number of recipients (0 = no cap)
- * @returns {Promise<{dryRun: boolean, candidates: number, cohort: number, alreadyNotified: number, sent: number, failed: number, undecryptable: number, recipients: string[]}>}
+ * @returns {Promise<{dryRun: boolean, candidates: number, cohort: number, strandedNoCredential: number, alreadyNotified: number, sent: number, failed: number, sentButUnstamped: number, undecryptable: number, remaining: number, recipients: string[]}>}
  */
 export async function runGoogleRetirementNotice({ send = false, deadline, force = false, limit = 0 } = {}) {
-    const when = deadline || DEFAULT_DEADLINE;
+    const when = deadline || retirementDeadline();
+    // Throws if the query fails — a false "cohort: 0" must never look like an all-clear.
     const candidates = await UserModel.getGoogleIdentityUsers();
 
     const cohort = candidates.filter((u) => authMethodsOf(u).googleOnly);
+    // Accounts with NO usable sign-in method at all: already locked out and invisible to
+    // the googleOnly rule (e.g. provider:'google' with no googleId). Surfacing this is the
+    // point — "cohort: 0" only means "nobody is locked out" if this is 0 too.
+    const strandedNoCredential = candidates.filter((u) => authMethodsOf(u).methodCount === 0).length;
+
     let alreadyNotified = 0;
     let undecryptable = 0;
     let sent = 0;
     let failed = 0;
+    let sentButUnstamped = 0;
+    let processed = 0;
     const recipients = [];
 
     for (const user of cohort) {
-        if (!force && user.googleRetirementNoticeSentAt) { alreadyNotified++; continue; }
+        if (!force && user.googleRetirementNoticeSentAt) { alreadyNotified++; processed++; continue; }
         if (limit > 0 && recipients.length >= limit) break;
 
         const email = AuthService.decryptEmail(user.email);
-        if (!email || !email.includes('@')) { undecryptable++; continue; }
+        if (!email || !email.includes('@')) { undecryptable++; processed++; continue; }
         recipients.push(maskEmail(email));
+        processed++;
 
         if (!send) continue; // dry run: counted, not contacted
 
         try {
             await sendGoogleRetirementEmail(email, user.firstName, when);
-            // Stamp only on success so a transient SMTP failure is retried, not lost.
-            await UserModel.updateUser({ userID: user.userID }, { googleRetirementNoticeSentAt: new Date() });
             sent++;
         } catch (error) {
             failed++;
             logger.error({ err: error, userID: user.userID }, 'google retirement notice failed to send');
+            continue; // unstamped on purpose — retried on the next run
+        }
+
+        // Stamped in a SEPARATE try: the mail is already delivered, so a stamp failure is
+        // NOT a send failure. Counting it as `failed` would invite a re-run that
+        // double-mails this member.
+        try {
+            await UserModel.updateUser({ userID: user.userID }, { googleRetirementNoticeSentAt: new Date() });
+        } catch (error) {
+            sentButUnstamped++;
+            logger.error({ err: error, userID: user.userID }, 'notice delivered but stamp failed — a re-run would duplicate it');
         }
     }
 
-    logger.info(
-        { dryRun: !send, candidates: candidates.length, cohort: cohort.length, alreadyNotified, sent, failed, undecryptable },
-        'google retirement notice run'
-    );
-
-    return {
+    const summary = {
         dryRun: !send,
         candidates: candidates.length,
         cohort: cohort.length,
+        strandedNoCredential,
         alreadyNotified,
         sent,
         failed,
+        sentButUnstamped,
         undecryptable,
+        remaining: Math.max(0, cohort.length - processed),
         recipients,
     };
+    logger.info({ ...summary, recipients: undefined }, 'google retirement notice run');
+    return summary;
 }
 
 /**

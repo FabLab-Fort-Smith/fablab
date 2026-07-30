@@ -23,6 +23,7 @@ export default function AuthMethodsNudge() {
     const [show, setShow] = useState(false);
     const [retiresOn, setRetiresOn] = useState(null);
     const [linking, setLinking] = useState(false);
+    const [linkError, setLinkError] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -50,16 +51,37 @@ export default function AuthMethodsNudge() {
 
     const linkDiscord = async () => {
         setLinking(true);
-        // Mark the upcoming OAuth round-trip as a LINK, not a new sign-in
-        // (same contract the settings tab uses).
-        try { await fetch('/api/v1/auth/link-intent', { method: 'POST' }); } catch { /* signIn still surfaces failure */ }
-        signIn('discord', { callbackUrl: '/dashboard' });
+        setLinkError(false);
+        // Mark the upcoming OAuth round-trip as a LINK, not a new sign-in (the contract
+        // auth.js's Discord profile() reads). ABORT if that marker was not set: without it
+        // Discord sign-in falls through to the normal path, which for a Google-only account
+        // creates a duplicate account or triggers a merge instead of linking. `fetch` only
+        // rejects on network failure, so the status has to be checked explicitly.
+        let marked = false;
+        try {
+            marked = (await fetch('/api/v1/auth/link-intent', { method: 'POST' })).ok;
+        } catch {
+            marked = false;
+        }
+        if (!marked) {
+            setLinking(false);
+            setLinkError(true);
+            return;
+        }
+        try {
+            await signIn('discord', { callbackUrl: '/dashboard' });
+        } catch {
+            // Never leave the button stuck on "opening Discord…".
+            setLinking(false);
+            setLinkError(true);
+        }
     };
 
     if (!show) return null;
 
     return (
         <section
+            role="status"
             aria-labelledby="google-retire-heading"
             style={{
                 display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap',
@@ -79,6 +101,11 @@ export default function AuthMethodsNudge() {
                     Google is currently your only way to sign in. Set a password or link Discord now
                     to keep access to your account.
                 </p>
+                {linkError && (
+                    <p style={{ margin: '6px 0 0', color: 'var(--red)' }}>
+                        Could not start Discord linking. Please try again, or set a password instead.
+                    </p>
+                )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <a
@@ -107,7 +134,7 @@ export default function AuthMethodsNudge() {
                     onClick={dismiss}
                     aria-label="Dismiss this notice for now"
                     style={{
-                        padding: '5px 8px', border: '1px solid var(--bd-1)', color: 'var(--text-mid)',
+                        padding: '5px 8px', border: '1px solid var(--text-mid)', color: 'var(--text-mid)',
                         background: 'transparent', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 12,
                     }}
                 >

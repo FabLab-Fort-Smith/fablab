@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import UserModel from '../model';
 import { authMethodsOf } from '@/lib/authMethods';
+import { retirementDeadline } from '@/lib/googleRetirement';
 import logger from '@/lib/logger';
 
 /**
@@ -38,8 +39,10 @@ export async function GET() {
             hasGoogle,
             hasDiscord,
             googleOnly,
-            // Non-secret campaign deadline so the client renders one consistent date.
-            googleRetiresOn: process.env.NEXT_PUBLIC_GOOGLE_RETIRES_ON || null,
+            // Same resolver the notice email uses, so the banner and the email can never
+            // name different deadlines. Server-side (no NEXT_PUBLIC_ inlining needed —
+            // the value reaches the client in this response), so it is runtime-changeable.
+            googleRetiresOn: retirementDeadline(),
         });
     } catch (error) {
         logger.error({ err: error }, 'failed to resolve sign-in methods');

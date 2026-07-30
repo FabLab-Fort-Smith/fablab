@@ -11,12 +11,16 @@ jest.mock("@/app/api/auth/[...nextauth]/service", () => ({
     default: { decryptEmail: jest.fn((v) => (v || "").replace("enc:", "")) },
 }));
 jest.mock("@/app/utils/email.util", () => ({ sendGoogleRetirementEmail: jest.fn() }));
+jest.mock("@/lib/rateLimit", () => ({ rateLimit: jest.fn(() => ({ allowed: true, retryAfterMs: 0 })) }));
+jest.mock("@/lib/audit", () => ({ auditLog: jest.fn() }));
 
 import { POST } from "@/app/api/v1/admin/google-retirement-notice/route";
 import { runGoogleRetirementNotice, maskEmail } from "@/app/api/v1/admin/google-retirement-notice/service";
 import { auth } from "@/auth";
 import UserModel from "@/app/api/v1/users/model";
 import { sendGoogleRetirementEmail } from "@/app/utils/email.util";
+import { rateLimit } from "@/lib/rateLimit";
+import { auditLog } from "@/lib/audit";
 
 const googleOnly = (n) => ({
     userID: `u-${n}`, googleId: `g-${n}`, discordId: "", password: "no password",
@@ -28,6 +32,7 @@ beforeEach(() => {
     jest.clearAllMocks();
     UserModel.updateUser.mockResolvedValue({});
     sendGoogleRetirementEmail.mockResolvedValue();
+    rateLimit.mockReturnValue({ allowed: true, retryAfterMs: 0 });
 });
 
 describe("route authorization", () => {
@@ -165,5 +170,90 @@ describe("maskEmail", () => {
     });
     test("malformed input does not throw or echo", () => {
         expect(maskEmail("not-an-email")).toBe("<malformed>");
+    });
+});
+
+// The cohort count IS the cutover gate ("drive googleOnly to 0"), so a failed query must
+// never look like an all-clear — that false 0 would authorise locking these members out.
+describe("fails closed on a broken cohort query", () => {
+    test("REGRESSION: query error propagates as 500, never as cohort:0", async () => {
+        auth.mockResolvedValue({ user: { userID: "admin-1", role: "admin" } });
+        UserModel.getGoogleIdentityUsers.mockRejectedValue(new Error("mongo down"));
+        const res = await POST(req({ send: true }));
+        expect(res.status).toBe(500);
+        const body = await res.json();
+        expect(body).not.toHaveProperty("cohort");
+        expect(sendGoogleRetirementEmail).not.toHaveBeenCalled();
+    });
+
+    test("REGRESSION: the service surfaces the error rather than an empty summary", async () => {
+        UserModel.getGoogleIdentityUsers.mockRejectedValue(new Error("mongo down"));
+        await expect(runGoogleRetirementNotice({ send: true })).rejects.toThrow("mongo down");
+    });
+});
+
+describe("stamp failure is not a send failure", () => {
+    test("REGRESSION: delivered-but-unstamped is counted separately, not as failed", async () => {
+        UserModel.getGoogleIdentityUsers.mockResolvedValue([googleOnly(1)]);
+        UserModel.updateUser.mockRejectedValue(new Error("No user found to update."));
+        const r = await runGoogleRetirementNotice({ send: true });
+        expect(r.sent).toBe(1);
+        expect(r.failed).toBe(0);
+        expect(r.sentButUnstamped).toBe(1);
+    });
+
+    test("an SMTP failure is still left unstamped for retry", async () => {
+        UserModel.getGoogleIdentityUsers.mockResolvedValue([googleOnly(1)]);
+        sendGoogleRetirementEmail.mockRejectedValue(new Error("smtp down"));
+        const r = await runGoogleRetirementNotice({ send: true });
+        expect(r.failed).toBe(1);
+        expect(r.sentButUnstamped).toBe(0);
+        expect(UserModel.updateUser).not.toHaveBeenCalled();
+    });
+});
+
+// A provider:'google' record whose googleId was never backfilled has no usable credential
+// at all: already locked out, and invisible to the googleOnly rule. "cohort: 0" only means
+// "nobody is locked out" if this is 0 too.
+describe("stranded accounts are surfaced", () => {
+    test("counts candidates with no usable sign-in method", async () => {
+        UserModel.getGoogleIdentityUsers.mockResolvedValue([
+            googleOnly(1),
+            { userID: "u-9", provider: "google", googleId: "", discordId: "", password: "no password", email: "enc:stranded@example.org" },
+        ]);
+        const r = await runGoogleRetirementNotice({ send: false });
+        expect(r.cohort).toBe(1);
+        expect(r.strandedNoCredential).toBe(1);
+    });
+});
+
+describe("abuse controls", () => {
+    test("rate-limited -> 429 with Retry-After, nothing sent", async () => {
+        auth.mockResolvedValue({ user: { userID: "admin-1", role: "admin" } });
+        UserModel.getGoogleIdentityUsers.mockResolvedValue([googleOnly(1)]);
+        rateLimit.mockReturnValue({ allowed: false, retryAfterMs: 60_000 });
+        const res = await POST(req({ send: true, force: true }));
+        expect(res.status).toBe(429);
+        expect(res.headers.get("Retry-After")).toBe("60");
+        expect(sendGoogleRetirementEmail).not.toHaveBeenCalled();
+    });
+
+    test("an over-long deadline is rejected before any send", async () => {
+        auth.mockResolvedValue({ user: { userID: "admin-1", role: "admin" } });
+        UserModel.getGoogleIdentityUsers.mockResolvedValue([googleOnly(1)]);
+        const res = await POST(req({ send: true, deadline: "x".repeat(200) }));
+        expect(res.status).toBe(400);
+        expect(sendGoogleRetirementEmail).not.toHaveBeenCalled();
+    });
+
+    test("the admin action is audited before and after the run", async () => {
+        auth.mockResolvedValue({ user: { userID: "admin-1", role: "admin" } });
+        UserModel.getGoogleIdentityUsers.mockResolvedValue([googleOnly(1)]);
+        await POST(req({ send: true }));
+        const events = auditLog.mock.calls.map((c) => c[0]);
+        expect(events).toContain("admin.google_retirement_notice.started");
+        expect(events).toContain("admin.google_retirement_notice.completed");
+        // never the recipient
+        expect(JSON.stringify(auditLog.mock.calls)).not.toContain("user1@example.org");
     });
 });

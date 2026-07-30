@@ -1,5 +1,6 @@
 // src/app/api/auth/email.util.js
 import nodemailer from 'nodemailer';
+import logger from '@/lib/logger';
 
 // Transactional mailer. Defaults to PurelyMail SMTP (our own mail infra — smtp.purelymail.com),
 // overridable via EMAIL_HOST / EMAIL_PORT. Auth is a dedicated sending mailbox: EMAIL_USER = the
@@ -555,12 +556,17 @@ export async function sendGoogleRetirementEmail(email, firstName, deadline) {
         `
     };
 
-    // SEC-24: never log mailOptions or the recipient — this is member PII.
+    // SEC-24: never log mailOptions OR the raw error — on an SMTP rejection nodemailer
+    // attaches the recipient to the error (`rejected`, `response`, `envelope`), and those
+    // paths are not covered by the logger's redaction list. Log the failure SHAPE only.
     try {
         await transporter.sendMail(mailOptions);
     } catch (error) {
-        console.error('Error sending Google retirement notice:', error);
-        throw new Error('Failed to send Google retirement notice');
+        logger.error(
+            { code: error?.code, responseCode: error?.responseCode, command: error?.command },
+            'google retirement notice send failed'
+        );
+        throw new Error('Failed to send Google retirement notice', { cause: error });
     }
 }
 
