@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import CommandPalette from './CommandPalette';
+import AuthMethodsNudge from './AuthMethodsNudge';
 
 export default function LabShell({ session, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -53,6 +54,7 @@ export default function LabShell({ session, children }) {
           onToggleSidebar={() => setSidebarOpen(true)}
           onOpenPalette={openPalette}
         />
+        <AuthMethodsNudge />
         <div className="lab-content page-enter">
           {children}
         </div>

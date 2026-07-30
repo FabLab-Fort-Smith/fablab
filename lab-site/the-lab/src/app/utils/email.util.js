@@ -1,5 +1,6 @@
 // src/app/api/auth/email.util.js
 import nodemailer from 'nodemailer';
+import logger from '@/lib/logger';
 
 // Transactional mailer. Defaults to PurelyMail SMTP (our own mail infra — smtp.purelymail.com),
 // overridable via EMAIL_HOST / EMAIL_PORT. Auth is a dedicated sending mailbox: EMAIL_USER = the
@@ -504,6 +505,68 @@ export async function sendContactEmail(name, email, message) {
     } catch (error) {
         console.error(`Error sending contact form email:`, error);
         throw new Error('Failed to send contact email');
+    }
+}
+
+/**
+ * ✅ Send the Google-sign-in retirement notice to a Google-only account
+ *
+ * Transactional account notice, NOT marketing: the recipient loses the ability to
+ * sign in if they do nothing, so it is sent regardless of notification
+ * preferences and carries no unsubscribe (docs/analysis/google-oauth-removal-impact.md §6).
+ *
+ * Contains no token and no secret — it links to the normal recovery + settings
+ * pages, so it is safe if forwarded.
+ *
+ * @param {string} email - The member's email address (already decrypted)
+ * @param {string} firstName - The member's first name (for the greeting)
+ * @param {string} deadline - Human-readable retirement date, e.g. "August 31, 2026"
+ * @returns {Promise<void>} resolves when SMTP accepted the message
+ * @throws {Error} when sending fails, so the caller can retry and not mark it sent
+ */
+export async function sendGoogleRetirementEmail(email, firstName, deadline) {
+    const setPasswordLink = `${process.env.NEXT_PUBLIC_URL}/auth/forgot-password`;
+
+    const mailOptions = {
+        from: `"The Lab" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: `Action needed: Google sign-in retires ${deadline}`,
+        html: `
+            <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
+                <h2 style="color: #00ff00;">Google sign-in is being retired</h2>
+                <p>Hi ${firstName || 'there'},</p>
+                <p>We are retiring "Sign in with Google" on <strong>${deadline}</strong>. Right now,
+                Google is the <strong>only</strong> way you can sign in to The Lab — so you need to
+                add a second way to get in before that date, or you will be locked out.</p>
+
+                <div style="border: 1px solid #333; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                    <p><strong>Pick either option — both take about a minute:</strong></p>
+                    <p><strong>1. Set a password.</strong> Use the link below, enter this email address,
+                    and we will send you a link to choose a password.</p>
+                    <p><strong>2. Link your Discord account.</strong> Sign in with Google one last time,
+                    then open Profile &rarr; Settings &rarr; Connections and link Discord.</p>
+                </div>
+
+                <a href="${setPasswordLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">Set a password</a>
+
+                <p style="margin-top: 20px;">Your account, membership, and history are not changing —
+                only the way you sign in. If you need help, just reply to this email.</p>
+                <p style="color: #666; font-size: 12px;">— The Lab Team</p>
+            </div>
+        `
+    };
+
+    // SEC-24: never log mailOptions OR the raw error — on an SMTP rejection nodemailer
+    // attaches the recipient to the error (`rejected`, `response`, `envelope`), and those
+    // paths are not covered by the logger's redaction list. Log the failure SHAPE only.
+    try {
+        await transporter.sendMail(mailOptions);
+    } catch (error) {
+        logger.error(
+            { code: error?.code, responseCode: error?.responseCode, command: error?.command },
+            'google retirement notice send failed'
+        );
+        throw new Error('Failed to send Google retirement notice', { cause: error });
     }
 }
 
