@@ -14,7 +14,10 @@ export async function POST(request, context) {
     // could subscribe to any plan for a penny. The price now comes from the Square catalog.
     // `userID` is likewise no longer accepted from the body: it came from the caller, so a
     // subscription could be attributed to another member.
-    const { currency = "USD", couponCode } = await request.json();
+    // Currency is NOT taken from the client: `{currency:"JPY"}` would ship
+    // `amount: 4500, currency: "JPY"` — 4500 yen for a $45 plan. We bill in USD.
+    const { couponCode } = await request.json();
+    const currency = "USD";
 
     // Identity from the session, never from input (§5).
     const session = await auth();
@@ -113,7 +116,10 @@ export async function POST(request, context) {
     }
 
     const checkoutResult = await createPaymentLink({
-      idempotencyKey: uuidv4(),
+      // Stable per (member, plan, coupon) so a double-click or retry returns the same link
+      // instead of creating a second subscription attempt. A fresh uuid per request — as the
+      // deleted /api/v1/payments did — defeats the point of an idempotency key.
+      idempotencyKey: `sub:${userID}:${planID}:${couponCode ? couponCode.toUpperCase() : "none"}`,
       quickPay: {
         name: itemName,
         priceMoney: { amount: BigInt(priceCents), currency },
@@ -129,8 +135,8 @@ export async function POST(request, context) {
     return NextResponse.json({ url: checkoutResult.paymentLink.url }, { status: 200 });
 
   } catch (error) {
-    const msg = error?.errors?.[0]?.detail || error?.message || "Failed to create checkout link.";
-    console.error("❌ Checkout error:", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // Square's message stays in the log; the client gets a generic error (§5).
+    console.error("❌ Checkout error:", error?.errors?.[0]?.detail || error?.message);
+    return NextResponse.json({ error: "Could not start checkout. Please try again." }, { status: 500 });
   }
 }

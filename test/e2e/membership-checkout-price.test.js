@@ -11,7 +11,7 @@
 // amount comes from the catalog.
 
 import { auth } from "@/auth";
-import { getCatalogObject, createPaymentLink } from "@/lib/square";
+import { getCatalogObject, createPaymentLink, searchCatalogObjects } from "@/lib/square";
 import { db } from "@/lib/database";
 import { POST } from "@/app/api/v1/memberships/[planID]/checkout/route";
 
@@ -100,5 +100,39 @@ describe("#182 — subscription price is set by the server, not the member", () 
     // The handler looks up the SESSION user, never the body userID.
     expect(findOne).toHaveBeenCalledWith(expect.objectContaining({ userID: "member-self" }));
     expect(findOne).not.toHaveBeenCalledWith(expect.objectContaining({ userID: "someone-else" }));
+  });
+
+  test("a client currency is ignored — always billed in USD", async () => {
+    // {currency:"JPY"} would otherwise ship amount:4500 currency:JPY — 4500 yen for a $45 plan.
+    await checkout({ currency: "JPY" });
+    const money = createPaymentLink.mock.calls[0][0].quickPay.priceMoney;
+    expect(money.currency).toBe("USD");
+    expect(Number(money.amount)).toBe(REAL_PRICE_CENTS);
+  });
+
+  test("the idempotency key is stable per member+plan, so a double-click is not a second attempt", async () => {
+    await checkout({});
+    const first = createPaymentLink.mock.calls[0][0].idempotencyKey;
+    createPaymentLink.mockClear();
+    await checkout({});
+    const second = createPaymentLink.mock.calls[0][0].idempotencyKey;
+    expect(first).toBe(second);
+    expect(first).not.toMatch(/^[0-9a-f-]{36}$/); // not a fresh uuid per request
+  });
+
+  test("a coupon discounts the CATALOG price, never a client price", async () => {
+    searchCatalogObjects.mockResolvedValueOnce({
+      objects: [{ discountData: { discountType: "FIXED_PERCENTAGE", percentage: "50" } }],
+    });
+    // Even with an absurd body price, the 50% comes off the $45 catalog price → $22.50.
+    const { amountSentToSquare } = await checkout({ price: 0.01, couponCode: "half" });
+    expect(amountSentToSquare).toBe(2250);
+  });
+
+  test("an unknown coupon is rejected, not silently ignored", async () => {
+    searchCatalogObjects.mockResolvedValueOnce({ objects: [] });
+    const { status } = await checkout({ couponCode: "nope" });
+    expect(status).toBe(400);
+    expect(createPaymentLink).not.toHaveBeenCalled();
   });
 });
