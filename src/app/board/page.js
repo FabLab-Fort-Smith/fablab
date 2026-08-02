@@ -29,38 +29,71 @@ const LINKS = [
 const fmt = cents => `$${(cents / 100).toFixed(0)}`;
 const CYCLE_MS = 10000; // 10 seconds per panel
 
+// Public funding meter for the kiosk: recurring dues + donations, stacked, against the
+// monthly goal. Dues is the steady base the lab can count on; donations are what pushes past
+// it — so the bar reads as "committed" + "given". Aggregate only; the per-tier breakdown is
+// admin-only (see /dashboard/admin/donations).
+//
+// The two segment colours are stepped into the legible lightness band and CVD-validated
+// (deutan ΔE 22.7), not the raw --green/--cyan neons which read as one colour to a
+// colourblind viewer at that lightness.
 function GoalMeter({ stats }) {
-  const { donationsCents, goalCents } = stats;
-  const pct       = Math.min(100, goalCents > 0 ? Math.round((donationsCents / goalCents) * 100) : 0);
-  const remaining = Math.max(0, goalCents - donationsCents);
-  const barColor  = pct >= 100 ? 'var(--green)' : pct >= 60 ? 'var(--amber)' : '#e05555';
+  const goalCents      = stats.goalCents || 0;
+  const duesCents      = stats.duesCents || 0;
+  const donationsCents = stats.donationsCents || 0;
+  const totalCents     = stats.totalCents ?? (duesCents + donationsCents);
+
+  const scale     = Math.max(goalCents, totalCents, 1);        // overshoot stays on-scale
+  const duesW     = (duesCents / scale) * 100;
+  const donW      = (donationsCents / scale) * 100;
+  const goalMark  = (goalCents / scale) * 100;
+  const pct       = goalCents > 0 ? Math.round((totalCents / goalCents) * 100) : 0;
+  const remaining = Math.max(0, goalCents - totalCents);
+  const met       = totalCents >= goalCents;
+
+  const DUES = '#2da810';   // recurring dues — validated categorical 1
+  const DON  = '#2f9fd4';   // donations      — validated categorical 2
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-        <span style={{ fontFamily: 'var(--display)', fontSize: 36, color: 'var(--text-bright)', letterSpacing: '-0.04em', textShadow: `0 0 20px ${barColor}` }}>
-          {fmt(donationsCents)}
+        <span style={{ fontFamily: 'var(--display)', fontSize: 36, color: 'var(--text-bright)', letterSpacing: '-0.04em', textShadow: `0 0 20px ${met ? 'var(--green)' : DUES}` }}>
+          {fmt(totalCents)}
         </span>
         <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text-dim)' }}>
           / <span style={{ color: 'var(--text-mid)' }}>{fmt(goalCents)}</span> goal
         </span>
       </div>
 
-      <div style={{ height: 8, background: 'var(--bg)', border: '1px solid var(--bd)', marginBottom: 8, position: 'relative', overflow: 'hidden' }}>
-        <div style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0,
-          width: `${pct}%`,
-          background: barColor,
-          boxShadow: `0 0 12px ${barColor}`,
-          transition: 'width 1s ease',
-        }} />
+      {/* Stacked bar. 2px surface gap between the two fills so they read as distinct. */}
+      <div
+        role="img"
+        aria-label={`${fmt(totalCents)} of a ${fmt(goalCents)} monthly goal: ${fmt(duesCents)} recurring dues and ${fmt(donationsCents)} donations.`}
+        style={{ display: 'flex', height: 10, background: 'var(--bg)', border: '1px solid var(--bd)', marginBottom: 8, position: 'relative', overflow: 'hidden' }}
+      >
+        <div style={{ width: `${duesW}%`, background: DUES, transition: 'width 1s ease' }} />
+        <div style={{ width: `${donW}%`, background: DON, borderLeft: donW > 0 && duesW > 0 ? '2px solid var(--bg)' : 'none', transition: 'width 1s ease' }} />
+        {/* goal tick */}
+        {goalMark < 100 && (
+          <div style={{ position: 'absolute', top: -2, bottom: -2, left: `${goalMark}%`, width: 2, background: 'var(--amber)' }} />
+        )}
+      </div>
+
+      {/* Legend — identity is never colour-alone: swatch + label + value. */}
+      <div style={{ display: 'flex', gap: 16, fontSize: 11, fontFamily: 'var(--mono)', marginBottom: 8 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-mid)' }}>
+          <span style={{ width: 9, height: 9, background: DUES, flex: 'none' }} /> dues {fmt(duesCents)}
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-mid)' }}>
+          <span style={{ width: 9, height: 9, background: DON, flex: 'none' }} /> donations {fmt(donationsCents)}
+        </span>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontFamily: 'var(--mono)' }}>
-        <span style={{ color: barColor, letterSpacing: '0.06em' }}>{pct}% funded this month</span>
-        {remaining > 0
-          ? <span style={{ color: 'var(--text-dim)' }}>{fmt(remaining)} to go</span>
-          : <span style={{ color: 'var(--green)' }}>✓ goal reached!</span>
+        <span style={{ color: met ? 'var(--green)' : 'var(--text-mid)', letterSpacing: '0.06em' }}>{pct}% funded this month</span>
+        {met
+          ? <span style={{ color: 'var(--green)' }}>✓ goal reached!</span>
+          : <span style={{ color: 'var(--text-dim)' }}>{fmt(remaining)} to go</span>
         }
       </div>
     </div>
@@ -210,7 +243,7 @@ export default function BoardPage() {
 
               {/* Meter */}
               <div style={{ flex: 1, paddingTop: 8 }}>
-                <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.14em', marginBottom: 16 }}>MONTHLY_DONATION_GOAL</div>
+                <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.14em', marginBottom: 16 }}>MONTHLY_FUNDING_GOAL</div>
                 {statsLoading ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-dim)', fontSize: 11, fontFamily: 'var(--mono)' }}>
                     <span className="dot pulse" style={{ background: 'var(--amber)', width: 6, height: 6, borderRadius: '50%', display: 'inline-block' }} />
