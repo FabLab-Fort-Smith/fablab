@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { searchOrders } from '@/lib/square';
 import { db } from '@/lib/database';
+import { auth } from '@/auth';
+import { getDuesRevenue } from '../dues';
+import { getGoalCents, setGoalCents } from '../goal';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +26,8 @@ const EXPENSE_RULES = [
     },
 ];
 
-const MONTHLY_GOAL_CENTS = 70000; // $700
+// Goal is now admin-editable and read from config (see ./goal). The old hardcoded $700 is
+// its fallback there.
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -111,22 +115,83 @@ async function getMemberExpenses() {
 }
 
 // ── GET /api/v1/donations/stats ───────────────────────────────────────────────
+//
+// PUBLIC. The board kiosk fetches this unauthenticated, so the base response carries only
+// aggregate, non-sensitive figures: the goal, dues + donations, and the combined total.
+// The detailed breakdown (per-tier dues, lab expenses, net, member counts) reveals the
+// org's income structure and is returned ONLY to an admin session.
 
 export async function GET() {
-    const [donationsCents, expenses] = await Promise.all([
+    const session = await auth().catch(() => null);
+    const isAdmin = session?.user?.role === 'admin';
+
+    const [donationsCents, dues, goalCents, expenses] = await Promise.all([
         getDonationsTotalCents(),
-        getMemberExpenses(),
+        getDuesRevenue().catch((e) => {
+            console.error('Funding stats: dues query failed', e?.message);
+            return { duesCents: 0, activeCount: 0, byTier: [], unmatchedCount: 0 };
+        }),
+        getGoalCents(),
+        isAdmin ? getMemberExpenses() : Promise.resolve(null),
     ]);
 
-    const totalExpenseCents = expenses.reduce((s, e) => s + e.totalCents, 0);
+    const totalCents = dues.duesCents + donationsCents;
 
-    return NextResponse.json({
-        goalCents: MONTHLY_GOAL_CENTS,
+    // Public-safe aggregate — what the kiosk meter needs and nothing more.
+    const body = {
+        goalCents,
+        duesCents: dues.duesCents,
         donationsCents,
-        expenses,
-        totalExpenseCents,
-        // Net = donations minus lab costs covered (or owed) by membership tiers
-        netCents: donationsCents - totalExpenseCents,
+        totalCents,
+        pct: goalCents > 0 ? totalCents / goalCents : 0,
         month: startOfCurrentMonth().toISOString(),
-    });
+    };
+
+    // Admin-only detail.
+    if (isAdmin) {
+        const totalExpenseCents = expenses.reduce((s, e) => s + e.totalCents, 0);
+        body.detail = {
+            activeMemberCount: dues.activeCount,
+            duesByTier: dues.byTier,
+            duesUnmatchedCount: dues.unmatchedCount,
+            expenses,
+            totalExpenseCents,
+            netCents: totalCents - totalExpenseCents,
+        };
+    }
+
+    return NextResponse.json(body);
+}
+
+// ── PUT /api/v1/donations/stats ───────────────────────────────────────────────
+// Admin-only: set the monthly funding goal (dollars in the body).
+
+export async function PUT(request) {
+    const session = await auth().catch(() => null);
+    if (!session?.user?.userID) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (session.user.role !== 'admin') {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    let goalDollars;
+    try {
+        ({ goalDollars } = await request.json());
+    } catch {
+        return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
+    }
+
+    const cents = Math.round(Number(goalDollars) * 100);
+    if (!Number.isSafeInteger(cents) || cents <= 0) {
+        return NextResponse.json({ error: 'Goal must be a positive dollar amount.' }, { status: 400 });
+    }
+
+    try {
+        const goalCents = await setGoalCents(cents);
+        return NextResponse.json({ goalCents });
+    } catch (e) {
+        console.error('Funding goal update failed', e?.message);
+        return NextResponse.json({ error: 'Could not update the goal.' }, { status: 500 });
+    }
 }
