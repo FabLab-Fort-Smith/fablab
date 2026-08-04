@@ -511,46 +511,50 @@ export async function sendContactEmail(name, email, message) {
 /**
  * ✅ Send the Google-sign-in retirement notice to a Google-only account
  *
- * Transactional account notice, NOT marketing: the recipient loses the ability to
- * sign in if they do nothing, so it is sent regardless of notification
- * preferences and carries no unsubscribe (docs/analysis/google-oauth-removal-impact.md §6).
+ * Transactional account notice, NOT marketing: the recipient has ALREADY lost the
+ * ability to sign in, so it is sent regardless of notification preferences and carries
+ * no unsubscribe (docs/analysis/google-oauth-removal-impact.md §6).
  *
- * Contains no token and no secret — it links to the normal recovery + settings
- * pages, so it is safe if forwarded.
+ * Deliberately carries no date: Google sign-in stopped working at the production
+ * cutover, so naming a future deadline would tell the member they still have time when
+ * they do not. The only actionable message is "set a password now".
+ *
+ * Contains no token and no secret — it links to the normal recovery page, so it is safe
+ * if forwarded.
  *
  * @param {string} email - The member's email address (already decrypted)
  * @param {string} firstName - The member's first name (for the greeting)
- * @param {string} deadline - Human-readable retirement date, e.g. "August 31, 2026"
  * @returns {Promise<void>} resolves when SMTP accepted the message
  * @throws {Error} when sending fails, so the caller can retry and not mark it sent
  */
-export async function sendGoogleRetirementEmail(email, firstName, deadline) {
+export async function sendGoogleRetirementEmail(email, firstName) {
     const setPasswordLink = `${process.env.NEXT_PUBLIC_URL}/auth/forgot-password`;
 
     const mailOptions = {
         from: `"The Lab" <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: `Action needed: Google sign-in retires ${deadline}`,
+        subject: 'Action needed: sign-in change for your Lab account',
         html: `
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
-                <h2 style="color: #00ff00;">Google sign-in is being retired</h2>
+                <h2 style="color: #00ff00;">Google sign-in is no longer available</h2>
                 <p>Hi ${firstName || 'there'},</p>
-                <p>We are retiring "Sign in with Google" on <strong>${deadline}</strong>. Right now,
-                Google is the <strong>only</strong> way you can sign in to The Lab — so you need to
-                add a second way to get in before that date, or you will be locked out.</p>
+                <p>We have retired "Sign in with Google" at The Lab. Google was the
+                <strong>only</strong> way you signed in, so you will need to set a password to get
+                back into your account. It takes about a minute.</p>
 
                 <div style="border: 1px solid #333; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                    <p><strong>Pick either option — both take about a minute:</strong></p>
-                    <p><strong>1. Set a password.</strong> Use the link below, enter this email address,
-                    and we will send you a link to choose a password.</p>
-                    <p><strong>2. Link your Discord account.</strong> Sign in with Google one last time,
-                    then open Profile &rarr; Settings &rarr; Connections and link Discord.</p>
+                    <p><strong>How to get back in:</strong></p>
+                    <p>Use the button below, enter this email address, and we will send you a link to
+                    choose a password. Then sign in with your email and that password as usual.</p>
+                    <p>Once you are back in, you can also link Discord from
+                    Profile &rarr; Settings &rarr; Connections if you would rather sign in that way.</p>
                 </div>
 
                 <a href="${setPasswordLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">Set a password</a>
 
-                <p style="margin-top: 20px;">Your account, membership, and history are not changing —
-                only the way you sign in. If you need help, just reply to this email.</p>
+                <p style="margin-top: 20px;">Your account, membership, and history are unchanged —
+                only the way you sign in. If the reset does not work, just reply to this email and we
+                will sort it out.</p>
                 <p style="color: #666; font-size: 12px;">— The Lab Team</p>
             </div>
         `
