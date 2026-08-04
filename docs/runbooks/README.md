@@ -30,6 +30,9 @@ step-by-step and executable by someone who didn't write it.
       feature present, not yet enabled). *(scaffold — not yet drilled)*
 - [x] **secret-rotation.md** — rotate the SSH CA key + certs (KRL revoke), deploy/automation keys,
       app/local secrets, and provider tokens; zero-downtime, revoke-first on compromise.
+- [x] **coolify-token-rotation.md** — mint/validate/store/revoke the Coolify API token. A dead
+      token fails with a bare HTTP 401 and stops **all** deploys + config-as-code while the
+      platform still looks healthy. *(validated 2026-08-03 — real rotation after an OOB reset)*
 - [x] **backup-restore.md** — back up the self-hosted MongoDB; **tested** restore drill (strict,
       automated: `lab-stack/scripts/mongo-restore-drill.sh`). *(validated 2026-07-12 — caught + fixed
       a missing app user)*
