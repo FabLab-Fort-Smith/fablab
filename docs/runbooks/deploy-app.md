@@ -24,6 +24,8 @@ summary: Create/update The-Lab's Coolify application from code (reconcile.sh ove
 - `../.env` has `COOLIFY_URL` (tailnet) + `COOLIFY_TOKEN` (Sanctum `id|secret` — **single-quoted**
   in `.env` so `.` sourcing is safe), and the app secrets (below).
 - `jq`, `curl` available where you run it (the tailnet host, or via `cot`).
+- If any call returns **HTTP 401 / `Unauthenticated.`**, the API token is dead or truncated —
+  rotate it via `coolify-token-rotation.md` (nothing else is wrong; Coolify keeps serving).
 
 ## Secrets the app needs (in `../.env`)
 - **Auto-generated** (already there): `AUTH_SECRET`, `JWT_SECRET`, `ENCRYPTION_KEY`,

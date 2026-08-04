@@ -78,7 +78,10 @@ make converge                  # GATED — pushes new MONGO_* to the DB config
 ```
 
 ## D. Rotate provider tokens
-Rotate in the provider console (Cloudflare API token, Coolify API token, Square, S3, SMTP, GenAI) →
+**Coolify API token: follow `coolify-token-rotation.md`** — it needs validate-before-write, exact
+single-quoting in `.env`, and a vault update; a dead token 401s silently and blocks every deploy.
+
+For the others, rotate in the provider console (Cloudflare API token, Square, S3, SMTP, GenAI) →
 update `../.env` (git-ignored) → `make converge` (DNS/Coolify checks) and/or restart the consuming
 service. Add-new-before-revoke-old where the provider supports overlapping tokens.
 

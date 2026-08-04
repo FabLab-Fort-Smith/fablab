@@ -21,6 +21,14 @@ const EMAIL_TEMPLATES = [
         color: 'var(--amber)',
     },
     {
+        id: 'google_retirement',
+        name: 'Google Sign-In Retirement',
+        trigger: 'Admin runs the retirement campaign (POST /api/v1/admin/google-retirement-notice)',
+        subject: 'Action needed: Google sign-in retires <date>',
+        description: 'Transactional notice to accounts whose ONLY sign-in method is Google: set a password or link Discord before the provider is removed, or lose access. Dry-run by default; skips anyone already notified.',
+        color: 'var(--amber)',
+    },
+    {
         id: 'application_received',
         name: 'Application Received',
         trigger: 'User submits membership application',

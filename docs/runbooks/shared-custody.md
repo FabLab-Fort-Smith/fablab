@@ -63,7 +63,7 @@ Fill in each person's real SSH public key and GitHub signing key as they provide
 | **All platform secrets** | single `.env` on one laptop (~40 secrets) | b007ab1e only | **Shared vault**; `.env` = local projection pulled from vault |
 | **RackNerd panel** (provider/power/console) | SolusVM login + `RACKNERD_API_KEY/HASH` in `.env` | b007ab1e | ≥2 custodians have panel login; API creds in vault |
 | **Cloudflare** (DNS + Access tokens) | `CLOUDFLARE_API_TOKEN`, `CF_ACCESS_TOKEN` in `.env` | b007ab1e | Scoped tokens in vault; ≥2 CF account members |
-| **Coolify** (admin + API token) | admin login+MFA; `COOLIFY_TOKEN` in `.env` | b007ab1e admin | Each custodian a Coolify team member (own login+MFA); token in vault |
+| **Coolify** (admin + API token) | admin login+MFA; `COOLIFY_TOKEN` in `.env` **and in the vault** (item `Coolify API token — fablab-prod`, rotated 2026-08-03 — `coolify-token-rotation.md`) | b007ab1e admin | Each custodian a Coolify team member (own login+MFA); ≥2 can retrieve the token from the vault |
 | **MongoDB** (root + app pw) | `MONGO_ROOT/APP_PASSWORD` in `.env`; on box at `/opt/fablab/mongodb/mongo.env` (root) | b007ab1e / root | In vault; ≥2 can retrieve |
 | **Backups / DR** (age key, restic pw) | age **private** key offline; `RESTIC_PASSWORD` in `.env` | whoever holds the age key | **≥2 custodians** hold age key + restic pw, or in vault — else only one person can restore |
 | **App secrets** (Square/S3/SMTP/GenAI/AUTH/JWT/ENCRYPTION) | `.env` | b007ab1e | Vault |

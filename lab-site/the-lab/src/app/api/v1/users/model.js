@@ -1,6 +1,7 @@
 // src/app/api/users/user.model.js
 import { db } from "@/lib/database";
 import { escapeRegExp } from "@/lib/escapeRegExp";
+import logger from "@/lib/logger";
 
 // Helper to sanitize null bytes from strings
 const sanitizeStrings = (obj) => {
@@ -59,6 +60,41 @@ export default class UserModel {
         } catch (error) {
             console.error("Error getting user by ID:", error);
             return null;
+        }
+    }
+
+    /**
+     * ✅ Get accounts that have a Google identity — candidates for the Google-OAuth
+     * retirement campaign (docs/analysis/google-oauth-removal-impact.md §6).
+     *
+     * Returns candidates, NOT the final cohort: the caller narrows them with
+     * authMethodsOf() (`@/lib/authMethods`) so the "googleOnly" rule lives in exactly
+     * one place. Projected to the minimum fields needed to classify and contact
+     * (PII minimisation — CLAUDE.md §3); `email` is still encrypted at rest here.
+     *
+     * Matches `provider:'google'` as well as a populated `googleId`, because `googleId`
+     * is backfilled by the Google `profile()` callback on SIGN-IN (auth.js) — the members
+     * who most need the notice are exactly the ones who have not signed in lately, and a
+     * missed account loses access silently.
+     *
+     * **Throws on failure — deliberately.** Unlike the read helpers around it, this feeds
+     * the retirement cutover gate ("drive googleOnly to 0"); returning an empty array on a
+     * transient DB error would report a false all-clear and authorise locking those
+     * members out. Fail closed (master §2).
+     *
+     * @returns {Promise<Array<Object>>} candidate users
+     * @throws {Error} if the query fails — never reports an empty cohort on error
+     */
+    static getGoogleIdentityUsers = async () => {
+        try {
+            const dbUsers = await db.dbUsers();
+            return await dbUsers.find(
+                { $or: [{ googleId: { $nin: [null, ""] } }, { provider: "google" }] },
+                { projection: { userID: 1, email: 1, firstName: 1, googleId: 1, discordId: 1, password: 1, provider: 1, googleRetirementNoticeSentAt: 1, _id: 0 } }
+            ).toArray();
+        } catch (error) {
+            logger.error({ err: error }, "getGoogleIdentityUsers failed — refusing to report an empty cohort");
+            throw error;
         }
     }
 
