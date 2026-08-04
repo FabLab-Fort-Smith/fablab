@@ -8,6 +8,11 @@ summary: Create/update The-Lab's Coolify application from code (reconcile.sh ove
 
 # Runbook: Deploy the app (Coolify) from code
 
+> **Multi-environment:** `reconcile.sh` takes `--env staging|production` (default `staging`).
+> Each environment has its own app, branch, domain, and **its own secret file** — `../.env` for
+> staging, `../.env.production` for production. A production WRITE additionally requires
+> `--confirm-production`. Promotion itself: `promote-staging-to-prod.md`.
+>
 > Repeatable, API-driven creation/update of the **the-lab-staging** application via
 > `lab-stack/coolify/reconcile.sh`. Config-as-code — the desired state lives in the script; no
 > dashboard clicking. Rules: `@rules/workflow-release.md`, `@rules/topic-config-environments.md`.

@@ -4,25 +4,36 @@
 # Talks to the Coolify API over the tailnet (COOLIFY_URL). Re-runnable. Prints the API response on
 # any failure. Deploys are GATED behind --deploy (an action); config/env changes run by default.
 #
-# Usage:  bash coolify/reconcile.sh [--dry-run] [--deploy]
-#   --dry-run  show what WOULD change (discover + plan); make no writes
-#   --deploy   after reconciling, trigger a deployment of the app
+# Usage:  bash coolify/reconcile.sh [--env staging|production] [--dry-run] [--deploy] [--confirm-production]
+#   --env NAME            which application to reconcile (default: staging)
+#   --dry-run             show what WOULD change (discover + plan); make no writes
+#   --deploy              after reconciling, trigger a deployment of the app
+#   --confirm-production  REQUIRED for any WRITE to production (belt-and-braces so a stray
+#                         `--env production` cannot mutate prod; dry-runs never need it)
 # Requires: jq, curl. Reads COOLIFY_URL + COOLIFY_TOKEN from ../.env (token is Sanctum id|secret).
+# App secrets come from the PER-ENVIRONMENT env file (../.env for staging, ../.env.production for
+# production) — never mixed, so a prod apply cannot push staging secrets (issue #85).
 set -uo pipefail
 IFS=$'\n\t'
 cd "$(dirname "$0")/.." || exit 1   # -> lab-stack/
-ENVF="../.env"
+PLATFORM_ENVF="../.env"     # COOLIFY_URL/TOKEN live here regardless of target environment
+ENVF="$PLATFORM_ENVF"        # app-secret source; re-pointed per environment below
 umask 077
 
-DRY=0; DEPLOY=0
-for a in "$@"; do
-  case "$a" in
+DRY=0; DEPLOY=0; ENV_TARGET=staging; CONFIRM_PROD=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
     --dry-run) DRY=1 ;;
     --deploy)  DEPLOY=1 ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
-    *) printf 'unknown arg: %s\n' "$a" >&2; exit 2 ;;
+    --confirm-production) CONFIRM_PROD=1 ;;
+    --env) shift; ENV_TARGET="${1:-}" ;;
+    --env=*) ENV_TARGET="${1#--env=}" ;;
+    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+    *) printf 'unknown arg: %s\n' "$1" >&2; exit 2 ;;
   esac
+  shift
 done
+case "$ENV_TARGET" in staging|production) ;; *) printf 'unknown --env: %s (expected staging|production)\n' "$ENV_TARGET" >&2; exit 2 ;; esac
 
 info(){ printf '  %s\n' "$*"; }
 warn(){ printf 'WARN: %s\n' "$*" >&2; }
@@ -33,21 +44,39 @@ command -v curl >/dev/null || die "curl is required"
 
 # --- connection (quote-safe read; token contains a shell metachar '|') ---
 envval(){ [ -f "$ENVF" ] || return 0; sed -n "s/^$1=//p" "$ENVF" | head -1 | sed "s/^[\"']//; s/[\"']\$//"; }
-COOLIFY_URL="$(envval COOLIFY_URL)"; COOLIFY_TOKEN="$(envval COOLIFY_TOKEN)"
+platval(){ [ -f "$PLATFORM_ENVF" ] || return 0; sed -n "s/^$1=//p" "$PLATFORM_ENVF" | head -1 | sed "s/^[\"']//; s/[\"']\$//"; }
+COOLIFY_URL="$(platval COOLIFY_URL)"; COOLIFY_TOKEN="$(platval COOLIFY_TOKEN)"
 if [ -z "$COOLIFY_URL" ] || [ -z "$COOLIFY_TOKEN" ]; then die "COOLIFY_URL and COOLIFY_TOKEN must be set in $ENVF"; fi
 
 # ============================ DESIRED STATE (config-as-code) ============================
 PROJECT_NAME="the-lab"                 # existing Coolify project
 GITHUB_APP_NAME="fab-lab-fort-smith"   # connected GitHub App source
-APP_NAME="the-lab-staging"             # the application to manage (staging: dev -> staging.)
 GIT_REPOSITORY="FabLab-Fort-Smith/fablab"
-GIT_BRANCH="dev"                       # staging tracks dev (prod=main added at cutover)
 BUILD_PACK="dockerfile"
 BASE_DIRECTORY="/lab-site/the-lab"     # monorepo subdir (ADR 0005)
 DOCKERFILE_LOCATION="/Dockerfile"      # relative to BASE_DIRECTORY
 PORTS_EXPOSES="3000"                   # Next.js standalone (Dockerfile EXPOSE 3000)
-DOMAINS="https://staging.fablabfortsmith.org"
 PRIMARY_DOMAIN="fablabfortsmith.org"
+
+# ---- per-environment desired state (selected by --env) ----
+# Each environment has its OWN app, branch, domain, and secret file. Production became the live
+# site at the Vercel cutover (ADR 0006); staging stays the dev->staging. parallel-run target.
+case "$ENV_TARGET" in
+  staging)
+    APP_NAME="the-lab-staging"
+    GIT_BRANCH="dev"
+    DOMAINS="https://staging.${PRIMARY_DOMAIN}"
+    ENVF="../.env"
+    ;;
+  production)
+    APP_NAME="the-lab-production"
+    GIT_BRANCH="main"
+    DOMAINS="https://${PRIMARY_DOMAIN},https://www.${PRIMARY_DOMAIN}"
+    # Separate secret file: prod MongoDB, prod ENCRYPTION_KEY (reusing it is mandatory — a fresh
+    # key makes every stored member email undecryptable), prod Turnstile widget, prod URLs.
+    ENVF="../.env.production"
+    ;;
+esac
 # Per-PR preview URL. SINGLE-label host under the apex so Cloudflare Universal SSL's
 # *.fablabfortsmith.org edge cert covers it (a 2-level *.preview.<domain> would need ACM/Enterprise).
 # A GitHub Action (.github/workflows/preview-dns.yml) creates a matching PROXIED CF record per PR,
@@ -70,8 +99,23 @@ APP_ENV_OPTIONAL=(SQUARE_ENVIRONMENT SQUARE_LOCATION_ID SQUARE_SDK_VERSION NEXT_
 # signin/callback URL was wrong and SSO could not complete. Pin AUTH_URL to the public staging
 # domain so callbacks/redirects are correct (@rules/topic-authn-authz.md). Each entry is "KEY=value".
 # NOTE: single-env API validation wants `is_buildtime`/`is_runtime` (not `is_build_time`).
-APP_ENV_FIXED=(AUTH_TRUST_HOST=true AUTH_URL=https://staging.fablabfortsmith.org)
+case "$ENV_TARGET" in
+  staging)    APP_ENV_FIXED=(AUTH_TRUST_HOST=true "AUTH_URL=https://staging.${PRIMARY_DOMAIN}") ;;
+  production) APP_ENV_FIXED=(AUTH_TRUST_HOST=true "AUTH_URL=https://${PRIMARY_DOMAIN}") ;;
+esac
 # =======================================================================================
+
+# --- guards: per-env secret file present, and production writes explicitly confirmed ---
+[ -f "$ENVF" ] || die "app-secret file '$ENVF' not found for --env $ENV_TARGET.
+  Production keeps its OWN secrets (prod MongoDB + the EXISTING prod ENCRYPTION_KEY — a fresh key
+  would make every stored member email undecryptable). Create it from .env.example, or pull it from
+  the vault, then re-run. Refusing to fall back to another environment's secrets."
+if [ "$ENV_TARGET" = "production" ] && [ "$DRY" -eq 0 ] && [ "$CONFIRM_PROD" -eq 0 ]; then
+  die "refusing to write to PRODUCTION without --confirm-production.
+  Re-run with --dry-run to see the plan, or add --confirm-production to apply
+  (@rules/workflow-gated-actions.md: production applies are a gated action)."
+fi
+info "target environment: $ENV_TARGET  (app '$APP_NAME', branch '$GIT_BRANCH', secrets from $ENVF)"
 
 # --- API helper: token via -K stdin (off argv); body via a 0600 temp file (off argv).
 # The HTTP status is written to a FILE (not a var) so it survives command substitution. ---
@@ -195,7 +239,7 @@ if [ "$DEPLOY" -eq 1 ]; then
 fi
 
 echo "== done =="
-info "app: $APP_NAME ($APP_UUID)  env: $ENVIRONMENT_NAME  branch: $GIT_BRANCH  domain: $DOMAINS"
+info "environment: $ENV_TARGET   app: $APP_NAME ($APP_UUID)  branch: $GIT_BRANCH  domain: $DOMAINS"
 info "preview URL template (set ONCE in Coolify UI — API won't accept it): $PREVIEW_URL_TEMPLATE"
 info "  per-PR DNS handled by .github/workflows/preview-dns.yml (coolify/README.md §6)"
 [ "$DEPLOY" -eq 1 ] || info "(no deploy; re-run with --deploy, or use docs/runbooks/redeploy-rollback.md)"
