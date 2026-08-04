@@ -17,7 +17,17 @@ summary: The gated production cutover from Vercel to the self-hosted Coolify pla
 > regardless of how ready the stack appears.** No apex/`www` DNS change, no Square sandbox→prod
 > flip, no prod-traffic move until then.
 
-## Guardrails — do NOT break the live Vercel pipeline
+> ## ✅ COMPLETED 2026-08-03 — this plan is now HISTORY
+> The cutover happened on 2026-08-03: the apex + `www` are served by the `the-lab-production`
+> Coolify app, and the **Vercel project was deleted**. For how production is deployed now, and the
+> record of what was actually done, see **`promote-staging-to-prod.md`**.
+>
+> The guardrails and the pre-cutover gate below were written while Vercel was live and are kept for
+> the audit trail. Several were **superseded rather than satisfied** — the owner deleted the Vercel
+> project first, which removed both the live service to protect and the DNS-revert rollback. The
+> resulting accepted risks are recorded in `promote-staging-to-prod.md` §Accepted risks.
+
+## Guardrails — do NOT break the live Vercel pipeline (historical)
 
 Until the deliberate, **gated DNS cutover**, **Vercel stays production**. The migration must run
 fully in parallel and must not be able to affect it. Enforce all of these:
