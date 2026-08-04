@@ -238,13 +238,6 @@ describe("abuse controls", () => {
         expect(sendGoogleRetirementEmail).not.toHaveBeenCalled();
     });
 
-    test("an over-long deadline is rejected before any send", async () => {
-        auth.mockResolvedValue({ user: { userID: "admin-1", role: "admin" } });
-        UserModel.getGoogleIdentityUsers.mockResolvedValue([googleOnly(1)]);
-        const res = await POST(req({ send: true, deadline: "x".repeat(200) }));
-        expect(res.status).toBe(400);
-        expect(sendGoogleRetirementEmail).not.toHaveBeenCalled();
-    });
 
     test("the admin action is audited before and after the run", async () => {
         auth.mockResolvedValue({ user: { userID: "admin-1", role: "admin" } });

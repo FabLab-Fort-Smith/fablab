@@ -3,7 +3,6 @@ import AuthService from '@/app/api/auth/[...nextauth]/service';
 import { authMethodsOf } from '@/lib/authMethods';
 import { sendGoogleRetirementEmail } from '@/app/utils/email.util';
 import logger from '@/lib/logger';
-import { retirementDeadline } from '@/lib/googleRetirement';
 
 
 /**
@@ -34,13 +33,11 @@ import { retirementDeadline } from '@/lib/googleRetirement';
  *
  * @param {Object} [options]
  * @param {boolean} [options.send=false] - actually send; false = dry run
- * @param {string} [options.deadline] - human-readable retirement date for the copy
  * @param {boolean} [options.force=false] - re-send to accounts already notified (reminder pass)
  * @param {number} [options.limit=0] - cap the number of recipients (0 = no cap)
  * @returns {Promise<{dryRun: boolean, candidates: number, cohort: number, strandedNoCredential: number, alreadyNotified: number, sent: number, failed: number, sentButUnstamped: number, undecryptable: number, remaining: number, recipients: string[]}>}
  */
-export async function runGoogleRetirementNotice({ send = false, deadline, force = false, limit = 0 } = {}) {
-    const when = deadline || retirementDeadline();
+export async function runGoogleRetirementNotice({ send = false, force = false, limit = 0 } = {}) {
     // Throws if the query fails — a false "cohort: 0" must never look like an all-clear.
     const candidates = await UserModel.getGoogleIdentityUsers();
 
@@ -70,7 +67,7 @@ export async function runGoogleRetirementNotice({ send = false, deadline, force 
         if (!send) continue; // dry run: counted, not contacted
 
         try {
-            await sendGoogleRetirementEmail(email, user.firstName, when);
+            await sendGoogleRetirementEmail(email, user.firstName);
             sent++;
         } catch (error) {
             failed++;
