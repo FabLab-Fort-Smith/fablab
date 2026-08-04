@@ -73,7 +73,9 @@ summary: Create/update The-Lab's Coolify application from code (reconcile.sh ove
 
 ## Rollback / abort
 - A bad deploy: see `redeploy-rollback.md` (redeploy a previous commit; DB migrations expand/contract).
-- Ultimate migration rollback: DNS stays such that the apex is on **Vercel** (ADR 0006) — production
+- ~~Ultimate migration rollback: DNS to Vercel~~ — **no longer available.** The Vercel project was
+  deleted at the 2026-08-03 cutover; rollback is now a previous **Coolify** deployment
+  (`redeploy-rollback.md`). Historical note: production
   is unaffected by staging.
 
 ## Related

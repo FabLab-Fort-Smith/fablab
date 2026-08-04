@@ -113,7 +113,8 @@ shape security scope and the deploy stack:
 Coolify with push-to-deploy + per-PR previews; self-hosted MongoDB + nightly restore-drilled backups
 run; admin is tailnet-only behind Cloudflare Access; platform secrets live in a shared Vaultwarden
 vault (`make secrets-pull`). Applying changes to the real VPS is a **gated** action. Remaining:
-production (apex) cutover from Vercel — deliberate, ADR 0006.
+production (apex) cutover from Vercel — **completed 2026-08-03** (ADR 0006); the apex now runs on
+Coolify and the Vercel project is deleted. See docs/runbooks/promote-staging-to-prod.md.
 
 ## Open decisions
 
@@ -129,7 +130,7 @@ production (apex) cutover from Vercel — deliberate, ADR 0006.
 
 The platform is built and running on **staging** (see Status). What remains:
 1. **Production cutover** (gated, deliberate — ADR 0006): parallel-run, then move the apex from
-   Vercel to the VPS. Until then the apex stays on Vercel.
+   Vercel to the VPS. **Done 2026-08-03** — the apex is served by the `the-lab-production` Coolify app.
 2. **Shared-custody follow-ups** (`docs/runbooks/shared-custody.md`): rotate the exposed vault
    master password, grant the remaining custodians, and fill the DR crown-jewel + owner-login items.
 

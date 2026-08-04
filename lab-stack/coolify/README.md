@@ -31,7 +31,8 @@ back up Coolify's own config/DB regularly so this is reproducible.
   config" below) — **Base Directory = `lab-site/the-lab`** (monorepo subdir — ADR 0005), built
   via the app's **Dockerfile** (Next.js `output: 'standalone'`), on port 3000.
 - Environments → branches: **`dev` → staging is LIVE** (`https://staging.fablabfortsmith.org`,
-  auto-deploy on push). **`main` → production** is the cutover target (apex still on Vercel — ADR
+  auto-deploy on push). **`main` → production** is LIVE since 2026-08-03 (apex + www on Coolify; the Vercel
+  project is deleted) — promote via `reconcile.sh --env production --confirm-production` (ADR
   0006). **Per-PR previews** are wired (see §6).
 - Inject all app env/secrets (Mongo URI, AUTH_SECRET, S3, SMTP, Square **sandbox first**,
   GenAI, **Cloudflare Turnstile** — see `../../.env.example`). `NEXT_PUBLIC_*` keys (incl.

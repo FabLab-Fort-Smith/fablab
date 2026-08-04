@@ -1,7 +1,7 @@
 # ADR 0006 — Migrate The-Lab from Vercel to self-hosted Coolify
 
-- **Status:** Accepted
-- **Date:** 2026-06-03
+- **Status:** Accepted — **executed 2026-08-03** (see Outcome)
+- **Date:** 2026-06-03 (outcome recorded 2026-08-03)
 
 ## Context
 
@@ -61,3 +61,23 @@ Migrate using a **parallel-run then cutover** strategy:
 
 - **Big-bang cutover** — rejected: unacceptable risk for a payment-handling app.
 - **Stay on Vercel** — rejected: the project's purpose is self-hosting for control/cost.
+
+## Outcome (2026-08-03)
+
+The migration completed, but **not** by the parallel-run/DNS-cutover path decided above. The owner
+deleted the Vercel project out of band first, so the apex served `404` and there was no live service
+to parallel-run against or revert to. The cutover was therefore executed as a **direct promotion**:
+
+- `the-lab-production` (Coolify, branch `main`) took the apex + `www`; Cloudflare records repointed
+  from Vercel (`76.76.21.21` / `cname.vercel-dns.com`) to the VPS `107.173.52.204`, still proxied.
+- Production reuses the **external MongoDB carried over from Vercel** (db `FabLab`) rather than the
+  VPS instance — a deliberate deviation from **ADR 0010**, accepted to avoid a data-migration window.
+  Tracked for later migration.
+- The **original production `ENCRYPTION_KEY` was carried over**, because member emails are encrypted
+  at rest with it.
+- Square stays in **sandbox**; Google OAuth is **not** configured on production (accepted member
+  lockout for 12 google-only accounts); `S3_*`, `GEMINI_API_KEY`, `ADMIN_EMAIL` are unset.
+- **Consequence:** step 4's "keep Vercel as instant rollback" no longer holds. Rollback is a previous
+  Coolify deployment; loss of the VPS is now a single point of failure with no warm standby.
+
+Procedure and the full accepted-risk list: `docs/runbooks/promote-staging-to-prod.md`.
