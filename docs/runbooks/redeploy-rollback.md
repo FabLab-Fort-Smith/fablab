@@ -18,6 +18,8 @@ summary: Redeploy the current ref, force a clean rebuild, or roll back to a prev
 
 ## Prerequisites
 - `../.env` with `COOLIFY_URL` (tailnet) + `COOLIFY_TOKEN`. `jq`/`curl`. The app exists
+- If any call returns **HTTP 401 / `Unauthenticated.`**, the API token is dead or truncated —
+  rotate it via `coolify-token-rotation.md` (nothing else is wrong; Coolify keeps serving).
   (`deploy-app.md`).
 
 ## Redeploy the current ref
