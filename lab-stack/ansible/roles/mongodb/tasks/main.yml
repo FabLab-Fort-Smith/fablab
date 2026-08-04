@@ -142,6 +142,7 @@
   ansible.builtin.debug:
     msg:
       - "MongoDB '{{ mongodb_container_name }}' is up on private net '{{ mongodb_network }}' (no host port)."
-      - "Mongo also joins: {{ mongodb_shared_networks | default([]) | join(', ') }} — Coolify apps resolve it by name, no manual `docker network connect` needed."
+      - "Also joined: {{ mongodb_shared_networks | default([]) | join(', ') }}"
+      - "Coolify apps resolve it by name — no manual `docker network connect` needed."
       - "Set MONGODB_URI in Coolify — value is in {{ mongodb_backup_env }} on the VPS."
       - "DB '{{ mongodb_app_db }}', app user '{{ mongodb_app_user }}' (readWrite)."
