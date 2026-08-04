@@ -99,7 +99,10 @@ coolify_install: true
 # Root + app passwords are AUTO-GENERATED into ../.env (`make secrets`) and read at converge time
 # — NOT here (@rules/workflow-secrets.md). These are non-secret knobs only.
 mongodb_manage: true
-mongodb_image: "mongo:7.0"              # pin to a digest before prod (@rules/std-supplychain.md)
+mongodb_image: "mongo:8.0"              # matches the running instance (8.0.26); a MAJOR DOWNGRADE
+                                        # (8 -> 7) will NOT start on 8.0 data files, so never lower
+                                        # this without a dump/restore. Pin to a digest before prod
+                                        # (@rules/std-supplychain.md).
 mongodb_app_db: "thelab"
 mongodb_app_user: "thelab_app"
 mongodb_network: "fablab"              # attach the Coolify app to this docker network
