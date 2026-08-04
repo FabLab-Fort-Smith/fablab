@@ -38,6 +38,9 @@
   ansible.builtin.command: gpg --show-keys --with-colons /etc/apt/keyrings/tailscale-archive-keyring.gpg
   register: tailscale_key
   changed_when: false
+  # Read-only, so run it in check mode too. Otherwise --check skips it, the assert below sees an
+  # empty stdout and fails as if the signing key had been tampered with (#93).
+  check_mode: false
 
 - name: Assert the Tailscale key matches the published signing key (fail closed on tamper)
   ansible.builtin.assert:
@@ -72,6 +75,9 @@
   ansible.builtin.command: tailscale status --json
   register: tailscale_status
   changed_when: false
+  # Read-only probe: also run under --check, otherwise its output is empty in check mode and
+  # whatever consumes it (assert / when / from_json) fails misleadingly (#93).
+  check_mode: false
   failed_when: false
 
 - name: Bring Tailscale up (join the tailnet)
@@ -99,6 +105,9 @@
   ansible.builtin.command: tailscale ip -4
   register: tailscale_ip
   changed_when: false
+  # Read-only probe: also run under --check, otherwise its output is empty in check mode and
+  # whatever consumes it (assert / when / from_json) fails misleadingly (#93).
+  check_mode: false
   failed_when: false
 
 - name: How to reach services over the tailnet

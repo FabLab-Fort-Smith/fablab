@@ -96,6 +96,9 @@
   retries: 20
   delay: 3
   changed_when: false
+  # Read-only probe: also run under --check, otherwise its output is empty in check mode and
+  # whatever consumes it (assert / when / from_json) fails misleadingly (#93).
+  check_mode: false
   no_log: true
 
 - name: Reconcile the least-privilege app user (create-or-update; idempotent)
