@@ -33,6 +33,8 @@
     - role: docker      # Docker Engine from the official repo, non-root deploy access
     - role: mongodb     # standalone self-hosted MongoDB on a private docker network (ADR 0010)
       when: mongodb_manage | default(true)
+    - role: minio       # self-hosted S3-compatible object storage, private net (issue #96)
+      when: minio_manage | default(true)
     - role: coolify      # install Coolify (reviewed installer); dashboard secured manually after
       when: coolify_install | default(true)
     - role: backups     # encrypted MongoDB dumps + off-box copy + restore script
@@ -45,6 +47,7 @@
           - "Coolify: finish setup at https://{{ coolify_fqdn }} (admin + MFA),"
           - "behind Cloudflare Access/allow-list."
           - "MongoDB is provisioned by the mongodb role (private '{{ mongodb_network }}' net)."
+          - "MinIO (S3) is provisioned by the minio role; app S3 settings in {{ minio_env_file }}."
           - "In Coolify: attach the app (base dir lab-site/the-lab) to '{{ mongodb_network }}',"
           - "and set MONGODB_URI (value in {{ mongodb_backup_env }} on the VPS)."
           - "Configure forge webhooks (HMAC) + Cloudflare DNS/origin lock. See ../coolify, ../cloudflare."

@@ -1,0 +1,44 @@
+# Managed by Ansible (lab-stack/ansible/roles/minio). Self-hosted S3-compatible object storage,
+# PRIVATE network only by default — NO published host port (@rules/topic-database.md,
+# @rules/std-zero-trust.md). Public exposure is a separate, gated step (issue #96).
+name: fablab-minio
+services:
+  minio:
+    image: "{{ minio_image }}"
+    container_name: "{{ minio_container_name }}"
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":{{ minio_console_port }}"]
+    env_file:
+      - ./minio.env
+    volumes:
+      - "{{ minio_volume }}:/data"
+{% if minio_publish_ports %}
+    ports:
+      - "127.0.0.1:{{ minio_api_port }}:{{ minio_api_port }}"
+      - "127.0.0.1:{{ minio_console_port }}:{{ minio_console_port }}"
+{% endif %}
+    networks:
+      - fablab
+{% for net in minio_shared_networks | default([]) %}
+      - shared_{{ loop.index }}
+{% endfor %}
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  {{ minio_volume }}:
+    name: "{{ minio_volume }}"
+
+networks:
+  fablab:
+    name: "{{ minio_network }}"
+{% for net in minio_shared_networks | default([]) %}
+  # Owned by Coolify — declared external so compose joins it without managing it.
+  shared_{{ loop.index }}:
+    name: "{{ net }}"
+    external: true
+{% endfor %}

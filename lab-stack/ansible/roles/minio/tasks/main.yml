@@ -1,0 +1,321 @@
+---
+# Deploy MinIO (S3-compatible object storage) as a Docker Compose stack on the PRIVATE docker
+# network — no published host port by default. Root creds + a BUCKET-SCOPED app user come from the
+# generated secrets in ../.env. Idempotent; safe to re-run (ADR 0004). Issue #96.
+#
+# Access model:
+#   - objects are anonymously READABLE (browsers load image URLs directly) via an explicit
+#     GetObject-only policy — NOT mc's canned `download` alias, which was verified to also grant
+#     anonymous s3:ListBucket (i.e. the whole object inventory would be publicly enumerable)
+#   - anonymous LIST / PUT / DELETE all return 403 (verified) — this MATCHES the instance we are
+#     replacing, which also 403s an anonymous list, so `download` would have been a regression
+#   - the app authenticates with a user scoped to ONE bucket, never the root credential
+#     (production was found using MinIO root, which could delete nine other projects' buckets)
+# Every mc mutation is gated on a state probe — see the note above the bucket tasks.
+
+- name: Require MinIO secrets (from ../.env via `make converge`; generate with `make secrets`)
+  ansible.builtin.assert:
+    that:
+      - lookup('ansible.builtin.env', 'MINIO_ROOT_PASSWORD') | length > 0
+      - lookup('ansible.builtin.env', 'MINIO_APP_PASSWORD') | length > 0
+    fail_msg: >-
+      MINIO_ROOT_PASSWORD and MINIO_APP_PASSWORD must be set. Run via `make converge`
+      (it sources ../.env); generate them first with `make secrets` / `make setup`.
+
+- name: Capture MinIO secrets (never logged)
+  ansible.builtin.set_fact:
+    minio_root_user: "{{ lookup('ansible.builtin.env', 'MINIO_ROOT_USER') | default('fablab-root', true) }}"
+    minio_root_pw: "{{ lookup('ansible.builtin.env', 'MINIO_ROOT_PASSWORD') }}"
+    minio_app_pw: "{{ lookup('ansible.builtin.env', 'MINIO_APP_PASSWORD') }}"
+  no_log: true
+
+- name: Create compose project dir (root-only)
+  ansible.builtin.file:
+    path: "{{ minio_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Render root credentials env-file for compose (0600)
+  ansible.builtin.template:
+    src: minio.env.j2
+    dest: "{{ minio_dir }}/minio.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Render the compose file
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ minio_dir }}/compose.yaml"
+    owner: root
+    group: root
+    mode: "0640"
+
+# compose declares the shared networks as `external: true`, so it refuses to start if one does not
+# exist yet (e.g. MinIO converges before Coolify is installed). Creating it here is idempotent.
+- name: Ensure shared docker networks exist (Coolify's application network)
+  ansible.builtin.command:
+    cmd: docker network create {{ item }}
+  loop: "{{ minio_shared_networks | default([]) }}"
+  register: minio_shared_net
+  changed_when: minio_shared_net.rc == 0
+  failed_when: >-
+    minio_shared_net.rc != 0
+    and ('already exists' not in minio_shared_net.stderr)
+
+- name: Start / refresh the MinIO compose stack
+  ansible.builtin.command:
+    cmd: docker compose -f {{ minio_dir }}/compose.yaml up -d --remove-orphans
+  register: minio_compose
+  changed_when: >-
+    ('Started' in minio_compose.stderr) or ('Created' in minio_compose.stderr)
+    or ('Recreated' in minio_compose.stderr)
+
+- name: Wait for MinIO to accept root credentials
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -e MC_HOST_local=http://{{ minio_root_user }}:{{ minio_root_pw | urlencode }}@127.0.0.1:{{ minio_api_port }}
+      {{ minio_container_name }} mc ls local
+  register: minio_ping
+  until: minio_ping.rc == 0
+  retries: 20
+  delay: 3
+  changed_when: false
+  # Read-only probe: also run under --check, else its output is empty and consumers fail
+  # misleadingly (#93).
+  check_mode: false
+  no_log: true
+
+# Every `mc` mutation below prints success and exits 0 even when it changed nothing
+# (verified against a live MinIO: `mc mb --ignore-existing`, `version enable`, `anonymous set`,
+# `policy create` and `user add` are all unconditional). So idempotency CANNOT come from parsing
+# their output — each mutation is gated on a read-only STATE PROBE instead. Otherwise every
+# converge would report "changed" and real drift would be invisible in the noise (#93).
+
+- name: Probe whether the bucket exists
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -e MC_HOST_local=http://{{ minio_root_user }}:{{ minio_root_pw | urlencode }}@127.0.0.1:{{ minio_api_port }}
+      {{ minio_container_name }} mc stat local/{{ minio_bucket }}
+  register: minio_bucket_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Create the bucket
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -e MC_HOST_local=http://{{ minio_root_user }}:{{ minio_root_pw | urlencode }}@127.0.0.1:{{ minio_api_port }}
+      {{ minio_container_name }} mc mb --region {{ minio_region }} local/{{ minio_bucket }}
+  when: minio_bucket_probe.rc != 0
+  changed_when: true
+  no_log: true
+
+- name: Probe the bucket's versioning state
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -e MC_HOST_local=http://{{ minio_root_user }}:{{ minio_root_pw | urlencode }}@127.0.0.1:{{ minio_api_port }}
+      {{ minio_container_name }} mc version info local/{{ minio_bucket }}
+  register: minio_ver_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  no_log: true
+
+# A compromised app credential can otherwise permanently erase objects; with versioning a delete
+# only writes a delete-marker and the prior version is still recoverable.
+- name: Enable object versioning
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -e MC_HOST_local=http://{{ minio_root_user }}:{{ minio_root_pw | urlencode }}@127.0.0.1:{{ minio_api_port }}
+      {{ minio_container_name }} mc version enable local/{{ minio_bucket }}
+  when:
+    - minio_versioning | bool
+    - "'versioning is enabled' not in minio_ver_probe.stdout"
+  changed_when: true
+  no_log: true
+
+- name: Probe the live anonymous access policy
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -e MC_HOST_local=http://{{ minio_root_user }}:{{ minio_root_pw | urlencode }}@127.0.0.1:{{ minio_api_port }}
+      {{ minio_container_name }} mc anonymous get-json local/{{ minio_bucket }}
+  register: minio_anon_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Canonicalise the desired anonymous policy
+  ansible.builtin.set_fact:
+    minio_anon_desired_canon: >-
+      {%- set t = [] -%}
+      {%- for st in _pol.Statement | default([]) -%}
+      {%- for a in st.Action | sort -%}
+      {%- for r in st.Resource | sort -%}
+      {%- set _ = t.append(st.Effect ~ '|' ~ a ~ '|' ~ r) -%}
+      {%- endfor -%}{%- endfor -%}{%- endfor -%}
+      {{ t | sort | join(',') }}
+  vars:
+    _pol: "{{ minio_anon_policy }}"
+
+# An unset policy returns `{}` (rc 0), which canonicalises to an empty string — so it still differs
+# from desired and the set below fires.
+- name: Canonicalise the live anonymous policy
+  ansible.builtin.set_fact:
+    minio_anon_live_canon: >-
+      {%- set t = [] -%}
+      {%- for st in _pol.Statement | default([]) -%}
+      {%- for a in st.Action | sort -%}
+      {%- for r in st.Resource | sort -%}
+      {%- set _ = t.append(st.Effect ~ '|' ~ a ~ '|' ~ r) -%}
+      {%- endfor -%}{%- endfor -%}{%- endfor -%}
+      {{ t | sort | join(',') }}
+  vars:
+    _pol: "{{ minio_anon_probe.stdout | from_json | default({}, true) }}"
+  when: minio_anon_probe.rc == 0
+
+- name: Set the anonymous access policy (objects readable; LIST/PUT/DELETE denied)
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -i
+      -e MC_HOST_local=http://{{ minio_root_user }}:{{ minio_root_pw | urlencode }}@127.0.0.1:{{ minio_api_port }}
+      {{ minio_container_name }} sh -c 'cat > /tmp/anon.json && mc anonymous set-json /tmp/anon.json
+      local/{{ minio_bucket }}'
+    stdin: "{{ minio_anon_policy | to_json }}"
+  when:
+    - minio_anonymous_public_read | bool
+    - minio_anon_live_canon | default('') != minio_anon_desired_canon
+  changed_when: true
+  no_log: true
+
+- name: Render the bucket-scoped IAM policy (from minio_app_policy — single source of truth)
+  ansible.builtin.copy:
+    dest: "{{ minio_dir }}/{{ minio_bucket }}-rw.json"
+    content: "{{ minio_app_policy | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Probe the live IAM policy
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -e MC_HOST_local=http://{{ minio_root_user }}:{{ minio_root_pw | urlencode }}@127.0.0.1:{{ minio_api_port }}
+      {{ minio_container_name }} mc admin policy info local {{ minio_bucket }}-rw
+  register: minio_policy_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  no_log: true
+
+# `mc` REORDERS Action lists when it stores a policy (verified: our GetObject-first list comes back
+# alphabetised), so a plain `desired != live` test would report "changed" on every single converge.
+# Compare an order-insensitive canonical form instead: the sorted set of Effect|Action|Resource
+# triples. That still catches a real out-of-band policy edit.
+- name: Canonicalise the desired policy (order-insensitive)
+  ansible.builtin.set_fact:
+    minio_policy_desired_canon: >-
+      {%- set t = [] -%}
+      {%- for st in _pol.Statement | default([]) -%}
+      {%- for a in st.Action | sort -%}
+      {%- for r in st.Resource | sort -%}
+      {%- set _ = t.append(st.Effect ~ '|' ~ a ~ '|' ~ r) -%}
+      {%- endfor -%}{%- endfor -%}{%- endfor -%}
+      {{ t | sort | join(',') }}
+  vars:
+    _pol: "{{ minio_app_policy }}"
+
+- name: Canonicalise the live policy (order-insensitive)
+  ansible.builtin.set_fact:
+    minio_policy_live_canon: >-
+      {%- set t = [] -%}
+      {%- for st in _pol.Statement | default([]) -%}
+      {%- for a in st.Action | sort -%}
+      {%- for r in st.Resource | sort -%}
+      {%- set _ = t.append(st.Effect ~ '|' ~ a ~ '|' ~ r) -%}
+      {%- endfor -%}{%- endfor -%}{%- endfor -%}
+      {{ t | sort | join(',') }}
+  vars:
+    _pol: "{{ (minio_policy_probe.stdout | from_json).Policy | default({}, true) }}"
+  when: minio_policy_probe.rc == 0
+
+- name: Reconcile the bucket-scoped IAM policy (create-or-replace)
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -i
+      -e MC_HOST_local=http://{{ minio_root_user }}:{{ minio_root_pw | urlencode }}@127.0.0.1:{{ minio_api_port }}
+      {{ minio_container_name }} sh -c 'cat > /tmp/policy.json && mc admin policy create local
+      {{ minio_bucket }}-rw /tmp/policy.json'
+    stdin: "{{ minio_app_policy | to_json }}"
+  when: >-
+    minio_policy_probe.rc != 0
+    or minio_policy_live_canon | default('') != minio_policy_desired_canon
+  changed_when: true
+  no_log: true
+
+- name: Probe the app user (existence AND its attached policy in one call)
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -e MC_HOST_local=http://{{ minio_root_user }}:{{ minio_root_pw | urlencode }}@127.0.0.1:{{ minio_api_port }}
+      {{ minio_container_name }} mc admin user info local {{ minio_app_user }} --json
+  register: minio_user_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  no_log: true
+
+# Run EVERY converge, not just on create: this is what propagates an app-password rotation to the
+# live user, and it self-heals a user deleted out-of-band. Reported as changed only when the user
+# was absent (a rotation is invisible to us by design — we never read the live secret back).
+- name: Reconcile the bucket-scoped app user (create-or-update)
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      -e MC_HOST_local=http://{{ minio_root_user }}:{{ minio_root_pw | urlencode }}@127.0.0.1:{{ minio_api_port }}
+      -e AP={{ minio_app_pw | quote }}
+      {{ minio_container_name }} sh -c 'mc admin user add local {{ minio_app_user | quote }} "$AP"'
+  changed_when: minio_user_probe.rc != 0
+  no_log: true
+
+- name: Attach the scoped policy to the app user
+  ansible.builtin.command:
+    cmd: >-
+      docker exec -e MC_HOST_local=http://{{ minio_root_user }}:{{ minio_root_pw | urlencode }}@127.0.0.1:{{ minio_api_port }}
+      {{ minio_container_name }} mc admin policy attach local {{ minio_bucket }}-rw --user {{ minio_app_user }}
+  when: >-
+    minio_user_probe.rc != 0
+    or (minio_user_probe.stdout | from_json).policyName | default('') != minio_bucket + '-rw'
+  changed_when: true
+  no_log: true
+
+- name: Ensure the app env-file directory exists (root-only)
+  ansible.builtin.file:
+    path: "{{ minio_env_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Write the app-facing S3 settings (0600, root-only)
+  ansible.builtin.template:
+    src: minio-app.env.j2
+    dest: "{{ minio_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Summary
+  ansible.builtin.debug:
+    msg:
+      - "MinIO '{{ minio_container_name }}' is up on private net '{{ minio_network }}'{{ ' (no host port)' if not minio_publish_ports else '' }}."
+      - "Also joined: {{ minio_shared_networks | default([]) | join(', ') }}"
+      - "Bucket '{{ minio_bucket }}': versioning={{ minio_versioning }}, anonymous
+         read={{ minio_anonymous_public_read }} (GetObject only — LIST/PUT/DELETE denied)."
+      - "App user '{{ minio_app_user }}' is scoped to that bucket only — NEVER use the root credential in an app."
+      - "App S3 settings written to {{ minio_env_file }} on the VPS (root-only)."
+      - "Public exposure (s3.<domain>) + data migration from the old instance are separate steps — issue #96."

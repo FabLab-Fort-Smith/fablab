@@ -107,6 +107,18 @@ mongodb_app_db: "thelab"
 mongodb_app_user: "thelab_app"
 mongodb_network: "fablab"              # attach the Coolify app to this docker network
 
+# --- MinIO / object storage (issue #96: replaces the external s3.crittercodes.dev instance) ---
+# Root + app S3 secret keys are AUTO-GENERATED into ../.env (`make secrets`) and read at converge
+# time — NOT here. These are non-secret knobs only.
+minio_manage: true
+minio_image: "quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z"   # pin to a digest before prod
+minio_bucket: "fablab-bounties"
+minio_app_user: "fablab-app"            # bucket-scoped; the app NEVER gets the root credential
+minio_versioning: true                  # a leaked app key can then only add delete-markers
+minio_anonymous_public_read: true       # GetObject only — browsers load image URLs directly
+minio_shared_networks: ["coolify"]      # so Coolify apps resolve `fablab-minio` by name
+minio_publish_ports: false              # private network only; public s3.<domain> is a later step
+
 # --- Backups (ADR 0007/0010: MongoDB on the VPS = our responsibility) ---
 backups_enabled: true
 backups_local_dir: "/var/backups/fablab"

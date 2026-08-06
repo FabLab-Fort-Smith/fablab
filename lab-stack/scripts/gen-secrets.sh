@@ -40,6 +40,8 @@ gen() {  # gen KEY -> a fresh value suited to KEY
     INTERNAL_API_SECRET|SOCKET_API_SECRET)  rand_b64 32 ;;
     ENCRYPTION_KEY)                         rand_b64 24 ;;   # 24 bytes -> 32 base64 chars == 32 bytes (env.js)
     MONGO_ROOT_PASSWORD|MONGO_APP_PASSWORD) rand_alnum 32 ;; # URI-safe for MONGODB_URI
+    MINIO_ROOT_PASSWORD|MINIO_APP_PASSWORD) rand_alnum 40 ;; # S3 secret keys: alnum only (they
+                                                             # appear in MC_HOST URLs + app env)
     *)                                      rand_b64 32 ;;
   esac
 }
