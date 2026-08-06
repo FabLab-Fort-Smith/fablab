@@ -135,6 +135,14 @@ single source of truth. You just need an existing sudo login for the **first** c
   set `ansible_user=b007ab1e` for the first run. The `harden` role hardens SSH **without**
   locking anyone out (no `AllowUsers` unless you set `ssh_allow_users`), and `deploy_account`
   creates the shared `deploy` user. **After** the first converge, switch `ansible_user=deploy`.
+  This is not optional housekeeping — converge is **unusable** as a human sudo user, and it bit us
+  (#93): `b007ab1e` needs a sudo password so unattended runs fail with `Missing sudo password`,
+  while `deploy` has passwordless sudo. Two related traps:
+  - `ansible_user` in the inventory **overrides `-u` on the command line** (inventory vars beat CLI
+    defaults). Edit the inventory, or use `-e ansible_user=...`, which does win.
+  - A passphrase-protected key must be in an **ssh-agent** (`ssh-add ~/.ssh/fablab_deploy`) or
+    Ansible cannot decrypt it and fails with `Permission denied (publickey)`.
+  - Human break-glass, no file edits: `ansible-playbook playbook.yml -e ansible_user=b007ab1e -K`.
 - **Fresh box with no users:** bootstrap one first (RackNerd/SolusVM can't inject cloud-init):
   ```bash
   scp lab-stack/cloud-init/manual-bootstrap.sh root@<vps-ip>:/root/
