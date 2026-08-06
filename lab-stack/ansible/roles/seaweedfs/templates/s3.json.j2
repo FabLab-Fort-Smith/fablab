@@ -1,0 +1,26 @@
+{#- SeaweedFS S3 identities. Rendered by Ansible; 0600 root-only (contains secret keys).
+    NOTE: SeaweedFS does NOT hot-reload this file — a new identity is ignored until the container
+    restarts (verified on 4.41), so the task that writes it notifies a restart handler. -#}
+{
+  "identities": [
+    {
+      "name": "admin",
+      "credentials": [
+        { "accessKey": "{{ seaweedfs_admin_access_key }}", "secretKey": "{{ seaweedfs_admin_secret }}" }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    },
+    {
+      "name": "{{ seaweedfs_app_access_key }}",
+      "credentials": [
+        { "accessKey": "{{ seaweedfs_app_access_key }}", "secretKey": "{{ seaweedfs_app_secret }}" }
+      ],
+      "actions": [{% for a in seaweedfs_app_actions %}"{{ a }}:{{ seaweedfs_bucket }}"{{ ", " if not loop.last }}{% endfor %}]
+    }{% if seaweedfs_anonymous_read %},
+    {
+      "name": "anonymous",
+      "actions": ["Read:{{ seaweedfs_bucket }}"]
+    }{% endif %}
+
+  ]
+}
