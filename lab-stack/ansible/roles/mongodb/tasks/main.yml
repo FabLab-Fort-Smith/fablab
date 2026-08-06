@@ -59,6 +59,20 @@
     group: root
     mode: "0640"
 
+# compose declares the shared networks as `external: true`, so it refuses to start if one does
+# not exist yet (e.g. Mongo converges before Coolify is installed). Creating it here is
+# idempotent and harmless: a no-op if Coolify already made it, and Coolify adopts an existing
+# network if it comes later.
+- name: Ensure shared docker networks exist (Coolify's application network)
+  ansible.builtin.command:
+    cmd: docker network create {{ item }}
+  loop: "{{ mongodb_shared_networks | default([]) }}"
+  register: mongodb_shared_net
+  changed_when: mongodb_shared_net.rc == 0
+  failed_when: >-
+    mongodb_shared_net.rc != 0
+    and ('already exists' not in mongodb_shared_net.stderr)
+
 - name: Start / refresh the MongoDB compose stack
   ansible.builtin.command:
     cmd: docker compose -f {{ mongodb_dir }}/compose.yaml up -d --remove-orphans
@@ -82,6 +96,9 @@
   retries: 20
   delay: 3
   changed_when: false
+  # Read-only probe: also run under --check, otherwise its output is empty in check mode and
+  # whatever consumes it (assert / when / from_json) fails misleadingly (#93).
+  check_mode: false
   no_log: true
 
 - name: Reconcile the least-privilege app user (create-or-update; idempotent)
@@ -128,6 +145,7 @@
   ansible.builtin.debug:
     msg:
       - "MongoDB '{{ mongodb_container_name }}' is up on private net '{{ mongodb_network }}' (no host port)."
-      - "In Coolify: attach the app to the '{{ mongodb_network }}' network."
+      - "Also joined: {{ mongodb_shared_networks | default([]) | join(', ') }}"
+      - "Coolify apps resolve it by name — no manual `docker network connect` needed."
       - "Set MONGODB_URI in Coolify — value is in {{ mongodb_backup_env }} on the VPS."
       - "DB '{{ mongodb_app_db }}', app user '{{ mongodb_app_user }}' (readWrite)."

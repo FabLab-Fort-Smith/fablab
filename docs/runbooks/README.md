@@ -21,6 +21,9 @@ step-by-step and executable by someone who didn't write it.
       Parallel-run; apex stays on Vercel. *(validated 2026-07-12 on the real VPS)*
 - [x] **migrate-from-vercel.md** — the parallel-run → data-migrate → validate → DNS-cutover →
       decommission flow, incl. MongoDB export/restore/reconcile. *(drafted — rehearse before cutover)*
+- [x] **promote-staging-to-prod.md** — promote `main` to the apex via `reconcile.sh --env
+      production`, plus the **record of the 2026-08-03 Vercel→Coolify cutover** and the accepted
+      risks taken with it. *(validated 2026-08-03 — it is the cutover as executed)*
 - [x] **deploy-app.md** — deploy/promote a site version via the Coolify API (push-to-deploy is
       automatic; documents the manual/break-glass path).
 - [x] **redeploy-rollback.md** — redeploy the current ref, force a clean rebuild, or roll back to a

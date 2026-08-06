@@ -89,4 +89,6 @@ self-hosted MongoDB + nightly restore-drilled backups run, and The-Lab serves on
 push-to-deploy + per-PR previews. The host is on **both** the Tailscale and ZeroTier meshes
 (admin + shared-vault access is overlay-only, never public); platform secrets live in a shared
 **Vaultwarden** vault, pulled into `.env` with `make secrets-pull`. Applying changes to the real
-VPS remains a **gated** action. Remaining: prod (apex) cutover from Vercel (ADR 0006, deliberate).
+VPS remains a **gated** action. Prod (apex) cutover from Vercel **completed 2026-08-03** — apex + www are
+served by `the-lab-production` (branch `main`); promote with `reconcile.sh --env production`
+(docs/runbooks/promote-staging-to-prod.md).

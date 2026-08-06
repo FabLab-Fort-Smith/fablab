@@ -6,8 +6,6 @@ import { auditLog } from '@/lib/audit';
 import { runGoogleRetirementNotice } from './service';
 import logger from '@/lib/logger';
 
-const DEADLINE_MAX_LENGTH = 40;
-
 /**
  * 429 with a Retry-After header, matching the forgot-password endpoint.
  * @param {number} retryAfterMs - milliseconds until the caller may retry
@@ -26,7 +24,7 @@ function tooMany(retryAfterMs) {
  * Admin-only. Emails the Google-only cohort the sign-in retirement notice
  * (docs/analysis/google-oauth-removal-impact.md §6, Phase 2).
  *
- * Body (all optional): `{ send?: boolean, deadline?: string, force?: boolean, limit?: number }`
+ * Body (all optional): `{ send?: boolean, force?: boolean, limit?: number }`
  * — **defaults to a dry run**; nothing is sent unless `send` is exactly `true`, so a stray
  * call cannot mail members. Idempotent: accounts already notified are skipped unless
  * `force:true` (reminder pass).
@@ -56,17 +54,6 @@ export async function POST(req) {
         const force = body.force === true;
         const limit = Number.isInteger(body.limit) && body.limit > 0 ? body.limit : 0;
 
-        let deadline;
-        if (body.deadline !== undefined) {
-            if (typeof body.deadline !== 'string' || body.deadline.trim().length === 0
-                || body.deadline.length > DEADLINE_MAX_LENGTH) {
-                return NextResponse.json(
-                    { error: `deadline must be a non-empty string of at most ${DEADLINE_MAX_LENGTH} characters.` },
-                    { status: 400 },
-                );
-            }
-            deadline = body.deadline.trim();
-        }
 
         const runLimit = rateLimit('google-retirement-notice:run', { limit: 3, windowMs: 60 * 60_000 });
         if (!runLimit.allowed) {
@@ -78,7 +65,7 @@ export async function POST(req) {
         // send was attempted (CLAUDE.md §9 — admin + PII-touching action).
         auditLog('admin.google_retirement_notice.started', { actor, outcome: 'started', send, force, limit });
 
-        const summary = await runGoogleRetirementNotice({ send, deadline, force, limit });
+        const summary = await runGoogleRetirementNotice({ send, force, limit });
 
         auditLog('admin.google_retirement_notice.completed', {
             actor,

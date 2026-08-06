@@ -14,6 +14,9 @@ services:
       - ./init:/docker-entrypoint-initdb.d:ro
     networks:
       - fablab
+{% for net in mongodb_shared_networks | default([]) %}
+      - shared_{{ loop.index }}
+{% endfor %}
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 30s
@@ -28,3 +31,9 @@ volumes:
 networks:
   fablab:
     name: "{{ mongodb_network }}"
+{% for net in mongodb_shared_networks | default([]) %}
+  # Owned by Coolify — declared external so compose joins it without managing it.
+  shared_{{ loop.index }}:
+    name: "{{ net }}"
+    external: true
+{% endfor %}

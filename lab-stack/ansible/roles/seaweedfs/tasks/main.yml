@@ -1,0 +1,194 @@
+---
+# Deploy SeaweedFS (S3-compatible object storage) as a Docker Compose stack on the PRIVATE docker
+# network — no published host port by default. Identities come from a rendered s3.json; secret keys
+# come from ../.env. Idempotent; safe to re-run (ADR 0004). Issue #96.
+#
+# Access model (every line verified against a live SeaweedFS 4.41, not read from docs):
+#   - objects are anonymously READABLE (browsers load image URLs directly) via an identity named
+#     `anonymous` holding ONLY `Read:<bucket>` — anonymous GET 200, LIST/PUT/DELETE 403, and 403
+#     on any other bucket
+#   - the app authenticates with a key scoped to ONE bucket, never the admin key; it is denied
+#     writing to or listing another bucket, deleting any bucket, and sees only its own bucket
+#   - object versioning is on, so a leaked app key can only add delete-markers
+
+- name: Require object-storage secrets (from ../.env via `make converge`; generate `make secrets`)
+  ansible.builtin.assert:
+    that:
+      - lookup('ansible.builtin.env', 'OBJSTORE_ADMIN_SECRET_KEY') | length > 0
+      - lookup('ansible.builtin.env', 'OBJSTORE_APP_SECRET_KEY') | length > 0
+    fail_msg: >-
+      OBJSTORE_ADMIN_SECRET_KEY and OBJSTORE_APP_SECRET_KEY must be set. Run via `make converge`
+      (it sources ../.env); generate them first with `make secrets` / `make setup`.
+
+- name: Capture object-storage secrets (never logged)
+  ansible.builtin.set_fact:
+    seaweedfs_admin_secret: "{{ lookup('ansible.builtin.env', 'OBJSTORE_ADMIN_SECRET_KEY') }}"
+    seaweedfs_app_secret: "{{ lookup('ansible.builtin.env', 'OBJSTORE_APP_SECRET_KEY') }}"
+  no_log: true
+
+- name: Create compose project dir (root-only)
+  ansible.builtin.file:
+    path: "{{ seaweedfs_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+# SeaweedFS does NOT hot-reload this file: a new identity stays unauthenticated until the container
+# restarts (verified — adding a key and waiting 26s changed nothing; a restart applied it). So the
+# handler is REQUIRED for correctness, not just tidiness. Restart is a few seconds of upload
+# downtime, which is why it only fires when the rendered content actually changes.
+- name: Render the S3 identities (0600 — contains secret keys)
+  ansible.builtin.template:
+    src: s3.json.j2
+    dest: "{{ seaweedfs_dir }}/s3.json"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart seaweedfs
+
+- name: Render the compose file
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ seaweedfs_dir }}/compose.yaml"
+    owner: root
+    group: root
+    mode: "0640"
+
+# compose declares the shared networks as `external: true`, so it refuses to start if one does not
+# exist yet (e.g. this converges before Coolify is installed). Creating it here is idempotent.
+- name: Ensure shared docker networks exist (Coolify's application network)
+  ansible.builtin.command:
+    cmd: docker network create {{ item }}
+  loop: "{{ seaweedfs_shared_networks | default([]) }}"
+  register: seaweedfs_shared_net
+  changed_when: seaweedfs_shared_net.rc == 0
+  failed_when: >-
+    seaweedfs_shared_net.rc != 0
+    and ('already exists' not in seaweedfs_shared_net.stderr)
+
+- name: Start / refresh the SeaweedFS compose stack
+  ansible.builtin.command:
+    cmd: docker compose -f {{ seaweedfs_dir }}/compose.yaml up -d --remove-orphans
+  register: seaweedfs_compose
+  changed_when: >-
+    ('Started' in seaweedfs_compose.stderr) or ('Created' in seaweedfs_compose.stderr)
+    or ('Recreated' in seaweedfs_compose.stderr)
+
+# Apply a pending identity change BEFORE the tasks below talk to the S3 API, otherwise a rotated
+# app secret would still be the old one when we use it.
+- name: Apply any pending identity change now
+  ansible.builtin.meta: flush_handlers
+
+# Probe /status, NOT the S3 root: the root path is ListBuckets, which returns 403 to the anonymous
+# identity (it only holds Read on one bucket). Probing the root made this wait for 30 attempts and
+# then fail on a perfectly healthy server.
+- name: Wait for the S3 gateway to answer
+  ansible.builtin.command:
+    cmd: >-
+      docker exec {{ seaweedfs_container_name }}
+      wget -q -O - http://127.0.0.1:{{ seaweedfs_s3_port }}/status
+  register: seaweedfs_ping
+  until: seaweedfs_ping.rc == 0
+  retries: 30
+  delay: 3
+  changed_when: false
+  # Read-only probe: also run under --check, else its output is empty and consumers fail
+  # misleadingly (#93).
+  check_mode: false
+
+- name: Probe the existing buckets
+  ansible.builtin.command:
+    cmd: >-
+      docker exec {{ seaweedfs_container_name }} sh -c
+      'echo s3.bucket.list | weed shell -master=localhost:{{ seaweedfs_master_port }}'
+  register: seaweedfs_bucket_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# CRITICAL: this MUST stay gated on the probe above. `s3.bucket.create` on an EXISTING bucket
+# reports "created bucket" and silently WIPES that bucket's configuration — verified: versioning
+# went from Enabled to unset by re-running it. An unconditional create would therefore disable
+# versioning on every single converge while looking like it succeeded.
+- name: Create the bucket (only when absent — a re-create wipes bucket config)
+  ansible.builtin.command:
+    cmd: >-
+      docker exec {{ seaweedfs_container_name }} sh -c
+      'echo "s3.bucket.create -name {{ seaweedfs_bucket }}" |
+      weed shell -master=localhost:{{ seaweedfs_master_port }}'
+  when: seaweedfs_bucket + "\t" not in seaweedfs_bucket_probe.stdout
+  changed_when: true
+
+- name: Probe the bucket's versioning state
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm --network container:{{ seaweedfs_container_name }}
+      -e AWS_ACCESS_KEY_ID={{ seaweedfs_admin_access_key }}
+      -e AWS_SECRET_ACCESS_KEY
+      -e AWS_DEFAULT_REGION={{ seaweedfs_region }}
+      {{ seaweedfs_awscli_image }}
+      --endpoint-url http://127.0.0.1:{{ seaweedfs_s3_port }}
+      s3api get-bucket-versioning --bucket {{ seaweedfs_bucket }}
+  # Bare `-e VAR` inherits from this task's environment: `command` runs WITHOUT a shell, so a
+  # `| quote` filter would inject literal quotes into the secret (verified: SignatureDoesNotMatch),
+  # and it also keeps the secret off the command line where `ps` could see it.
+  environment:
+    AWS_SECRET_ACCESS_KEY: "{{ seaweedfs_admin_secret }}"
+  register: seaweedfs_ver_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  no_log: true
+
+# An unset/suspended bucket returns empty output, so "Enabled" not being present is the gate.
+- name: Enable object versioning
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm --network container:{{ seaweedfs_container_name }}
+      -e AWS_ACCESS_KEY_ID={{ seaweedfs_admin_access_key }}
+      -e AWS_SECRET_ACCESS_KEY
+      -e AWS_DEFAULT_REGION={{ seaweedfs_region }}
+      {{ seaweedfs_awscli_image }}
+      --endpoint-url http://127.0.0.1:{{ seaweedfs_s3_port }}
+      s3api put-bucket-versioning --bucket {{ seaweedfs_bucket }}
+      --versioning-configuration Status=Enabled
+  environment:
+    AWS_SECRET_ACCESS_KEY: "{{ seaweedfs_admin_secret }}"
+  when:
+    - seaweedfs_versioning | bool
+    - "'Enabled' not in seaweedfs_ver_probe.stdout"
+  changed_when: true
+  no_log: true
+
+- name: Ensure the app env-file directory exists (root-only)
+  ansible.builtin.file:
+    path: "{{ seaweedfs_env_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Write the app-facing S3 settings (0600, root-only)
+  ansible.builtin.template:
+    src: objstore.env.j2
+    dest: "{{ seaweedfs_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Summary
+  ansible.builtin.debug:
+    msg:
+      - "SeaweedFS '{{ seaweedfs_container_name }}' is up on private net
+         '{{ seaweedfs_network }}'{{ ' (no host port)' if not seaweedfs_publish_ports else '' }}."
+      - "Also joined: {{ seaweedfs_shared_networks | default([]) | join(', ') }}"
+      - "Bucket '{{ seaweedfs_bucket }}': versioning={{ seaweedfs_versioning }},
+         anonymous read={{ seaweedfs_anonymous_read }} (Read only — LIST/PUT/DELETE denied)."
+      - "App key '{{ seaweedfs_app_access_key }}' is scoped to that bucket only — NEVER give the
+         app the admin key."
+      - "App S3 settings written to {{ seaweedfs_env_file }} on the VPS (root-only)."
+      - "Public exposure (s3.<domain>) + data migration from the old instance are separate steps
+         — issue #96."

@@ -70,3 +70,14 @@ Provision MongoDB with an **Ansible `mongodb` role** run during `make converge`:
   capability the app doesn't use yet; documented as an easy toggle.
 - **Managed Atlas:** still the escape hatch per ADR 0007 if ops/HA burden grows — the
   `MONGODB_URI` abstraction keeps the switch low-friction.
+
+## Deviation (2026-08-03) — production data stayed external
+
+At the Vercel cutover, **production** was pointed at the **external MongoDB carried over from
+Vercel** (db `FabLab`) instead of the VPS instance this ADR provisions. Accepted to avoid an
+export/restore window and the risk of losing writes; staging continues to use the VPS instance as
+decided here.
+
+Consequences: production data is **not** covered by `docs/runbooks/backup-restore.md` (that drills the
+VPS instance), and the provider's own backup posture must be verified separately. Migrating
+production onto the VPS instance is tracked as a follow-up.

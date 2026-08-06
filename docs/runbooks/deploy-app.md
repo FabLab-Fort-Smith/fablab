@@ -8,6 +8,11 @@ summary: Create/update The-Lab's Coolify application from code (reconcile.sh ove
 
 # Runbook: Deploy the app (Coolify) from code
 
+> **Multi-environment:** `reconcile.sh` takes `--env staging|production` (default `staging`).
+> Each environment has its own app, branch, domain, and **its own secret file** — `../.env` for
+> staging, `../.env.production` for production. A production WRITE additionally requires
+> `--confirm-production`. Promotion itself: `promote-staging-to-prod.md`.
+>
 > Repeatable, API-driven creation/update of the **the-lab-staging** application via
 > `lab-stack/coolify/reconcile.sh`. Config-as-code — the desired state lives in the script; no
 > dashboard clicking. Rules: `@rules/workflow-release.md`, `@rules/topic-config-environments.md`.
@@ -68,7 +73,9 @@ summary: Create/update The-Lab's Coolify application from code (reconcile.sh ove
 
 ## Rollback / abort
 - A bad deploy: see `redeploy-rollback.md` (redeploy a previous commit; DB migrations expand/contract).
-- Ultimate migration rollback: DNS stays such that the apex is on **Vercel** (ADR 0006) — production
+- ~~Ultimate migration rollback: DNS to Vercel~~ — **no longer available.** The Vercel project was
+  deleted at the 2026-08-03 cutover; rollback is now a previous **Coolify** deployment
+  (`redeploy-rollback.md`). Historical note: production
   is unaffected by staging.
 
 ## Related

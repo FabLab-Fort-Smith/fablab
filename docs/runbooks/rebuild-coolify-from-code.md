@@ -28,7 +28,8 @@ summary: Stand the whole platform + app back up from the repo after a wipe or on
 ## Steps
 1. **Platform** (`bootstrap-vps.md`): order/rebuild VPS → `make setup` → `make converge` (harden,
    docker, mongodb, coolify, backups, tailscale). MongoDB app user/URI regenerate from `.env`.
-2. **DNS**: `make dns` (idempotent; apex stays on Vercel).
+2. **DNS**: `make dns` (idempotent). NOTE: the apex + `www` now point at this VPS (cutover
+   2026-08-03) — a rebuild must restore those records too, not just the staging host.
 3. **Coolify one-time UI** (`deploy-app.md` prereqs + ADR 0012):
    - Create admin + **MFA**; disable registration + telemetry; auto-update off.
    - Set **instance domain** = `https://deploy.fablabfortsmith.org`; Cloudflare **Full (strict)**.
@@ -53,7 +54,8 @@ summary: Stand the whole platform + app back up from the repo after a wipe or on
 ## Verification
 - `deploy-app.md` verification passes (staging serves; push-to-deploy works).
 - Coolify reachable over the tailnet (`http://fablab-prod:8000`) and, via Access, at the public
-  domain. Apex still on Vercel.
+  domain. **The apex + `www` are production on this VPS** — rebuild `the-lab-production` as well
+  (`reconcile.sh --env production --confirm-production`); see promote-staging-to-prod.md.
 
 ## Related
 - `bootstrap-vps.md`, `deploy-app.md`, `redeploy-rollback.md`, `backup-restore.md`,

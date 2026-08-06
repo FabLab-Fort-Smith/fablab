@@ -21,7 +21,6 @@ const DISMISS_KEY = 'nudge.googleOnly.dismissed';
  */
 export default function AuthMethodsNudge() {
     const [show, setShow] = useState(false);
-    const [retiresOn, setRetiresOn] = useState(null);
     const [linking, setLinking] = useState(false);
     const [linkError, setLinkError] = useState(false);
 
@@ -35,10 +34,7 @@ export default function AuthMethodsNudge() {
                 const res = await fetch('/api/v1/users/auth-methods');
                 if (!res.ok) return;                  // unauthenticated or error: stay silent
                 const data = await res.json();
-                if (!cancelled && data?.googleOnly) {
-                    setRetiresOn(data.googleRetiresOn || null);
-                    setShow(true);
-                }
+                if (!cancelled && data?.googleOnly) setShow(true);
             } catch { /* offline / transient — the nudge is advisory, never block the app */ }
         })();
         return () => { cancelled = true; };
@@ -95,11 +91,11 @@ export default function AuthMethodsNudge() {
                     id="google-retire-heading"
                     style={{ margin: 0, fontSize: 12.5, color: 'var(--amber)', fontWeight: 700 }}
                 >
-                    Google sign-in is being retired{retiresOn ? ` on ${retiresOn}` : ''}
+                    Google sign-in is no longer available
                 </h2>
                 <p style={{ margin: '4px 0 0', color: 'var(--text-mid)' }}>
-                    Google is currently your only way to sign in. Set a password or link Discord now
-                    to keep access to your account.
+                    Google was your only way to sign in. Set a password now — or link Discord — so you
+                    can keep getting into your account.
                 </p>
                 {linkError && (
                     <p style={{ margin: '6px 0 0', color: 'var(--red)' }}>

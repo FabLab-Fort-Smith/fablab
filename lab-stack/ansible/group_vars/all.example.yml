@@ -99,10 +99,27 @@ coolify_install: true
 # Root + app passwords are AUTO-GENERATED into ../.env (`make secrets`) and read at converge time
 # — NOT here (@rules/workflow-secrets.md). These are non-secret knobs only.
 mongodb_manage: true
-mongodb_image: "mongo:7.0"              # pin to a digest before prod (@rules/std-supplychain.md)
+mongodb_image: "mongo:8.0"              # matches the running instance (8.0.26); a MAJOR DOWNGRADE
+                                        # (8 -> 7) will NOT start on 8.0 data files, so never lower
+                                        # this without a dump/restore. Pin to a digest before prod
+                                        # (@rules/std-supplychain.md).
 mongodb_app_db: "thelab"
 mongodb_app_user: "thelab_app"
 mongodb_network: "fablab"              # attach the Coolify app to this docker network
+
+# --- Object storage (SeaweedFS — issue #96: replaces the external s3.crittercodes.dev instance) ---
+# Secret keys are AUTO-GENERATED into ../.env (`make secrets`) and read at converge time — NOT here.
+# MinIO was the first choice but its community edition was ARCHIVED read-only on 2026-04-25 (no
+# security patches); Garage was rejected (no bucket policies -> no anonymous object read, and no
+# versioning). SeaweedFS is Apache-2.0 and maintained.
+seaweedfs_manage: true
+seaweedfs_image: "chrislusf/seaweedfs:4.41"   # pin to a digest before prod
+seaweedfs_bucket: "fablab-bounties"
+seaweedfs_app_access_key: "fablab-app"        # bucket-scoped; the app NEVER gets the admin key
+seaweedfs_versioning: true                    # a leaked app key can then only add delete-markers
+seaweedfs_anonymous_read: true                # Read only — browsers load image URLs directly
+seaweedfs_shared_networks: ["coolify"]        # so Coolify apps resolve `fablab-s3` by name
+seaweedfs_publish_ports: false                # private network only; public s3.<domain> is later
 
 # --- Backups (ADR 0007/0010: MongoDB on the VPS = our responsibility) ---
 backups_enabled: true
