@@ -1,0 +1,55 @@
+# Managed by Ansible (lab-stack/ansible/roles/seaweedfs). Self-hosted S3-compatible object storage,
+# PRIVATE network only by default — NO published host port (@rules/topic-database.md,
+# @rules/std-zero-trust.md). Public exposure is a separate, gated step (issue #96).
+name: fablab-s3
+services:
+  seaweedfs:
+    image: "{{ seaweedfs_image }}"
+    container_name: "{{ seaweedfs_container_name }}"
+    restart: unless-stopped
+    # Single-node "server" mode runs master + volume + filer + the S3 gateway in one process,
+    # which is what an 8 GB single-VPS deployment wants (no cluster to operate).
+    command:
+      - "server"
+      - "-dir=/data"
+      - "-s3"
+      - "-s3.port={{ seaweedfs_s3_port }}"
+      - "-s3.config=/etc/seaweedfs/s3.json"
+      - "-master.volumeSizeLimitMB={{ seaweedfs_volume_size_limit_mb }}"
+      - "-metricsPort=0"
+    volumes:
+      - "{{ seaweedfs_volume }}:/data"
+      # Identities/credentials. Read-only to the container; 0600 root-only on the host.
+      - "{{ seaweedfs_dir }}/s3.json:/etc/seaweedfs/s3.json:ro"
+{% if seaweedfs_publish_ports %}
+    ports:
+      - "127.0.0.1:{{ seaweedfs_s3_port }}:{{ seaweedfs_s3_port }}"
+      - "127.0.0.1:{{ seaweedfs_filer_port }}:{{ seaweedfs_filer_port }}"
+{% endif %}
+    networks:
+      - fablab
+{% for net in seaweedfs_shared_networks | default([]) %}
+      - shared_{{ loop.index }}
+{% endfor %}
+    healthcheck:
+      # /status, not the S3 root: the root is ListBuckets and returns 403 to the anonymous identity,
+      # which would leave a healthy container permanently "unhealthy".
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:{{ seaweedfs_s3_port }}/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  {{ seaweedfs_volume }}:
+    name: "{{ seaweedfs_volume }}"
+
+networks:
+  fablab:
+    name: "{{ seaweedfs_network }}"
+{% for net in seaweedfs_shared_networks | default([]) %}
+  # Owned by Coolify — declared external so compose joins it without managing it.
+  shared_{{ loop.index }}:
+    name: "{{ net }}"
+    external: true
+{% endfor %}

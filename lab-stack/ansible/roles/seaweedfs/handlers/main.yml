@@ -1,0 +1,12 @@
+---
+# SeaweedFS reads -s3.config only at startup: a changed/added identity is ignored until the
+# container restarts (verified on 4.41 — a new key was still rejected 26s after the file changed,
+# and worked immediately after a restart). Restart is therefore a correctness requirement when
+# identities change, and costs a few seconds of upload downtime.
+- name: Restart seaweedfs
+  ansible.builtin.command:
+    cmd: docker restart {{ seaweedfs_container_name }}
+  changed_when: true
+  # On a first converge the container does not exist yet; compose starts it with the new config
+  # anyway, so a missing container here is not an error.
+  failed_when: false
