@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import matter from "gray-matter";
+import yaml from "js-yaml";
 import MarkdownIt from "markdown-it";
 import taskLists from "markdown-it-task-lists";
 
@@ -13,6 +13,25 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RUNBOOKS_DIR = path.resolve(__dirname, ".."); // docs/runbooks
 const OUT_DIR = path.join(__dirname, "dist");
 const SKIP = new Set(["README.md"]);
+
+// Parse YAML front matter. Replaces gray-matter, which was dropped because it is unmaintained
+// (4.0.3, 2019) and pinned js-yaml ^3, whose quadratic-CPU `!!omap` flaw (GHSA-5p4m-2wfm-xmqj /
+// CVE-2026-59870) is NOT fixed in the 3.x line. gray-matter cannot be moved to js-yaml 4 either:
+// it calls the removed `yaml.safeLoad` at import time. js-yaml 4's `load` is the safe loader (no
+// arbitrary type construction), so this is also a small attack-surface reduction, not just a
+// version bump.
+const FRONT_MATTER = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+function matter(raw) {
+  const m = raw.match(FRONT_MATTER);
+  if (!m) return { data: {}, content: raw };
+  const data = yaml.load(m[1]) ?? {};
+  // A scalar/array front matter block is malformed for our purposes; treat it as absent rather
+  // than letting `data.title` blow up downstream (fail closed on the data, not the build).
+  return {
+    data: typeof data === "object" && !Array.isArray(data) ? data : {},
+    content: raw.slice(m[0].length),
+  };
+}
 
 // Category display order for the catalog; anything else falls under "Other".
 const CATEGORY_ORDER = [
