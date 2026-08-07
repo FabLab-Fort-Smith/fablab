@@ -67,8 +67,10 @@ if [ -z "$ARCHIVE" ]; then
     echo "   NOTE: taking a fresh transient dump instead — this drill exercises the DATABASE"
     echo "   NOTE: round-trip only, NOT the encrypted-artifact chain (run the off-box drill for that)."
     ARCHIVE="$(mktemp /tmp/drill-XXXXXX.archive.gz)"; CLEANUP_ARCHIVE="$ARCHIVE"
-    docker run --rm --network "$NET" -e U="$RURI" "$IMG" \
-      sh -c 'mongodump --uri="$U" --archive --gzip' >"$ARCHIVE" 2>/dev/null \
+    # --db is ESSENTIAL: the root URI has no database, so without it mongodump captures the
+    # WHOLE INSTANCE, and restoring that archive splatters every other database on the box.
+    docker run --rm --network "$NET" -e U="$RURI" -e SDB="$SRC_DB" "$IMG" \
+      sh -c 'mongodump --uri="$U" --db="$SDB" --archive --gzip' >"$ARCHIVE" 2>/dev/null \
       || { echo "ERROR: fresh dump for the drill failed"; exit 1; }
   fi
 fi
@@ -82,7 +84,7 @@ SRC="$(msh "$(count_js "$SRC_DB")")"; echo "   $SRC"
 
 echo "== 3. restore archive into throwaway db '$DRILL_DB' =="
 docker run --rm -i --network "$NET" -e U="$RURI" "$IMG" \
-  sh -c 'mongorestore --uri="$U" --archive --gzip --drop --nsFrom="'"$SRC_DB"'.*" --nsTo="'"$DRILL_DB"'.*"' \
+  sh -c 'mongorestore --uri="$U" --archive --gzip --drop --nsInclude="'"$SRC_DB"'.*" --nsFrom="'"$SRC_DB"'.*" --nsTo="'"$DRILL_DB"'.*"' \
   < "$ARCHIVE" 2>&1 | tail -2 | sed 's/^/   /'
 
 echo "== 4. verify restored counts ($DRILL_DB) =="
