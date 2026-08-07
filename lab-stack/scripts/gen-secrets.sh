@@ -39,7 +39,8 @@ gen() {  # gen KEY -> a fresh value suited to KEY
     AUTH_SECRET|JWT_SECRET)                 rand_b64 48 ;;
     INTERNAL_API_SECRET|SOCKET_API_SECRET)  rand_b64 32 ;;
     ENCRYPTION_KEY)                         rand_b64 24 ;;   # 24 bytes -> 32 base64 chars == 32 bytes (env.js)
-    MONGO_ROOT_PASSWORD|MONGO_APP_PASSWORD) rand_alnum 32 ;; # URI-safe for MONGODB_URI
+    MONGO_ROOT_PASSWORD|MONGO_APP_PASSWORD|MONGO_APP_PASSWORD_PRODUCTION|MONGO_APP_PASSWORD_STAGING)
+      rand_alnum 32 ;;                                    # URI-safe for MONGODB_URI (no %-encoding)
     OBJSTORE_ADMIN_SECRET_KEY|OBJSTORE_APP_SECRET_KEY|OBJSTORE_BACKUP_SECRET_KEY) rand_alnum 40 ;; # S3 secret keys: alnum
                                              # only — they land in an S3 client env + a JSON config
     *)                                      rand_b64 32 ;;

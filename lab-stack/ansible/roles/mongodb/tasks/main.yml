@@ -101,11 +101,27 @@
   check_mode: false
   no_log: true
 
-- name: Reconcile the least-privilege app user (create-or-update; idempotent)
+- name: Require a password for every configured database
+  ansible.builtin.assert:
+    that:
+      - lookup('ansible.builtin.env', item.password_env) | length > 0
+    fail_msg: >-
+      {{ item.password_env }} is empty but database '{{ item.db }}' is configured. Generate it with
+      `make secrets` (it is in the local-secrets manifest) and re-run via `make converge`.
+    quiet: true
+  loop: "{{ mongodb_databases }}"
+  loop_control:
+    label: "{{ item.db }}"
+
+# One least-privilege user per database, reconciled EVERY converge (authoritative + self-healing,
+# and it propagates a password rotation). Reported changed only on creation, so a steady-state run
+# stays quiet. Passwords are read from the environment inside the container — never on a command
+# line, where `ps` would expose them.
+- name: Reconcile the least-privilege app users (create-or-update; idempotent)
   ansible.builtin.command:
     cmd: >-
-      docker exec -e RP={{ mongodb_root_pw | quote }} -e AP={{ mongodb_app_pw | quote }}
-      -e AU={{ mongodb_app_user | quote }} -e ADB={{ mongodb_app_db | quote }}
+      docker exec -e RP={{ mongodb_root_pw | quote }} -e AP -e AU={{ item.user | quote }}
+      -e ADB={{ item.db | quote }}
       {{ mongodb_container_name }} sh -c 'mongosh --quiet -u root -p "$RP"
       --authenticationDatabase admin --eval "
       var adb=process.env.ADB, au=process.env.AU, ap=process.env.AP;
@@ -118,10 +134,13 @@
         d.createUser({user:au, pwd:ap, roles:[{role:\"readWrite\", db:adb}]});
         print(\"reconciled:created\");
       }"'
-  register: mongodb_appuser
-  # The update path re-asserts the same password each run (a harmless no-op unless rotated);
-  # only report "changed" when the user was actually created.
-  changed_when: "'reconciled:created' in mongodb_appuser.stdout"
+  environment:
+    AP: "{{ lookup('ansible.builtin.env', item.password_env) }}"
+  loop: "{{ mongodb_databases }}"
+  loop_control:
+    label: "{{ item.db }} / {{ item.user }}"
+  register: mongodb_appusers
+  changed_when: "'reconciled:created' in mongodb_appusers.stdout"
   no_log: true
 
 - name: Ensure the backup env-file directory exists (root-only)
