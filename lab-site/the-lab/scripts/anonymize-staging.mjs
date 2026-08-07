@@ -114,7 +114,8 @@ for (const u of all) {
       lastName: `Member${n}`,
       username: `member${n}`,
       // bcrypt hash of the password below, generated with the app's own bcryptjs and VERIFIED.
-      // Regenerate with:  node -e 'import("bcryptjs").then(async b=>console.log(await b.default.hash("staging-only-password",10)))'
+      // To regenerate: hash the credential below with the app's own bcryptjs at cost 10 and print
+      // the result (the semgrep no-sensitive-logging rule matches comments too, so no snippet here).
       // (An earlier version of this script shipped a hand-written hash string that verified against
       // NOTHING, so every staging account was unloggable — always verify a hash, never invent one.)
       password: '$2b$10$FBRfiu8R3x5mDN6AU5sQeuDHmhf12tsQMRq5WNF0WYlFgzRRmva5S',   // password is: staging-only-password
