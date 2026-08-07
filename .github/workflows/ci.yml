@@ -98,7 +98,7 @@ jobs:
         working-directory: lab-site/the-lab
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: lts/*
           cache: npm
@@ -123,7 +123,7 @@ jobs:
         working-directory: docs/runbooks/site
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: lts/*
           cache: npm
