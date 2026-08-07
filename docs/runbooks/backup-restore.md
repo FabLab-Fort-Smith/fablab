@@ -22,10 +22,12 @@ summary: Back up the self-hosted MongoDB and run a strict, automated restore dri
 ## Prerequisites & access
 - SSH to the VPS as a sudo-capable user (tailnet `fablab-prod` or `107.173.52.204`); the deploy
   key. Root reads `/opt/fablab/mongodb/mongo.env` (root creds) and `/etc/fablab/mongo.env` (app URI).
-- MongoDB runs as container `fablab-mongo` (image `mongo:7.0`) on the private `fablab` docker
+- MongoDB runs as container `fablab-mongo` (image **`mongo:8.0`**) on the private `fablab` docker
   network — **no published host port**; all access is via a container on that network.
-- Backups: `/var/backups/fablab/mongo-<UTC>.archive.gz` (gzip `mongodump --archive`), cron 03:00 UTC,
-  7-day local retention. Script: `/usr/local/sbin/fablab-backup-mongo`.
+- Backups: `/var/backups/fablab/mongo-<UTC>.archive.gz.age` — **age-encrypted since 2026-08-07**;
+  cron 03:00 UTC, 7-day local retention, mode 0600. Script: `/usr/local/sbin/fablab-backup-mongo`.
+- **Decrypting anything requires the age identity from the vault** (below). The VPS deliberately
+  cannot decrypt its own backups.
 
 ## How the backup works
 `/usr/local/sbin/fablab-backup-mongo` runs an ephemeral `mongo:7.0` container on the `fablab`
@@ -48,9 +50,20 @@ script + a converge task **warn loudly**. Two independent controls, by design:
   (`--keep-daily/weekly/monthly --prune`).
 
 ### Enabling encryption + off-box (one-time, deliberate)
-1. **age identity (offline, on your workstation — NOT the box):** `age-keygen -o fablab-backup.key`
-   → note the `# public key: age1…` line. Store `fablab-backup.key` **securely offline** (it's the
-   only way to decrypt backups). Put the **public** key in `../.env` `BACKUP_AGE_RECIPIENT=age1…`.
+1. **age identity (generated OFF the box — never on the VPS):**
+   `age-keygen -o fablab-backup.agekey` → note the `Public key: age1…` line. Put the **public** key
+   in `../.env` as `BACKUP_AGE_RECIPIENT=age1…`, then store the private key in the vault
+   **automatically, with read-back verification**:
+   ```bash
+   cd lab-stack
+   BW_PASSWORD_FILE=<0600 file> bash scripts/secrets-push.sh \
+     --item "FabLab backup age identity" \
+     --attach fablab-backup.agekey --field AGE_PUBLIC_RECIPIENT=@recipient.pub
+   shred -u fablab-backup.agekey     # only after it reports "verified attachment"
+   ```
+   **Current custody:** vault item **"FabLab backup age identity"** (Infrastructure collection),
+   attachment `fablab-backup.agekey`. Lose it and every backup is permanently undecryptable, so it
+   must never live on `fablab-prod` or inside the repo it protects.
 2. **restic off-box repo:** create a **backup-only** S3 bucket + a least-privilege key pair (NOT
    the app's S3 creds). Set in `../.env`: `RESTIC_REPOSITORY=s3:<endpoint>/<bucket>/fablab-mongo`,
    `RESTIC_PASSWORD=<strong; store in the shared vault, held by ≥2 custodians — unrecoverable if lost>`,
@@ -59,7 +72,7 @@ script + a converge task **warn loudly**. Two independent controls, by design:
    **initializes the restic repo** (idempotent). Then run `sudo /usr/local/sbin/fablab-backup-mongo`
    once and confirm `encrypted (age)` + `shipped off-box (restic)` in the output.
 
-### Decrypt / restore from off-box (restic)
+### Decrypt / restore from off-box (restic) — applies on **meerkat**, once pull is live
 ```bash
 # On the box (or anywhere restic + the repo creds + the age identity are available):
 export RESTIC_REPOSITORY=… RESTIC_PASSWORD=… AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=…
@@ -69,18 +82,81 @@ age -d -i fablab-backup.key -o mongo.archive.gz /tmp/restore/**/mongo-*.archive.
 # …then mongorestore the .archive.gz as in "Real restore" below.
 ```
 
-## Restore drill (do this on a schedule)
-Automated + strict — fails loudly on any auth/backup/restore error, restores into a throwaway DB,
-verifies counts, and drops it:
+## Restore drills — TWO of them, they prove different things
+
+### A. Database round-trip (on the box, scripted)
+```bash
+# from lab-stack/ with SSH + become:
+ansible lab_vps -m script -a scripts/mongo-restore-drill.sh --become
+# or on the box:  sudo /path/to/mongo-restore-drill.sh
+```
+Takes a fresh backup, restores into throwaway `thelab_restore_drill`, compares collection/doc
+counts, drops it. Expect `== DRILL PASSED … ==`; non-zero exit or `DRILL FAILED` means the backup
+does not round-trip.
+
+**What it does NOT prove:** the encrypted-artifact chain. The identity is not on the box, so with
+only `.age` artifacts present the script takes a **fresh transient dump** (shredded on exit) and
+says so. To exercise decryption on the box, hand it an identity explicitly:
+```bash
+sudo AGE_IDENTITY_FILE=/path/to/fablab-backup.agekey /path/to/mongo-restore-drill.sh
+```
+Only do that with a temporary copy, and shred it afterwards.
+
+### B. VPS-loss drill (off the box) — the one that proves recoverability
+Simulates *"the VPS is gone; I have the vault and one artifact."* Nothing here runs on the VPS
+except reading the ciphertext, and the identity never touches it.
 
 ```bash
-# From lab-stack/ with SSH + become configured:
-ansible lab_vps -m script -a scripts/mongo-restore-drill.sh --become
-# …or on the box directly:
-sudo /path/to/mongo-restore-drill.sh
+# 1. baseline: live counts, for comparison afterwards
+ssh fablab-prod 'sudo bash -c ". /etc/fablab/mongo.env; \
+  docker run --rm --network fablab mongo:8.0 mongosh \"$MONGODB_URI\" --quiet --eval \
+  \"db.getCollectionNames().sort().forEach(c=>print(c+\\\" \\\"+db.getCollection(c).countDocuments()))\""'
+
+# 2. copy the newest ENCRYPTED artifact (ciphertext — safe to move). NOTE the sudo sh -c:
+#    the glob must expand AS ROOT, or it silently returns nothing.
+NEWEST=$(ssh fablab-prod 'sudo sh -c "ls -t /var/backups/fablab/*.age | head -1"')
+ssh fablab-prod "sudo sh -c \"cat '$NEWEST'\"" > artifact.age
+
+# 3. fetch the identity from the vault (one unlock), 0600
+bw get attachment fablab-backup.agekey \
+   --itemid "$(bw list items --search 'FabLab backup age identity' | jq -r '.[0].id')" \
+   --output identity.agekey && chmod 600 identity.agekey
+
+# 4. decrypt + restore into a THROWAWAY instance, never a live namespace
+age -d -i identity.agekey -o restored.archive.gz artifact.age
+docker run -d --name drill-mongo -e MONGO_INITDB_ROOT_USERNAME=drill \
+  -e MONGO_INITDB_ROOT_PASSWORD=<temp> mongo:7.0      # see the kernel note below
+docker cp restored.archive.gz drill-mongo:/tmp/r.gz
+docker exec drill-mongo mongorestore -u drill -p <temp> --authenticationDatabase admin \
+  --archive=/tmp/r.gz --gzip --nsFrom 'thelab.*' --nsTo 'drill.*'
+
+# 5. verify COUNTS and CONTENT (counts alone can hide corruption)
+#    digest both sides over users(_id, email) and compare — no PII is printed:
+#    rows = db.users.find({},{_id:1,email:1}).sort({_id:1}) -> "id|email" lines | sha256sum
+
+# 6. teardown: drop the db, remove the container, shred identity + decrypted dump
 ```
-Expect `== DRILL PASSED: 'thelab' backs up and restores correctly (…) ==`. A non-zero exit or
-`DRILL FAILED` means the backup does not round-trip — investigate before relying on it.
+
+> **⚠ Kernel gotcha:** `mongo:8.0` **refuses to start on Linux kernel ≥ 6.19**
+> (upstream guard, SERVER-121912) — which includes current Parrot/Debian workstations. Use
+> **`mongo:7.0`** for the restore container; it reads an 8.0-produced archive fine (verified).
+> The VPS itself is on 6.8, so `mongo:8.0` is correct *there*.
+
+## Off-box copies: PULL, not push (decided 2026-08-07)
+
+`RESTIC_REPOSITORY` on the VPS is intentionally **unset**, so the backup script's
+`WARNING: RESTIC_REPOSITORY unset — backup is LOCAL-ONLY` is **expected** until the puller exists.
+
+Off-box is done by **meerkat pulling** age-encrypted artifacts from the VPS into its own restic
+repo, rather than the VPS pushing. Why: a push-based repo is deletable by the machine it protects —
+ransomware on the VPS holds the restic password and can `restic forget --prune` the only offsite
+copy. With pull, the VPS holds **no credential into the lab**, no route to the lab LAN is needed,
+and the puller only ever sees ciphertext.
+
+**Status: not live.** Blocked on meerkat joining the `fablab-private` ZeroTier network (its LAN is
+not routed) and on a public key for a restricted `backup-pull` account
+(`restrict,from="10.121.16.0/24",command="rrsync -ro /var/backups/fablab"`). Until then
+**every copy lives on one VPS** — a VPS loss loses all backup history. Tracked: #90.
 
 ## Real restore (recovery)
 1. Pick the archive: `ls -t /var/backups/fablab/mongo-*.archive.gz` → choose the point-in-time.
@@ -113,4 +189,21 @@ first, empty-volume boot). Fix: **re-converge** — the `mongodb` role now recon
   `lab-stack/ansible/roles/backups/`, `lab-stack/ansible/roles/mongodb/`.
 
 ---
-_Last validated: 2026-07-12 (restore drill — passed; caught + fixed a missing app user). Owner: platform._
+_Last validated: **2026-08-07** — both drills passed. Owner: platform._
+
+## Drill record
+
+| Date | Drill | Result |
+|---|---|---|
+| 2026-08-07 | **B — VPS-loss (off-box)** | **PASSED.** Restored off the VPS using only the vaulted identity + one artifact: 1965 docs, 0 failures; **18/18 collections matched** live counts; `users` content digest **identical** (`44befb0d…`) — faithful, not just count-equal; emails still encrypted at rest. **Achieved RTO 4 min 01 s** (vault unlock → verified restore). |
+| 2026-08-07 | **A — on-box round-trip** | **PASSED** (18 collections, 1965 docs). Enabling age encryption had **broken** this script — it looked for plaintext `mongo-*.archive.gz`, which no longer exists, and failed with `no backup archive`. Fixed to handle `.age` artifacts, plus its image bumped `mongo:7.0`→`mongo:8.0` to match the server. |
+| 2026-07-12 | on-box round-trip | passed; caught + fixed a missing app user |
+
+**One-time remediation, 2026-08-07:** 8 nightly dumps dating back to 2026-07-31 were sitting
+**plaintext** on the VPS (staging's DB is seeded from a prod copy, so that was real member data at
+rest unencrypted). All were encrypted in place, the plaintext shredded, and modes normalised to
+0600. Verified afterwards: 0 plaintext dumps remain, 9 encrypted artifacts, and the newest cannot
+be decrypted without the vaulted identity.
+
+**Still not covered by any backup:** production MongoDB (external host — the real member data), the
+SeaweedFS object bucket, and Coolify's own configuration. Tracked: #90.

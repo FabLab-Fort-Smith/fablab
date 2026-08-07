@@ -11,9 +11,10 @@
 #   # or, from a workstation with SSH + become:
 #   ansible lab_vps -m script -a scripts/mongo-restore-drill.sh --become
 set -euo pipefail
+trap '[ -n "${CLEANUP_ARCHIVE:-}" ] && shred -u "$CLEANUP_ARCHIVE" 2>/dev/null || true' EXIT
 
 NET=fablab
-IMG=mongo:7.0
+IMG=mongo:8.0        # match the running server (the mongodb role pins mongo:8.0)
 CN=fablab-mongo
 BACKUP_DIR=/var/backups/fablab
 ROOT_ENV=/opt/fablab/mongodb/mongo.env      # root-only: MONGO_INITDB_ROOT_USERNAME/_PASSWORD
@@ -46,8 +47,32 @@ count_js() { printf 'var d=db.getSiblingDB("%s");var t=0;var n=d.getCollectionNa
 
 echo "== 1. take a fresh backup =="
 /usr/local/sbin/fablab-backup-mongo | sed 's/^/   /'
+# Artifacts are age-ENCRYPTED once BACKUP_AGE_RECIPIENT is set, and the decryption identity is
+# deliberately NOT on this box (it lives only in the vault — the box can encrypt, never decrypt).
+# So: prefer a plaintext archive if one exists; else decrypt a .age artifact when an identity is
+# explicitly supplied via AGE_IDENTITY_FILE; else fall back to a fresh transient dump so the
+# database round-trip is still exercised — and say plainly that the ENCRYPTED-artifact chain was
+# not, because that needs the off-box drill (see docs/runbooks/backup-restore.md).
+CLEANUP_ARCHIVE=""
 ARCHIVE="$(find "$BACKUP_DIR" -maxdepth 1 -name 'mongo-*.archive.gz' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
-[ -n "$ARCHIVE" ] || { echo "ERROR: no backup archive in $BACKUP_DIR"; exit 1; }
+if [ -z "$ARCHIVE" ]; then
+  ENC="$(find "$BACKUP_DIR" -maxdepth 1 -name 'mongo-*.archive.gz.age' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
+  if [ -n "$ENC" ] && [ -n "${AGE_IDENTITY_FILE:-}" ] && [ -f "${AGE_IDENTITY_FILE}" ]; then
+    ARCHIVE="$(mktemp /tmp/drill-XXXXXX.archive.gz)"; CLEANUP_ARCHIVE="$ARCHIVE"
+    age -d -i "$AGE_IDENTITY_FILE" -o "$ARCHIVE" "$ENC" \
+      || { echo "ERROR: could not decrypt $ENC with $AGE_IDENTITY_FILE"; exit 1; }
+    echo "   decrypted the newest ENCRYPTED artifact for this drill: $(basename "$ENC")"
+  elif [ -n "$ENC" ]; then
+    echo "   NOTE: only encrypted artifacts present and no AGE_IDENTITY_FILE given."
+    echo "   NOTE: taking a fresh transient dump instead — this drill exercises the DATABASE"
+    echo "   NOTE: round-trip only, NOT the encrypted-artifact chain (run the off-box drill for that)."
+    ARCHIVE="$(mktemp /tmp/drill-XXXXXX.archive.gz)"; CLEANUP_ARCHIVE="$ARCHIVE"
+    docker run --rm --network "$NET" -e U="$RURI" "$IMG" \
+      sh -c 'mongodump --uri="$U" --archive --gzip' >"$ARCHIVE" 2>/dev/null \
+      || { echo "ERROR: fresh dump for the drill failed"; exit 1; }
+  fi
+fi
+[ -n "$ARCHIVE" ] || { echo "ERROR: no backup archive (plaintext or .age) in $BACKUP_DIR"; exit 1; }
 SIZE="$(stat -c %s "$ARCHIVE")"
 echo "   archive: $ARCHIVE (${SIZE} bytes)"
 [ "$SIZE" -gt 0 ] || { echo "ERROR: archive is empty — the dump failed (check Mongo auth)"; exit 1; }
