@@ -81,6 +81,27 @@
 - name: Apply any pending identity change now
   ansible.builtin.meta: flush_handlers
 
+# Under `--check` the compose task above is skipped, so the container does not exist yet — but the
+# probes below carry `check_mode: false` (#93) and therefore run for real, which made
+# `converge-check` fail with "No such container". Gate them on the container actually running:
+#   - real converge  -> compose just started it -> true  -> probes run
+#   - check, no stack -> false -> probes skip (nothing to inspect, and saying so is honest)
+#   - check, existing -> true  -> probes still report real drift, read-only
+- name: Probe whether the storage container is running
+  ansible.builtin.command:
+    cmd: docker inspect -f {{ '{{.State.Running}}' }} {{ seaweedfs_container_name }}
+  register: seaweedfs_container_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Note when the object-storage reconcile is skipped (check mode, stack not yet created)
+  ansible.builtin.debug:
+    msg: >-
+      SKIPPING bucket/identity reconcile: container '{{ seaweedfs_container_name }}' does not exist
+      yet and this is --check. Re-run `make converge-check` after a real converge to see drift.
+  when: seaweedfs_container_probe.stdout | trim != 'true'
+
 # Probe /status, NOT the S3 root: the root path is ListBuckets, which returns 403 to the anonymous
 # identity (it only holds Read on one bucket). Probing the root made this wait for 30 attempts and
 # then fail on a perfectly healthy server.
@@ -93,6 +114,7 @@
   until: seaweedfs_ping.rc == 0
   retries: 30
   delay: 3
+  when: seaweedfs_container_probe.stdout | trim == 'true'
   changed_when: false
   # Read-only probe: also run under --check, else its output is empty and consumers fail
   # misleadingly (#93).
@@ -104,6 +126,7 @@
       docker exec {{ seaweedfs_container_name }} sh -c
       'echo s3.bucket.list | weed shell -master=localhost:{{ seaweedfs_master_port }}'
   register: seaweedfs_bucket_probe
+  when: seaweedfs_container_probe.stdout | trim == 'true'
   changed_when: false
   failed_when: false
   check_mode: false
@@ -118,7 +141,9 @@
       docker exec {{ seaweedfs_container_name }} sh -c
       'echo "s3.bucket.create -name {{ seaweedfs_bucket }}" |
       weed shell -master=localhost:{{ seaweedfs_master_port }}'
-  when: seaweedfs_bucket + "\t" not in seaweedfs_bucket_probe.stdout
+  when:
+    - seaweedfs_container_probe.stdout | trim == 'true'
+    - seaweedfs_bucket + "\t" not in (seaweedfs_bucket_probe.stdout | default(''))
   changed_when: true
 
 - name: Probe the bucket's versioning state
@@ -137,6 +162,7 @@
   environment:
     AWS_SECRET_ACCESS_KEY: "{{ seaweedfs_admin_secret }}"
   register: seaweedfs_ver_probe
+  when: seaweedfs_container_probe.stdout | trim == 'true'
   changed_when: false
   failed_when: false
   check_mode: false
@@ -158,7 +184,8 @@
     AWS_SECRET_ACCESS_KEY: "{{ seaweedfs_admin_secret }}"
   when:
     - seaweedfs_versioning | bool
-    - "'Enabled' not in seaweedfs_ver_probe.stdout"
+    - seaweedfs_container_probe.stdout | trim == 'true'
+    - "'Enabled' not in (seaweedfs_ver_probe.stdout | default(''))"
   changed_when: true
   no_log: true
 
