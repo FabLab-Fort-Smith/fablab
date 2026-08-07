@@ -7,11 +7,25 @@ services:
     image: "{{ seaweedfs_image }}"
     container_name: "{{ seaweedfs_container_name }}"
     restart: unless-stopped
+    # Run AS the image's non-root user (@rules/std-cis.md). This also makes the entrypoint skip its
+    # root branch, so it does not `su-exec seaweed` — which would reset supplementary groups and
+    # discard the group_add below. See the tasks file for the verified detail.
+    user: "{{ seaweedfs_run_uid }}:{{ seaweedfs_run_gid }}"
+    # Join the dedicated host group so the process can read the root-owned, group-readable
+    # s3.json without any host account being able to read the secret keys.
+    group_add:
+      - "{{ seaweedfs_config_gid }}"
     # Single-node "server" mode runs master + volume + filer + the S3 gateway in one process,
     # which is what an 8 GB single-VPS deployment wants (no cluster to operate).
     command:
       - "server"
       - "-dir=/data"
+      # Bind ALL container interfaces. SeaweedFS otherwise binds only its auto-detected first
+      # interface (+ localhost), which made it reachable on the `coolify` network but NOT on
+      # `fablab` — and which network wins is an ordering accident that a recreate could flip,
+      # silently cutting the app off from storage. Safe: no host ports are published, so this is
+      # only reachable from the two private docker networks.
+      - "-ip.bind=0.0.0.0"
       - "-s3"
       - "-s3.port={{ seaweedfs_s3_port }}"
       - "-s3.config=/etc/seaweedfs/s3.json"

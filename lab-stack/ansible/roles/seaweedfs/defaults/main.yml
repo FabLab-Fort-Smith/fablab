@@ -30,6 +30,16 @@ seaweedfs_network: "fablab"             # the private network this stack owns
 seaweedfs_shared_networks:
   - "coolify"
 
+# The container's process runs as the image's `seaweed` user (uid/gid 1000) — NOT root, even though
+# `docker exec` lands as root, which is what initially masked this. A 0600 root-only s3.json is
+# therefore UNREADABLE to it and the S3 gateway dies fatally (master/filer keep running, so the
+# container looks "Up" while port 8333 refuses). We do NOT fix that by chowning to uid 1000: on this
+# host uid/gid 1000 is a human account (`critter`), which would hand it the S3 secret keys. Instead
+# the config is root-owned, group-readable by a DEDICATED system group, and the container joins that
+# group via `group_add` — so in-container it stays non-root, and on the host only root can read it.
+seaweedfs_config_group: "fablab-s3"
+seaweedfs_config_gid: 3000
+
 seaweedfs_volume: "fablab_s3_data"
 seaweedfs_dir: "/opt/fablab/seaweedfs"  # compose project dir on the VPS (root-only)
 
