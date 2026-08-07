@@ -75,6 +75,9 @@ run() { ( cd "$T/lab-stack" && BW_CLI="$T/bw" BW_SESSION=FAKESESSION STATE="$STA
 fresh_state() { STATE="$T/state"; rm -rf "$STATE"; mkdir -p "$STATE"; : > "$STATE/calls"; }
 
 printf 'secrets-push.sh regression tests\n'
+# The `$` in this fixture is DELIBERATE: it proves a value containing shell metacharacters
+# survives round-trip and is never expanded or echoed. Single quotes are the point.
+# shellcheck disable=SC2016
 SECRET='s3cr3t-value-$do-not-print'
 printf '%s' "$SECRET" > "$T/key.bin"
 printf 'age1examplepublicrecipient\n' > "$T/pub.txt"
