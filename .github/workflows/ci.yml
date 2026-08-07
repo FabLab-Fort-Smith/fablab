@@ -2,9 +2,12 @@
 # security scans (secret/SAST/SCA/IaC) run repo-wide. Fail closed: a skipped/errored
 # security stage is a failure, not a pass.
 #
-# SUPPLY-CHAIN TODO (@rules/std-supplychain.md): pin all actions by commit SHA, not tag.
-# Tags are used here for first-draft readability; Dependabot (.github/dependabot.yml) tracks
-# updates — convert to SHA pins before this repo goes live.
+# SUPPLY-CHAIN (@rules/std-supplychain.md): every action is pinned by COMMIT SHA, with the tag
+# kept in a trailing comment for readability. A tag is mutable — the same `@v7` can be re-pointed
+# at different code after review — so a digest pin is what actually fixes what runs in CI.
+# Dependabot (.github/dependabot.yml, github-actions ecosystem, weekly) bumps the SHA + comment
+# together. When updating by hand, resolve the COMMIT sha (dereference annotated tags: an
+# annotated tag's own object sha is not a commit and Actions will reject it).
 name: CI
 
 "on":               # quoted to avoid the YAML 1.1 truthy quirk; GitHub reads it as the trigger key
@@ -27,7 +30,7 @@ jobs:
     outputs:
       app: ${{ steps.f.outputs.app }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - id: f
         name: Detect whether the app is present yet (lab-site/the-lab)
         run: |
@@ -42,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0          # full history so gitleaks scans all commits
       - name: gitleaks (OSS CLI — the GitHub Action needs a paid org license; the CLI does not)
@@ -56,8 +59,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
       - name: Install linters + Ansible collections
@@ -83,7 +86,7 @@ jobs:
       run:
         working-directory: lab-stack
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Run script unit tests (bash + openssl + ssh-keygen; no VPS)
         run: make test
 
@@ -97,8 +100,8 @@ jobs:
       run:
         working-directory: lab-site/the-lab
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: lts/*
           cache: npm
@@ -122,8 +125,8 @@ jobs:
       run:
         working-directory: docs/runbooks/site
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: lts/*
           cache: npm
@@ -143,8 +146,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
       - name: Install semgrep

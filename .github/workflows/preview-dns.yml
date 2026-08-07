@@ -25,7 +25,7 @@ jobs:
     # do NOT use `pull_request_target` (it would run with our secrets in an untrusted context).
     if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Upsert (open/sync) or delete (close) the preview DNS record
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}   # scoped Zone > DNS > Edit
