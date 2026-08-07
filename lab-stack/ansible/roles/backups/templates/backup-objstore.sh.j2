@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Managed by Ansible (lab-stack/ansible/roles/backups). Object-storage (SeaweedFS) backup:
+# sync the bucket's objects out over the S3 API -> tar -> encrypt (age) -> off-box/prune via the
+# shared library. Credentials come from /etc/fablab/objstore-backup.env at runtime (0600) and are
+# a READ-ONLY identity — a backup job never needs write or delete.
+#
+# Portability note: this backs up via the S3 API rather than tarring the docker volume, so the
+# artifact restores into ANY S3-compatible target, not just an identical SeaweedFS layout. The
+# trade-off is that it captures CURRENT object versions only — version history is not preserved.
+set -euo pipefail
+IFS=$'\n\t'
+
+# shellcheck source=/dev/null
+. /usr/local/lib/fablab-backup-lib.sh
+# shellcheck source=/dev/null
+if [ -f /etc/fablab/objstore-backup.env ]; then . /etc/fablab/objstore-backup.env; fi
+
+: "${S3_ENDPOINT:?S3_ENDPOINT must be set (roles/seaweedfs writes /etc/fablab/objstore-backup.env)}"
+: "${S3_BUCKET:?S3_BUCKET must be set}"
+: "${S3_ACCESS_KEY:?S3_ACCESS_KEY must be set}"
+: "${S3_SECRET_KEY:?S3_SECRET_KEY must be set}"
+
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+OUT="${BACKUP_DIR}/objstore-${S3_BUCKET}-${STAMP}.tar.gz"
+NET="{{ seaweedfs_network | default('fablab') }}"
+AWSCLI="{{ seaweedfs_awscli_image | default('amazon/aws-cli:latest') }}"
+
+umask 077
+mkdir -p "${BACKUP_DIR}"
+WORK="$(mktemp -d /tmp/objstore-backup-XXXXXX)"
+trap 'rm -rf "${WORK}"' EXIT
+
+# Sync the bucket into a scratch dir. The S3 API is reachable only on the private docker network,
+# so run the client there. The secret is passed via the environment, never on the command line.
+AWS_SECRET_ACCESS_KEY="${S3_SECRET_KEY}" \
+docker run --rm --network "${NET}" \
+  -e AWS_ACCESS_KEY_ID="${S3_ACCESS_KEY}" \
+  -e AWS_SECRET_ACCESS_KEY \
+  -e AWS_DEFAULT_REGION="${S3_REGION:-us-east-1}" \
+  -v "${WORK}:/dump" \
+  "${AWSCLI}" --endpoint-url "${S3_ENDPOINT}" \
+  s3 sync "s3://${S3_BUCKET}" /dump --only-show-errors
+OBJECTS="$(find "${WORK}" -type f | wc -l)"
+echo "synced ${OBJECTS} object(s) from s3://${S3_BUCKET}"
+
+# An EMPTY bucket is legitimate, so tar it anyway — but say so loudly, because "0 objects" is also
+# what a broken credential or wrong endpoint looks like.
+[ "${OBJECTS}" -gt 0 ] || echo "WARNING: 0 objects synced — empty bucket, or check the endpoint/credential." >&2
+
+tar -czf "${OUT}" -C "${WORK}" .
+finalize_artifact "${OUT}" objstore "objstore-${S3_BUCKET}-*.tar.gz*"

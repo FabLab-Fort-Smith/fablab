@@ -142,6 +142,40 @@ docker exec drill-mongo mongorestore -u drill -p <temp> --authenticationDatabase
 > **`mongo:7.0`** for the restore container; it reads an 8.0-produced archive fine (verified).
 > The VPS itself is on 6.8, so `mongo:8.0` is correct *there*.
 
+## What is backed up (three jobs, staggered)
+
+| Job | Cron (UTC) | Covers | Artifact |
+|---|---|---|---|
+| `fablab-backup-mongo` | 03:00 | staging `thelab` database | `mongo-<UTC>.archive.gz.age` |
+| `fablab-backup-objstore` | 03:20 | SeaweedFS bucket objects, via the **S3 API** | `objstore-<bucket>-<UTC>.tar.gz.age` |
+| `fablab-backup-coolify` | 03:40 | Coolify's Postgres DB + `/data/coolify` (config, `.env`, keys) | `coolify-<UTC>.tar.gz.age` |
+
+Staggered 20 minutes apart: three dumps at once contend for CPU/disk on one small VPS. Each is a
+separate cron entry, so one failing target cannot stop the others
+(`backups_objstore_enabled` / `backups_coolify_enabled` toggle them).
+
+Shared plumbing (encrypt → off-box → prune) lives in **`/usr/local/lib/fablab-backup-lib.sh`**
+(`finalize_artifact`), sourced by all three — one implementation to audit, and no chance of the
+targets drifting apart on encryption or retention.
+
+**Object storage uses a READ-ONLY S3 identity** (`fablab-backup`, `Read`+`List` on one bucket,
+credentials in `/etc/fablab/objstore-backup.env`, 0600). Verified: it can list, and **PUT/DELETE are
+denied** — a compromised backup cron cannot destroy the data it protects. Backing up over the S3 API
+(rather than tarring the docker volume) means the artifact restores into **any** S3-compatible
+target; the trade-off is that it captures **current object versions only**, not version history.
+
+> `objstore` reporting **`synced 0 object(s)`** is ambiguous by nature — an empty bucket looks
+> exactly like a broken credential or wrong endpoint, so the job warns. To tell them apart, put one
+> object with the app key and re-run: it should report `synced 1 object(s)`.
+
+**⚠ The Coolify artifact is the most sensitive one on the box:** `/data/coolify/source/.env` holds
+its DB password and app key, and the tree can hold deploy keys. It is only safe because age
+encryption is on — never disable `BACKUP_AGE_RECIPIENT` while this job is enabled.
+
+**Not yet drilled:** the objstore and coolify artifacts have been *produced and verified encrypted*,
+but a full restore drill for them (restore objects into a scratch bucket; restore the Coolify DB into
+a throwaway Postgres) has NOT been run. Mongo is the only target with a proven restore path.
+
 ## Off-box copies: PULL, not push (decided 2026-08-07)
 
 `RESTIC_REPOSITORY` on the VPS is intentionally **unset**, so the backup script's
