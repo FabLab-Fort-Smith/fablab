@@ -4,3 +4,12 @@
 MONGODB_URI=mongodb://{{ mongodb_app_user }}:{{ mongodb_app_pw | urlencode | regex_replace('/', '%2F') }}@{{ mongodb_container_name }}:27017/{{ mongodb_app_db }}?authSource={{ mongodb_app_db }}
 MONGO_BACKUP_NETWORK={{ mongodb_network }}
 MONGO_IMAGE={{ mongodb_image }}
+
+# Every application database on this instance, space separated — the authoritative list for the
+# backup cron and the restore drill (#107 phase 4). Derived from mongodb_databases, so adding an
+# environment automatically extends both. System databases (admin/config/local) are deliberately
+# absent: restoring them is hazardous and they hold no application data.
+MONGO_BACKUP_DATABASES="{{ mongodb_databases | map(attribute='db') | join(' ') }}"
+# Root credentials live ONLY in this file (0600, root-only). The backup + drill run as root from
+# cron and need instance-wide read, which the per-database app users deliberately do not have.
+MONGO_ROOT_ENV=/opt/fablab/mongodb/mongo.env

@@ -11,6 +11,50 @@ IFS=$'\n\t'
 . /usr/local/lib/fablab-backup-lib.sh
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"          # UTC, monotonic-safe naming (@rules/topic-numeric-correctness.md)
+
+# Mongo connection + the database list (roles/mongodb writes this): MONGO_BACKUP_DATABASES,
+# MONGO_ROOT_ENV, MONGO_BACKUP_NETWORK, MONGO_IMAGE. MONGODB_URI is still present for compatibility.
+# shellcheck source=/dev/null
+if [ -f /etc/fablab/mongo.env ]; then . /etc/fablab/mongo.env; fi
+
+# Per-database artifacts rather than one instance-wide blob: restore granularity matches the naming
+# schema (#107), a single database can be recovered without touching the others, and system
+# databases stay out of it. Falls back to the legacy single-URI behaviour if the list is absent.
+DATABASES="${MONGO_BACKUP_DATABASES:-}"
+if [ -n "$DATABASES" ]; then
+  # shellcheck source=/dev/null
+  . "${MONGO_ROOT_ENV:-/opt/fablab/mongodb/mongo.env}"
+  : "${MONGO_INITDB_ROOT_USERNAME:?root credentials required to dump every database}"
+  ROOT_URI="$(RU="$MONGO_INITDB_ROOT_USERNAME" RP="$MONGO_INITDB_ROOT_PASSWORD" \
+    CN="{{ mongodb_container_name | default('fablab-mongo') }}" python3 - <<'PY'
+import os, urllib.parse
+print("mongodb://%s:%s@%s:27017/?authSource=admin" % (
+    os.environ["RU"], urllib.parse.quote(os.environ["RP"], safe=""), os.environ["CN"]))
+PY
+)"
+  umask 077
+  mkdir -p "${BACKUP_DIR}"
+  rc=0
+  # IFS is $'\n\t' at the top of this script (no space), so `for DB in $DATABASES` would NOT split
+  # a space-separated list — it silently dumped with one bogus database name and still produced a
+  # non-empty archive that passed the size check. Split explicitly.
+  IFS=' ' read -r -a DB_ARRAY <<< "$DATABASES"
+  for DB in "${DB_ARRAY[@]}"; do
+    case "$DB" in ''|*[[:space:]]*) echo "ERROR: refusing suspicious database name '$DB'" >&2; rc=1; continue ;; esac
+    OUT="${BACKUP_DIR}/mongo-${DB}-${STAMP}.archive.gz"
+    # --db scopes the archive to ONE database. Without it a root URI dumps the whole instance, and
+    # restoring that splatters every other database (the bug fixed in #109).
+    docker run --rm --network "${MONGO_BACKUP_NETWORK:-fablab}" -e U="$ROOT_URI" -e D="$DB" \
+      "${MONGO_IMAGE:-mongo:8.0}" sh -c 'mongodump --uri="$U" --db="$D" --archive --gzip' > "${OUT}" 2>/dev/null || true
+    if [ ! -s "${OUT}" ]; then
+      echo "ERROR: dump of '${DB}' produced an empty archive" >&2; rm -f "${OUT}"; rc=1; continue
+    fi
+    finalize_artifact "${OUT}" "mongo-${DB}" "mongo-${DB}-*.archive.gz*" || rc=1
+  done
+  exit "$rc"
+fi
+
+# ---- legacy path: single database from MONGODB_URI (kept so an un-converged host still backs up) --
 OUT="${BACKUP_DIR}/mongo-${STAMP}.archive.gz"
 
 # Mongo connection (roles/mongodb writes this): MONGODB_URI + MONGO_BACKUP_NETWORK + MONGO_IMAGE.
