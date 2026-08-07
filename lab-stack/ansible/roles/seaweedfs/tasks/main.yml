@@ -16,6 +16,7 @@
     that:
       - lookup('ansible.builtin.env', 'OBJSTORE_ADMIN_SECRET_KEY') | length > 0
       - lookup('ansible.builtin.env', 'OBJSTORE_APP_SECRET_KEY') | length > 0
+      - lookup('ansible.builtin.env', 'OBJSTORE_BACKUP_SECRET_KEY') | length > 0
     fail_msg: >-
       OBJSTORE_ADMIN_SECRET_KEY and OBJSTORE_APP_SECRET_KEY must be set. Run via `make converge`
       (it sources ../.env); generate them first with `make secrets` / `make setup`.
@@ -24,6 +25,7 @@
   ansible.builtin.set_fact:
     seaweedfs_admin_secret: "{{ lookup('ansible.builtin.env', 'OBJSTORE_ADMIN_SECRET_KEY') }}"
     seaweedfs_app_secret: "{{ lookup('ansible.builtin.env', 'OBJSTORE_APP_SECRET_KEY') }}"
+    seaweedfs_backup_secret: "{{ lookup('ansible.builtin.env', 'OBJSTORE_BACKUP_SECRET_KEY') }}"
   no_log: true
 
 - name: Ensure the dedicated config group exists (lets the non-root container read s3.json)
@@ -275,6 +277,15 @@
   ansible.builtin.template:
     src: objstore.env.j2
     dest: "{{ seaweedfs_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Write the READ-ONLY backup credentials (0600, root-only)
+  ansible.builtin.template:
+    src: objstore-backup.env.j2
+    dest: /etc/fablab/objstore-backup.env
     owner: root
     group: root
     mode: "0600"

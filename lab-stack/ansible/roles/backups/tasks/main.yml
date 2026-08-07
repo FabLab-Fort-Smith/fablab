@@ -88,21 +88,55 @@
     - backups_restic_cat.rc | default(1) != 0
   no_log: true
 
-- name: Install backup script
+# Shared plumbing (encrypt -> off-box -> prune) lives in ONE place so the three backup jobs
+# cannot drift apart. Sourced, not executed: 0640 and no exec bit.
+- name: Install the shared backup library
   ansible.builtin.template:
-    src: backup-mongo.sh.j2
-    dest: /usr/local/sbin/fablab-backup-mongo
+    src: backup-lib.sh.j2
+    dest: /usr/local/lib/fablab-backup-lib.sh
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Install backup scripts
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
     owner: root
     group: root
     mode: "0700"
+  loop:
+    - { src: backup-mongo.sh.j2, dest: /usr/local/sbin/fablab-backup-mongo }
+    - { src: backup-objstore.sh.j2, dest: /usr/local/sbin/fablab-backup-objstore }
+    - { src: backup-coolify.sh.j2, dest: /usr/local/sbin/fablab-backup-coolify }
+  loop_control:
+    label: "{{ item.dest }}"
 
-- name: Schedule daily backup (dump -> age -> restic off-box)
+# Staggered by 20 minutes: three jobs starting together would contend for CPU/disk on a single
+# small VPS, and a slow mongodump would overlap the next job's dump.
+- name: Schedule the daily backups (dump -> age -> off-box/prune)
   ansible.builtin.cron:
-    name: fablab-mongo-backup
+    name: "{{ item.name }}"
     user: root
-    minute: "0"
+    minute: "{{ item.minute }}"
     hour: "{{ backups_schedule_hour }}"
-    job: "/usr/local/sbin/fablab-backup-mongo >> /var/log/fablab-backup.log 2>&1"
+    job: "{{ item.job }} >> /var/log/fablab-backup.log 2>&1"
+    state: "{{ 'present' if item.enabled | bool else 'absent' }}"
+  loop:
+    - name: fablab-mongo-backup
+      minute: "0"
+      job: /usr/local/sbin/fablab-backup-mongo
+      enabled: true
+    - name: fablab-objstore-backup
+      minute: "20"
+      job: /usr/local/sbin/fablab-backup-objstore
+      enabled: "{{ backups_objstore_enabled | default(true) }}"
+    - name: fablab-coolify-backup
+      minute: "40"
+      job: /usr/local/sbin/fablab-backup-coolify
+      enabled: "{{ backups_coolify_enabled | default(true) }}"
+  loop_control:
+    label: "{{ item.name }}"
 
 - name: Warn when backups are local-only (encryption/off-box not configured)
   ansible.builtin.debug:

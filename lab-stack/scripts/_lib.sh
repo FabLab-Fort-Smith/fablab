@@ -38,7 +38,7 @@ rand_alnum() { LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$1"; }
 # These are consumed by scripts that SOURCE this lib, so shellcheck can't see the use here.
 # Local secrets we auto-generate (app secrets per src/lib/env.js + self-hosted MongoDB creds).
 # shellcheck disable=SC2034  # used by sourcing scripts
-LOCAL_SECRET_KEYS=(AUTH_SECRET JWT_SECRET ENCRYPTION_KEY INTERNAL_API_SECRET SOCKET_API_SECRET MONGO_ROOT_PASSWORD MONGO_APP_PASSWORD OBJSTORE_ADMIN_SECRET_KEY OBJSTORE_APP_SECRET_KEY)
+LOCAL_SECRET_KEYS=(AUTH_SECRET JWT_SECRET ENCRYPTION_KEY INTERNAL_API_SECRET SOCKET_API_SECRET MONGO_ROOT_PASSWORD MONGO_APP_PASSWORD OBJSTORE_ADMIN_SECRET_KEY OBJSTORE_APP_SECRET_KEY OBJSTORE_BACKUP_SECRET_KEY)
 # Provider keys REQUIRED to continue provisioning (can't be generated — .env or interactive).
 # shellcheck disable=SC2034  # used by sourcing scripts
 REQUIRED_PROVISION_KEYS=(LAB_VPS_HOST CLOUDFLARE_API_TOKEN COOLIFY_URL COOLIFY_TOKEN)
