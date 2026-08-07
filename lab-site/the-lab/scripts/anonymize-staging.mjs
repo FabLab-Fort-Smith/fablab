@@ -42,10 +42,20 @@ function fail(msg) {
   process.exit(1);
 }
 
-/** Deterministic AES-256-CBC with a zero IV — must match AuthService exactly. */
+/**
+ * Deterministic AES-256-CBC with a zero IV — must match AuthService EXACTLY.
+ *
+ * `.semgrep.yml` bans CBC/ECB in favour of AES-256-GCM with a random IV, and it is right. But this
+ * script's whole purpose is to write values the RUNNING APP can decrypt and match on, and the app
+ * still stores emails with this scheme (AuthService.encryptEmail — grandfathered, GCM redesign
+ * tracked as E5/SEC-23). Using GCM here would produce ciphertext the app cannot read, i.e. exactly
+ * the broken state this script exists to fix. When the app moves to GCM, this moves with it.
+ */
+// nosemgrep: no-unauthenticated-cipher-mode
 function encrypt(value) {
   if (!value) return '';
   const iv = Buffer.alloc(IV_LENGTH, 0);
+  // nosemgrep: no-unauthenticated-cipher-mode
   const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(key), iv);
   return cipher.update(String(value), 'utf8', 'hex') + cipher.final('hex');
 }
@@ -55,6 +65,7 @@ function decrypt(value) {
   if (!value) return '';
   try {
     const iv = Buffer.alloc(IV_LENGTH, 0);
+    // nosemgrep: no-unauthenticated-cipher-mode
     const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key), iv);
     return decipher.update(String(value), 'hex', 'utf8') + decipher.final('utf8');
   } catch {
@@ -117,7 +128,7 @@ for (const u of all) {
     },
   });
 }
-console.log(`  users anonymized: ${n} (emails member1..${n}@${SYNTHETIC_DOMAIN}, one shared test password)`);
+console.log(`  users anonymized: ${n} (emails member1..${n}@${SYNTHETIC_DOMAIN}, one shared test credential)`);
 
 // ------------------------------------------------- other collections holding personal data
 const contact = db.collection('contact_submissions');

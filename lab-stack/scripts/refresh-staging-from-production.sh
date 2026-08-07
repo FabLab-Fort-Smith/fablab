@@ -37,7 +37,9 @@ die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 COOLIFY_URL="${COOLIFY_URL:-$(env_get "$ENVF" COOLIFY_URL)}"
 COOLIFY_TOKEN="${COOLIFY_TOKEN:-$(env_get "$ENVF" COOLIFY_TOKEN)}"
 STAGING_PW="$(env_get "$ENVF" MONGO_APP_PASSWORD_STAGING)"
-[ -n "$COOLIFY_URL" ] && [ -n "$COOLIFY_TOKEN" ] || die "COOLIFY_URL / COOLIFY_TOKEN missing from $ENVF"
+if [ -z "$COOLIFY_URL" ] || [ -z "$COOLIFY_TOKEN" ]; then
+  die "COOLIFY_URL / COOLIFY_TOKEN missing from $ENVF"
+fi
 [ -n "$STAGING_PW" ] || die "MONGO_APP_PASSWORD_STAGING missing from $ENVF (run make secrets)"
 command -v jq >/dev/null || die "jq is required"
 
@@ -69,9 +71,16 @@ STAGING_URI="mongodb://thelab_staging_app:${STAGING_PW}@fablab-mongo:27017/${STA
 # The archive is streamed through the VPS's /tmp and shredded; --nsInclude keeps a whole-instance
 # archive from ever touching another database (the trap that bit mongo-restore-drill.sh).
 info "dumping production and restoring into $STAGING_DB (this DROPS $STAGING_DB) ..."
-PROD_URI="$PROD_URI" "${SSH[@]}" "sudo PU='$PROD_URI' SDB='$STAGING_DB' bash -s" <<'REMOTE'
+# The production URI goes over STDIN into a root-only file, never in the remote command line:
+# anything on argv is visible in `ps` to every user on the VPS (shellcheck SC2097/SC2098 pointed at
+# the earlier version, which did exactly that). The remote script shreds it on exit.
+printf '%s' "$PROD_URI" | "${SSH[@]}" 'sudo sh -c "umask 077; cat > /root/.refresh-uri"' \
+  || die "could not stage the production URI on $SSH_HOST"
+"${SSH[@]}" "sudo SDB='$STAGING_DB' bash -s" <<'REMOTE'
 set -euo pipefail
 umask 077
+trap 'shred -u /root/.refresh-uri 2>/dev/null || rm -f /root/.refresh-uri' EXIT
+PU="$(cat /root/.refresh-uri)"
 . /opt/fablab/mongodb/mongo.env
 RURI="$(RU="$MONGO_INITDB_ROOT_USERNAME" RP="$MONGO_INITDB_ROOT_PASSWORD" python3 -c '
 import os, urllib.parse
@@ -85,7 +94,17 @@ echo "    dump: $(stat -c %s "$TMP") bytes from db '$SRC_DB'"
 docker run --rm -i --network fablab -e U="$RURI" mongo:8.0 sh -c \
   "mongorestore --uri=\"\$U\" --archive --gzip --drop --nsInclude=\"$SRC_DB.*\" --nsFrom=\"$SRC_DB.*\" --nsTo=\"$SDB.*\"" \
   < "$TMP" 2>&1 | tail -1 | sed 's/^/    /'
+shred -u /root/.refresh-uri 2>/dev/null || rm -f /root/.refresh-uri
 REMOTE
+
+# Do not trust the remote trap: verify the staged credential is really gone, and remove it if not.
+if "${SSH[@]}" 'sudo test -f /root/.refresh-uri' 2>/dev/null; then
+  "${SSH[@]}" 'sudo sh -c "shred -u /root/.refresh-uri 2>/dev/null || rm -f /root/.refresh-uri"' || true
+  info "staged production URI removed (the remote trap had not fired)"
+fi
+"${SSH[@]}" 'sudo test ! -f /root/.refresh-uri' \
+  || die "the production URI is STILL on $SSH_HOST at /root/.refresh-uri — remove it manually"
+info "verified: no production credential left on $SSH_HOST"
 
 # --- anonymize INSIDE the staging container (its ENCRYPTION_KEY, its crypto scheme) ----------
 # Ship THIS checkout's anonymizer into the container rather than relying on the deployed image
