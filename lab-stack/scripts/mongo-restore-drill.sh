@@ -18,7 +18,7 @@ IMG=mongo:8.0        # match the running server (the mongodb role pins mongo:8.0
 CN=fablab-mongo
 BACKUP_DIR=/var/backups/fablab
 ROOT_ENV=/opt/fablab/mongodb/mongo.env      # root-only: MONGO_INITDB_ROOT_USERNAME/_PASSWORD
-DRILL_DB=thelab_restore_drill               # throwaway target — dropped at the end
+DRILL_SUFFIX=_drill                        # throwaway target per database — dropped at the end
 
 [ "$(id -u)" -eq 0 ] || { echo "ERROR: must run as root (reads $ROOT_ENV, invokes docker)"; exit 1; }
 [ -r "$ROOT_ENV" ] || { echo "ERROR: cannot read $ROOT_ENV"; exit 1; }
@@ -84,7 +84,7 @@ FAILED=""
 IFS=' ' read -r -a DRILL_DBS <<< "$DB_LIST"
 for DB in "${DRILL_DBS[@]}"; do
   case "$DB" in ''|*[[:space:]]*) echo "   FAIL: suspicious database name '$DB'"; FAILED="$FAILED bad-name"; continue ;; esac
-  DDB="${DB}_drill"
+  DDB="${DB}${DRILL_SUFFIX}"
   echo "== database: $DB =="
   ARCHIVE="$(archive_for_db "$DB")" || { echo "   FAIL: could not obtain an archive for $DB"; FAILED="$FAILED $DB"; continue; }
   case "$ARCHIVE" in /tmp/*) CLEANUP="$ARCHIVE" ;; *) CLEANUP="" ;; esac
