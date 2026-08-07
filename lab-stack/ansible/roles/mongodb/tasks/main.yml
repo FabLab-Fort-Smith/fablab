@@ -19,7 +19,8 @@
 - name: Capture MongoDB secrets (never logged)
   ansible.builtin.set_fact:
     mongodb_root_pw: "{{ lookup('ansible.builtin.env', 'MONGO_ROOT_PASSWORD') }}"
-    mongodb_app_pw: "{{ lookup('ansible.builtin.env', 'MONGO_APP_PASSWORD') }}"
+    # Compat URI only (see defaults): it must match mongodb_app_user, which is now the staging user.
+    mongodb_app_pw: "{{ lookup('ansible.builtin.env', 'MONGO_APP_PASSWORD_STAGING') }}"
   no_log: true
 
 - name: Create compose project + init dirs (root-only)
