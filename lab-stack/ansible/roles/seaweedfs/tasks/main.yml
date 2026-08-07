@@ -26,25 +26,60 @@
     seaweedfs_app_secret: "{{ lookup('ansible.builtin.env', 'OBJSTORE_APP_SECRET_KEY') }}"
   no_log: true
 
+- name: Ensure the dedicated config group exists (lets the non-root container read s3.json)
+  ansible.builtin.group:
+    name: "{{ seaweedfs_config_group }}"
+    gid: "{{ seaweedfs_config_gid }}"
+    system: true
+    state: present
+
+# The image drops privileges with `exec su-exec seaweed "$0"`, which RESETS supplementary groups —
+# so `group_add` alone is discarded (verified: /proc/1/status showed "Groups: 1000 1000"). Running
+# the container AS that uid makes the entrypoint skip its root branch entirely, so no su-exec runs
+# and the added group survives. Probe the uid/gid instead of hardcoding, so an image update that
+# renumbers the user cannot silently break the read.
+- name: Determine the uid/gid the storage image runs as
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm --entrypoint sh {{ seaweedfs_image }} -c 'id -u seaweed; id -g seaweed'
+  register: seaweedfs_id_probe
+  changed_when: false
+  check_mode: false
+
+- name: Record the storage runtime uid/gid
+  ansible.builtin.set_fact:
+    seaweedfs_run_uid: "{{ seaweedfs_id_probe.stdout_lines[0] | trim }}"
+    seaweedfs_run_gid: "{{ seaweedfs_id_probe.stdout_lines[1] | trim }}"
+
+- name: Fail closed if the image's runtime user is root (the config would not need a group, but the
+        hardening assumption would be wrong)
+  ansible.builtin.assert:
+    that: seaweedfs_run_uid != '0'
+    fail_msg: >-
+      {{ seaweedfs_image }} now runs as root; revisit the s3.json ownership model in this role
+      before converging (it is built around a NON-root runtime user).
+
 - name: Create compose project dir (root-only)
   ansible.builtin.file:
     path: "{{ seaweedfs_dir }}"
     state: directory
     owner: root
-    group: root
-    mode: "0700"
+    group: "{{ seaweedfs_config_group }}"
+    # 0750, not 0700: the container's non-root user must TRAVERSE this dir to reach s3.json.
+    # Still unreadable to everyone else on the host.
+    mode: "0750"
 
 # SeaweedFS does NOT hot-reload this file: a new identity stays unauthenticated until the container
 # restarts (verified — adding a key and waiting 26s changed nothing; a restart applied it). So the
 # handler is REQUIRED for correctness, not just tidiness. Restart is a few seconds of upload
 # downtime, which is why it only fires when the rendered content actually changes.
-- name: Render the S3 identities (0600 — contains secret keys)
+- name: Render the S3 identities (0640, group-readable — contains secret keys)
   ansible.builtin.template:
     src: s3.json.j2
     dest: "{{ seaweedfs_dir }}/s3.json"
     owner: root
-    group: root
-    mode: "0600"
+    group: "{{ seaweedfs_config_group }}"
+    mode: "0640"
   no_log: true
   notify: Restart seaweedfs
 
@@ -68,6 +103,45 @@
     seaweedfs_shared_net.rc != 0
     and ('already exists' not in seaweedfs_shared_net.stderr)
 
+# Because we bypass the entrypoint's root branch, its `chown -R seaweed:seaweed /data` no longer
+# runs — so a FRESH docker volume (created root-owned) would be unwritable. Fix it once, gated on a
+# probe so it is not a recursive chown on every converge.
+# `docker volume create` echoes the volume name whether or not it created anything — the same
+# "always reports success" trap as the mc/weed commands, so it cannot drive changed_when. Probe.
+- name: Probe whether the data volume exists
+  ansible.builtin.command:
+    cmd: docker volume inspect {{ seaweedfs_volume }}
+  register: seaweedfs_vol_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Create the data volume
+  ansible.builtin.command:
+    cmd: docker volume create {{ seaweedfs_volume }}
+  when: seaweedfs_vol_probe.rc != 0
+  changed_when: true
+
+- name: Probe the data volume's ownership
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm -u 0 -v {{ seaweedfs_volume }}:/data --entrypoint sh {{ seaweedfs_image }}
+      -c 'stat -c %u:%g /data'
+  register: seaweedfs_vol_owner
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Take ownership of the data volume for the storage runtime user
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm -u 0 -v {{ seaweedfs_volume }}:/data --entrypoint sh {{ seaweedfs_image }}
+      -c 'chown -R {{ seaweedfs_run_uid }}:{{ seaweedfs_run_gid }} /data'
+  when: >-
+    (seaweedfs_vol_owner.stdout | default('') | trim)
+    != (seaweedfs_run_uid ~ ':' ~ seaweedfs_run_gid)
+  changed_when: true
+
 - name: Start / refresh the SeaweedFS compose stack
   ansible.builtin.command:
     cmd: docker compose -f {{ seaweedfs_dir }}/compose.yaml up -d --remove-orphans
@@ -81,6 +155,27 @@
 - name: Apply any pending identity change now
   ansible.builtin.meta: flush_handlers
 
+# Under `--check` the compose task above is skipped, so the container does not exist yet — but the
+# probes below carry `check_mode: false` (#93) and therefore run for real, which made
+# `converge-check` fail with "No such container". Gate them on the container actually running:
+#   - real converge  -> compose just started it -> true  -> probes run
+#   - check, no stack -> false -> probes skip (nothing to inspect, and saying so is honest)
+#   - check, existing -> true  -> probes still report real drift, read-only
+- name: Probe whether the storage container is running
+  ansible.builtin.command:
+    cmd: docker inspect -f {{ '{{.State.Running}}' }} {{ seaweedfs_container_name }}
+  register: seaweedfs_container_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Note when the object-storage reconcile is skipped (check mode, stack not yet created)
+  ansible.builtin.debug:
+    msg: >-
+      SKIPPING bucket/identity reconcile: container '{{ seaweedfs_container_name }}' does not exist
+      yet and this is --check. Re-run `make converge-check` after a real converge to see drift.
+  when: seaweedfs_container_probe.stdout | trim != 'true'
+
 # Probe /status, NOT the S3 root: the root path is ListBuckets, which returns 403 to the anonymous
 # identity (it only holds Read on one bucket). Probing the root made this wait for 30 attempts and
 # then fail on a perfectly healthy server.
@@ -93,6 +188,7 @@
   until: seaweedfs_ping.rc == 0
   retries: 30
   delay: 3
+  when: seaweedfs_container_probe.stdout | trim == 'true'
   changed_when: false
   # Read-only probe: also run under --check, else its output is empty and consumers fail
   # misleadingly (#93).
@@ -104,6 +200,7 @@
       docker exec {{ seaweedfs_container_name }} sh -c
       'echo s3.bucket.list | weed shell -master=localhost:{{ seaweedfs_master_port }}'
   register: seaweedfs_bucket_probe
+  when: seaweedfs_container_probe.stdout | trim == 'true'
   changed_when: false
   failed_when: false
   check_mode: false
@@ -118,7 +215,9 @@
       docker exec {{ seaweedfs_container_name }} sh -c
       'echo "s3.bucket.create -name {{ seaweedfs_bucket }}" |
       weed shell -master=localhost:{{ seaweedfs_master_port }}'
-  when: seaweedfs_bucket + "\t" not in seaweedfs_bucket_probe.stdout
+  when:
+    - seaweedfs_container_probe.stdout | trim == 'true'
+    - seaweedfs_bucket + "\t" not in (seaweedfs_bucket_probe.stdout | default(''))
   changed_when: true
 
 - name: Probe the bucket's versioning state
@@ -137,6 +236,7 @@
   environment:
     AWS_SECRET_ACCESS_KEY: "{{ seaweedfs_admin_secret }}"
   register: seaweedfs_ver_probe
+  when: seaweedfs_container_probe.stdout | trim == 'true'
   changed_when: false
   failed_when: false
   check_mode: false
@@ -158,7 +258,8 @@
     AWS_SECRET_ACCESS_KEY: "{{ seaweedfs_admin_secret }}"
   when:
     - seaweedfs_versioning | bool
-    - "'Enabled' not in seaweedfs_ver_probe.stdout"
+    - seaweedfs_container_probe.stdout | trim == 'true'
+    - "'Enabled' not in (seaweedfs_ver_probe.stdout | default(''))"
   changed_when: true
   no_log: true
 

@@ -47,7 +47,8 @@
           - "Coolify: finish setup at https://{{ coolify_fqdn }} (admin + MFA),"
           - "behind Cloudflare Access/allow-list."
           - "MongoDB is provisioned by the mongodb role (private '{{ mongodb_network }}' net)."
-          - "MinIO (S3) is provisioned by the minio role; app S3 settings in {{ minio_env_file }}."
+          - "Object storage (S3) is provisioned by the seaweedfs role; app S3
+             settings in {{ seaweedfs_env_file }}."
           - "In Coolify: attach the app (base dir lab-site/the-lab) to '{{ mongodb_network }}',"
           - "and set MONGODB_URI (value in {{ mongodb_backup_env }} on the VPS)."
           - "Configure forge webhooks (HMAC) + Cloudflare DNS/origin lock. See ../coolify, ../cloudflare."
