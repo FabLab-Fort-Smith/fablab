@@ -146,13 +146,27 @@ docker exec drill-mongo mongorestore -u drill -p <temp> --authenticationDatabase
 
 | Job | Cron (UTC) | Covers | Artifact |
 |---|---|---|---|
-| `fablab-backup-mongo` | 03:00 | staging `thelab` database | `mongo-<UTC>.archive.gz.age` |
+| `fablab-backup-mongo` | 03:00 | **every** application database, one artifact each | `mongo-<db>-<UTC>.archive.gz.age` |
 | `fablab-backup-objstore` | 03:20 | SeaweedFS bucket objects, via the **S3 API** | `objstore-<bucket>-<UTC>.tar.gz.age` |
 | `fablab-backup-coolify` | 03:40 | Coolify's Postgres DB + `/data/coolify` (config, `.env`, keys) | `coolify-<UTC>.tar.gz.age` |
 
 Staggered 20 minutes apart: three dumps at once contend for CPU/disk on one small VPS. Each is a
 separate cron entry, so one failing target cannot stop the others
 (`backups_objstore_enabled` / `backups_coolify_enabled` toggle them).
+
+**Which databases:** the list comes from `MONGO_BACKUP_DATABASES` in `/etc/fablab/mongo.env`,
+derived from the `mongodb` role's `mongodb_databases` — so adding an environment automatically
+extends both the backup and the drill. System databases (`admin`/`config`/`local`) are excluded
+deliberately: restoring them is hazardous and they hold no application data. The dump uses the ROOT
+credential (root-only file, root's cron) because the per-database app users deliberately cannot read
+instance-wide.
+
+**Per-database artifacts, not one blob:** a single database can be restored without touching the
+others, and each `--db` dump is fenced so it can never contain another database (#109).
+
+**The drill covers EVERY database** (`mongo-restore-drill.sh`), not just staging — it fails if any one
+of them does not round-trip. Before this, a drill could report PASSED while production was never
+verified, which was the exact state the day production moved onto this instance.
 
 Shared plumbing (encrypt → off-box → prune) lives in **`/usr/local/lib/fablab-backup-lib.sh`**
 (`finalize_artifact`), sourced by all three — one implementation to audit, and no chance of the
@@ -223,7 +237,7 @@ first, empty-volume boot). Fix: **re-converge** — the `mongodb` role now recon
   `lab-stack/ansible/roles/backups/`, `lab-stack/ansible/roles/mongodb/`.
 
 ---
-_Last validated: **2026-08-07** — both drills passed. Owner: platform._
+_Last validated: **2026-08-07** — both drills passed; per-database drill covers thelab, thelab_production and thelab_staging. Owner: platform._
 
 ## Drill record
 
