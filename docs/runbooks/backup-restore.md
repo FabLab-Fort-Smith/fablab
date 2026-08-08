@@ -72,7 +72,7 @@ script + a converge task **warn loudly**. Two independent controls, by design:
    **initializes the restic repo** (idempotent). Then run `sudo /usr/local/sbin/fablab-backup-mongo`
    once and confirm `encrypted (age)` + `shipped off-box (restic)` in the output.
 
-### Decrypt / restore from off-box (restic) — applies on **meerkat**, once pull is live
+### Decrypt / restore from off-box (restic) — applies on **prod-backup**, once pull is live
 ```bash
 # On the box (or anywhere restic + the repo creds + the age identity are available):
 export RESTIC_REPOSITORY=… RESTIC_PASSWORD=… AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=…
@@ -195,16 +195,42 @@ a throwaway Postgres) has NOT been run. Mongo is the only target with a proven r
 `RESTIC_REPOSITORY` on the VPS is intentionally **unset**, so the backup script's
 `WARNING: RESTIC_REPOSITORY unset — backup is LOCAL-ONLY` is **expected** until the puller exists.
 
-Off-box is done by **meerkat pulling** age-encrypted artifacts from the VPS into its own restic
-repo, rather than the VPS pushing. Why: a push-based repo is deletable by the machine it protects —
-ransomware on the VPS holds the restic password and can `restic forget --prune` the only offsite
-copy. With pull, the VPS holds **no credential into the lab**, no route to the lab LAN is needed,
-and the puller only ever sees ciphertext.
+Off-box is done by **`prod-backup` (10.121.16.1) pulling** age-encrypted artifacts from the VPS into
+its own restic repo, rather than the VPS pushing. Why: a push-based repo is deletable by the machine
+it protects — ransomware on the VPS holds the restic password and can `restic forget --prune` the
+only offsite copy. With pull, the VPS holds **no credential into the lab**, no route to the lab LAN
+is needed, and the puller only ever sees ciphertext.
 
-**Status: not live.** Blocked on meerkat joining the `fablab-private` ZeroTier network (its LAN is
-not routed) and on a public key for a restricted `backup-pull` account
-(`restrict,from="10.121.16.0/24",command="rrsync -ro /var/backups/fablab"`). Until then
-**every copy lives on one VPS** — a VPS loss loses all backup history. Tracked: #90.
+> The puller was retargeted from **meerkat** to **prod-backup** (a dedicated Debian 13 box already on
+> the `10.121.16.0/24` overlay), which removes the original blocker — meerkat's LAN was never routed.
+
+**VPS side (in code, inert until keyed).** The `backups` role creates a locked `backup-pull` system
+account whose authorized_keys entry is
+`restrict,from="10.121.16.0/24",command="/usr/bin/rrsync -ro /var/backups/fablab"` — that key can
+only read-only-rsync one directory: no shell, no writes, no forwarding, and only from the overlay.
+Artifacts become `640 root:fablab-backup-read`, which is safe because they are **ciphertext**; the
+age identity stays solely in Vaultwarden. Everything stays inert until `BACKUP_PULL_PUBKEY` is set
+in `../.env`, then `make converge`.
+
+**prod-backup side.** Two scripts in `lab-stack/scripts/`, both run **on prod-backup**, not the VPS:
+
+- [ ] `prod-backup-preflight.sh` — read-only. Identifies the host and proves the route (ZT address,
+      path to the VPS on 22, path MTU, prerequisites, and whether the key is authorised **and
+      correctly confined**). Run it first; its output is safe to paste.
+- [ ] `prod-backup-pull.sh` — rsync → restic snapshot → `forget --prune` → `check --read-data-subset`.
+      Install per the header comment; systemd service + timer are at the bottom of the file.
+
+**Order of operations:**
+- [ ] On prod-backup: `sudo bash prod-backup-preflight.sh` — expect a warning that no keypair exists.
+- [ ] `ssh-keygen -t ed25519 -N '' -f /root/.ssh/backup_pull -C 'backup-pull@prod-backup'`.
+- [ ] Put the **public** half in `BACKUP_PULL_PUBKEY` in `../.env`; `make converge` on the VPS.
+- [ ] Re-run the pre-flight. It must report the key **reached the VPS and was confined** — if it ever
+      reports `the key got a SHELL on the VPS`, stop: the forced command is not in place.
+- [ ] Install the puller + timer; run once by hand; confirm a restic snapshot exists.
+- [ ] Drill it: restore an artifact **from the restic repo** and decrypt with the vaulted identity.
+
+**Status: not live.** Until the pull runs, **every copy lives on one VPS** — and that VPS now also
+holds production. A VPS loss loses all backup history. Tracked: #90.
 
 ## Real restore (recovery)
 1. Pick the archive: `ls -t /var/backups/fablab/mongo-*.archive.gz` → choose the point-in-time.

@@ -32,6 +32,11 @@ finalize_artifact() {
     age -r "${BACKUP_AGE_RECIPIENT}" -o "${out}.age" "$out"
     shred -u "$out" 2>/dev/null || rm -f "$out"
     artifact="${out}.age"
+    # Group-read so the off-box puller can fetch it (#90). This is ciphertext: the decryption
+    # identity lives only in the vault, never on this box or on the puller.
+    if getent group "{{ backups_pull_group | default('fablab-backup-read') }}" >/dev/null 2>&1; then
+      chgrp "{{ backups_pull_group | default('fablab-backup-read') }}" "${artifact}" && chmod 640 "${artifact}"
+    fi
     echo "encrypted (age): ${artifact}"
   else
     echo "WARNING: BACKUP_AGE_RECIPIENT unset — ${tag} backup is NOT encrypted at rest on the box." >&2
