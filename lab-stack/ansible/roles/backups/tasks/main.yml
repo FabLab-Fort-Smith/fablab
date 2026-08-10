@@ -138,6 +138,48 @@
   loop_control:
     label: "{{ item.name }}"
 
+# --- off-box pull access: a read-only, key-restricted, ZT-only account (#90) -----------------
+- name: Ensure the artifact-read group exists
+  ansible.builtin.group:
+    name: "{{ backups_pull_group }}"
+    gid: "{{ backups_pull_gid }}"
+    system: true
+    state: present
+  when: backups_pull_enabled | bool and (backups_pull_pubkey | length > 0)
+
+- name: Create the pull account (no password; shell required for the forced command)
+  ansible.builtin.user:
+    name: "{{ backups_pull_user }}"
+    group: "{{ backups_pull_group }}"
+    home: "{{ backups_pull_home }}"
+    shell: /bin/sh
+    system: true
+    password: "!"          # locked: key-only, never a password login
+    create_home: true
+    state: present
+  when: backups_pull_enabled | bool and (backups_pull_pubkey | length > 0)
+
+# `restrict` disables port-forwarding, agent/X11 forwarding and PTY allocation; `from` pins the
+# source to the overlay; the forced command means this key can ONLY run a READ-ONLY rsync of the
+# backup directory — it cannot get a shell, write anything, or read anything else on the box.
+- name: Authorize the puller's key with a read-only forced command
+  ansible.posix.authorized_key:
+    user: "{{ backups_pull_user }}"
+    key: "{{ backups_pull_pubkey }}"
+    exclusive: true
+    key_options: 'restrict,from="{{ backups_pull_from }}",command="/usr/bin/rrsync -ro {{ backups_local_dir }}"'
+  when: backups_pull_enabled | bool and (backups_pull_pubkey | length > 0)
+
+# The directory is root-owned; the group only needs to traverse + read. Artifacts are age-encrypted,
+# so group-read exposes ciphertext only — the puller is never able to read plaintext backups.
+- name: Allow the artifact-read group to traverse the backup directory
+  ansible.builtin.file:
+    path: "{{ backups_local_dir }}"
+    state: directory
+    owner: root
+    group: "{{ backups_pull_group if (backups_pull_pubkey | length > 0) else 'root' }}"
+    mode: "{{ '0750' if (backups_pull_pubkey | length > 0) else '0700' }}"
+
 - name: Warn when backups are local-only (encryption/off-box not configured)
   ansible.builtin.debug:
     msg:
