@@ -229,11 +229,16 @@ rc=0
 for spec in "${FIELDS[@]:-}"; do
   [ -n "$spec" ] || continue
   fname="${spec%%=@*}"; src="${spec#*=@}"
-  want="$(sha256sum <"$src" | cut -c1-64)"
+  # Compare the CANONICAL stored value on both sides: the field is stored as the source file's
+  # content .strip()ed (see the item-build step), so hash that same normalization here. Hashing
+  # the raw file (and re-adding a "\n" to the read-back) falsely failed whenever the source file
+  # did not end in a trailing newline — the value was stored correctly but verify reported a
+  # mismatch. Normalize identically instead of assuming a trailing newline.
+  want="$(SRC="$src" python3 -c 'import os,hashlib,pathlib;print(hashlib.sha256(pathlib.Path(os.environ["SRC"]).read_text().strip().encode()).hexdigest())')"
   got="$("$BW" get item "$ITEM_ID" | python3 -c '
 import json, sys, hashlib
-v = next((f.get("value") or "" for f in (json.load(sys.stdin).get("fields") or []) if f["name"] == sys.argv[1]), None)
-print(hashlib.sha256(((v or "") + "\n").encode()).hexdigest() if v is not None else "MISSING")
+v = next((f.get("value") for f in (json.load(sys.stdin).get("fields") or []) if f["name"] == sys.argv[1]), None)
+print(hashlib.sha256(v.encode()).hexdigest() if v is not None else "MISSING")
 ' "$fname")"
   if [ "$want" = "$got" ]; then info "verified field: $fname"; else info "VERIFY FAILED for field: $fname"; rc=1; fi
 done
