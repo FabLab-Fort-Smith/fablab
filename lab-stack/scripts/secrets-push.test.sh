@@ -111,6 +111,18 @@ case "$out" in *"verified attachment"*) ok "verifies the attachment by byte comp
 case "$out" in *"verified field"*) ok "verifies the field by digest" ;; *) bad "field unverified: $out" ;; esac
 case "$out" in *"$SECRET"*) bad "SECRET VALUE WAS PRINTED" ;; *) ok "secret value never appears in output" ;; esac
 
+# --- 5b. REGRESSION: a field whose source file has NO trailing newline still verifies --------
+# Verify used to hash the raw file and re-add "\n" to the read-back, so a source file without a
+# trailing newline falsely FAILED verification even though the value was stored correctly.
+fresh_state
+printf 'no-trailing-newline-token' > "$T/nonl.txt"   # deliberately NO trailing "\n"
+out="$(run --item "Thing" --field TOKEN=@"$T/nonl.txt")"
+case "$out" in
+  *"verified field"*) ok "field from a file with NO trailing newline verifies (regression)" ;;
+  *"VERIFY FAILED"*)  bad "no-newline field falsely failed verify (the fixed bug): $out" ;;
+  *) bad "unexpected verify output for no-newline field: $out" ;;
+esac
+
 # --- 6. idempotent upsert: re-run updates, one item, one attachment -------------------------
 out="$(run --item "Thing" --attach "$T/key.bin" --field AGE_PUBLIC_RECIPIENT=@"$T/pub.txt")"
 case "$out" in *"updated item"*) ok "re-run UPDATES instead of creating a duplicate" ;; *) bad "no update path: $out" ;; esac
