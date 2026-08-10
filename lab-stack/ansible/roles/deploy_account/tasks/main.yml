@@ -1,7 +1,8 @@
 ---
 # Non-custodial admin: a shared, Ansible-managed role account (not tied to any one person).
-# Its authorized_keys list is the SINGLE SOURCE OF TRUTH — add a maintainer/CI key to
-# `deploy_authorized_keys` in group_vars and re-run; remove one to offboard. Runs only when
+# Its authorized_keys list is the SINGLE SOURCE OF TRUTH — add a maintainer key to
+# `deploy_authorized_keys` in the tracked group_vars/lab_vps/authorized_keys.yml (public keys,
+# version-controlled — not per-machine all.yml) and re-run; remove one to offboard. Runs only when
 # `manage_deploy_account` is true (skip it if you connect as an existing personal sudo user).
 # (ADR 0008; @rules/workflow-secrets.md least-privilege / one-identity-per-workload.)
 
@@ -9,8 +10,8 @@
   ansible.builtin.assert:
     that: deploy_authorized_keys | default([]) | length > 0
     fail_msg: >-
-      manage_deploy_account is true but deploy_authorized_keys is empty — set the maintainer/CI
-      public keys in group_vars/all.yml (a keyless login account would be unusable).
+      manage_deploy_account is true but deploy_authorized_keys is empty — set the maintainer
+      public keys in group_vars/lab_vps/authorized_keys.yml (a keyless login account would be unusable).
 
 - name: Ensure the deploy group
   ansible.builtin.group:
