@@ -26,7 +26,7 @@ cd "$HERE/.."   # -> lab-stack/
 
 # Config (none secret). Env-overridable to match prod-backup-preflight.sh / prod-backup-pull.sh.
 PULL_KEY="${PULL_KEY:-/var/lib/fablab-offbox/.ssh/backup_pull}"   # service user's home, not /root
-VPS_ZT="${VPS_ZT:-10.121.16.235}"
+VPS_ZT="${VPS_ZT:-}"   # VPS overlay IP; supply via env (bootstrap / EDIT block). Only passed to preflight.
 KEY_COMMENT="${KEY_COMMENT:-backup-pull@$(hostname -s 2>/dev/null || hostname)}"
 VAULT_ITEM="${VAULT_ITEM:-FabLab off-box backup pull key}"
 # Injectable for tests; default to the real tools / sibling scripts.

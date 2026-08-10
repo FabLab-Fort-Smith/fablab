@@ -34,13 +34,19 @@ export PATH="/usr/local/sbin:/usr/local/bin:$PATH"
 # ===================== EDIT THESE =====================
 # Vaultwarden URL on the ZeroTier overlay, and your vault login email.
 VAULT_URL='https://REPLACE_vault_zerotier_ip:8000'
-VAULT_EMAIL='johnannis@fablabfortsmith.org'
+VAULT_EMAIL='you@example.org'
 
-# Pinned script version (immutable). Use a branch name only if you want latest.
-REF='2a81d15'
+# OPTIONAL: the VPS overlay IP the box will pull FROM. If set, the pre-flight tests the route to
+# it; if left empty, that check is skipped (you still supply it later in /etc/fablab-offbox.env for
+# the puller). VPS_PUBLIC is an optional public fallback to probe.
+VPS_ZT=''
+VPS_PUBLIC=''
 
-# OPTIONAL: if bw is not already unlocked for the user that runs this (root, via
-# sudo below), set ONE of these so keysetup can reach the vault non-interactively.
+# Which version of the scripts to fetch: a branch (default 'main') or an immutable commit SHA/tag.
+REF='main'
+
+# OPTIONAL: if bw is not already unlocked for the user that runs this, set ONE of these so
+# keysetup can reach the vault non-interactively.
 #   BW_SESSION='...'                 # from: bw unlock --raw
 #   BW_PASSWORD_FILE='/root/.bwpw'   # a 0600 file holding the master password
 BW_SESSION=''
@@ -208,7 +214,7 @@ echo "installed ${#FILES[@]} scripts to $SVC_SCRIPTS (owned by $SVC_USER)"
 # --- 3) run keysetup AS the service user (key in its home; NO root) ----------
 # HOME is set explicitly so bw stores its config under the service user (runuser does not set it);
 # env passes the vault config and the key path off-argv. Optional bw creds forwarded only if set.
-KEYSETUP_ENV=(HOME="$SVC_HOME" VAULT_URL="$VAULT_URL" VAULT_EMAIL="$VAULT_EMAIL" PULL_KEY="$PULL_KEY")
+KEYSETUP_ENV=(HOME="$SVC_HOME" VAULT_URL="$VAULT_URL" VAULT_EMAIL="$VAULT_EMAIL" PULL_KEY="$PULL_KEY" VPS_ZT="$VPS_ZT" VPS_PUBLIC="$VPS_PUBLIC")
 [ -n "$BW_SESSION" ]       && KEYSETUP_ENV+=(BW_SESSION="$BW_SESSION")
 [ -n "$BW_PASSWORD_FILE" ] && KEYSETUP_ENV+=(BW_PASSWORD_FILE="$BW_PASSWORD_FILE")
 
@@ -231,7 +237,9 @@ as the unprivileged $SVC_USER, nothing as root at runtime:
 
 3. restic password file, owned by the service user, 0600 (value from the vault):
      ${ELEV}install -o $SVC_USER -g $SVC_USER -m600 /dev/null /etc/fablab-offbox.env
-     # then add a line:  RESTIC_PASSWORD=<strong; store in Vaultwarden, >=2 custodians>
+     # then add these lines:
+     #   RESTIC_PASSWORD=<strong; store in Vaultwarden, >=2 custodians>
+     #   VPS_HOST=<vps-overlay-ip>          # the address the puller connects to
 
 4. Install the puller + a LEAST-PRIVILEGED systemd unit (runs as $SVC_USER, not root):
      ${ELEV}install -o root -g root -m0755 $SVC_SCRIPTS/prod-backup-pull.sh /usr/local/sbin/fablab-pull-backups

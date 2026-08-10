@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Off-box backup PULLER — runs on prod-backup (10.121.16.1), NOT on the VPS (fablab #90).
+# Off-box backup PULLER — runs on the off-box puller host, NOT on the VPS (fablab #90).
 #
 #   fablab-prod:/var/backups/fablab/*.age  --rsync over ZeroTier-->  local mirror  --> restic repo
 #
@@ -18,18 +18,19 @@
 #        bash prod-backup-keysetup.sh    # creates + VAULTS the keypair, prints BACKUP_PULL_PUBKEY, checks route
 #   # put the printed BACKUP_PULL_PUBKEY line in lab-stack/../.env on the VPS -> make converge
 #   sudo install -o root -g root -m0755 prod-backup-pull.sh /usr/local/sbin/fablab-pull-backups
-#   sudo install -o fablab-offbox -g fablab-offbox -m600 /dev/null /etc/fablab-offbox.env
+#   install -o fablab-offbox -g fablab-offbox -m600 /dev/null /etc/fablab-offbox.env
 #   # then add:  RESTIC_PASSWORD=<strong, stored in Vaultwarden, >=2 custodians>
+#   #      and:  VPS_HOST=<vps-overlay-ip>    (the address to pull from)
 #   sudo systemctl enable --now fablab-pull-backups.timer     # see the unit at the end of this file
 #
 # The VPS key is restricted to `rrsync -ro`, so this script can ONLY read that one directory: it
 # cannot get a shell, write to the VPS, or reach anything else there. Verify that yourself with:
-#   sudo -u fablab-offbox ssh -i /var/lib/fablab-offbox/.ssh/backup_pull backup-pull@10.121.16.235 'echo hi'  # must FAIL
+#   sudo -u fablab-offbox ssh -i /var/lib/fablab-offbox/.ssh/backup_pull "$VPS_USER@$VPS_HOST" 'echo hi'  # must FAIL
 set -euo pipefail
 IFS=$'\n\t'
 
-VPS_HOST="${VPS_HOST:-10.121.16.235}"        # fablab-prod on the ZeroTier overlay
-VPS_USER="${VPS_USER:-backup-pull}"
+VPS_HOST="${VPS_HOST:-}"                      # VPS overlay IP — set in /etc/fablab-offbox.env (no default)
+VPS_USER="${VPS_USER:-backup-pull}"          # forced-command account on the VPS
 SSH_KEY="${SSH_KEY:-/var/lib/fablab-offbox/.ssh/backup_pull}"   # service user's key, not /root
 MIRROR="${MIRROR:-/var/lib/fablab-offbox/mirror}"
 RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/var/lib/fablab-offbox/restic}"
@@ -40,6 +41,7 @@ KEEP_MONTHLY="${KEEP_MONTHLY:-12}"
 # shellcheck source=/dev/null
 [ -f /etc/fablab-offbox.env ] && . /etc/fablab-offbox.env
 : "${RESTIC_PASSWORD:?RESTIC_PASSWORD must be set in /etc/fablab-offbox.env (0600)}"
+: "${VPS_HOST:?VPS_HOST must be set (the VPS overlay IP) in /etc/fablab-offbox.env or the unit}"
 export RESTIC_REPOSITORY RESTIC_PASSWORD
 
 log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }

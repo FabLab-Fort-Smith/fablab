@@ -218,7 +218,7 @@ installs deps, creates the `fablab-offbox` user, downloads the pinned scripts, a
 that user (works on bare root without `sudo`):
 
 ```bash
-REF='2a81d15'                                    # pinned: least-privileged keysetup + siblings
+REF='main'                                    # pinned: least-privileged keysetup + siblings
 curl -fsSLO "https://raw.githubusercontent.com/FabLab-Fort-Smith/fablab/$REF/lab-stack/scripts/prod-backup-bootstrap.sh"
 # set VAULT_URL, then run:
 sed -i 's#https://REPLACE_vault_zerotier_ip:8000#https://10.121.16.224:8000#' prod-backup-bootstrap.sh
@@ -228,7 +228,7 @@ bash prod-backup-bootstrap.sh
 The manual curl-only equivalent (what the bootstrap automates), pinned so the download can't drift:
 
 ```bash
-REF='2a81d15'; OWNER=FabLab-Fort-Smith; REPO=fablab
+REF='main'; OWNER=FabLab-Fort-Smith; REPO=fablab
 mkdir -p ~/fablab-backup/scripts && cd ~/fablab-backup/scripts
 for f in _lib.sh secrets-push.sh prod-backup-preflight.sh prod-backup-pull.sh prod-backup-keysetup.sh; do
   curl -fsSL "https://raw.githubusercontent.com/$OWNER/$REPO/$REF/lab-stack/scripts/$f" -o "$f"
