@@ -212,26 +212,28 @@ Artifacts become `640 root:fablab-backup-read`, which is safe because they are *
 age identity stays solely in Vaultwarden. Everything stays inert until `BACKUP_PULL_PUBKEY` is set
 in `../.env`, then `make converge`.
 
-**Getting the scripts onto prod-backup (curl only — no git/gh on that box).** Easiest: copy the
-template `lab-stack/scripts/prod-backup-bootstrap.sh` to the box, fill its EDIT block (PAT +
-`VAULT_URL`), and run it — it installs deps, creates the `fablab-offbox` user, downloads the pinned
-scripts, and runs keysetup as that user (works on bare root without `sudo`). `shred -u` the filled
-copy afterwards. The manual curl-only equivalent (what the bootstrap automates): the repo is
-private, so a plain `raw.githubusercontent.com` fetch 404s; use the Contents API with a
-fine-grained PAT (**Contents: Read-only**, repo `fablab`, short expiry). Pinned to an immutable
-commit so the download can't drift:
+**Getting the scripts onto prod-backup (curl only — no git/gh on that box).** The repo is **public**,
+so everything is fetched over anonymous HTTPS — no token. Easiest: curl the bootstrap and run it — it
+installs deps, creates the `fablab-offbox` user, downloads the pinned scripts, and runs keysetup as
+that user (works on bare root without `sudo`):
 
 ```bash
-export GH_TOKEN='github_pat_...'                 # fine-grained, Contents:read, repo fablab
-REF='2a81d15'                                    # pinned: least-privileged keysetup + siblings (branch feat/offbox-backup-pull)
-OWNER=FabLab-Fort-Smith; REPO=fablab
+REF='2a81d15'                                    # pinned: least-privileged keysetup + siblings
+curl -fsSLO "https://raw.githubusercontent.com/FabLab-Fort-Smith/fablab/$REF/lab-stack/scripts/prod-backup-bootstrap.sh"
+# set VAULT_URL, then run:
+sed -i 's#https://REPLACE_vault_zerotier_ip:8000#https://10.121.16.224:8000#' prod-backup-bootstrap.sh
+bash prod-backup-bootstrap.sh
+```
+
+The manual curl-only equivalent (what the bootstrap automates), pinned so the download can't drift:
+
+```bash
+REF='2a81d15'; OWNER=FabLab-Fort-Smith; REPO=fablab
 mkdir -p ~/fablab-backup/scripts && cd ~/fablab-backup/scripts
 for f in _lib.sh secrets-push.sh prod-backup-preflight.sh prod-backup-pull.sh prod-backup-keysetup.sh; do
-  curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github.raw" \
-    "https://api.github.com/repos/$OWNER/$REPO/contents/lab-stack/scripts/$f?ref=$REF" -o "$f"
+  curl -fsSL "https://raw.githubusercontent.com/$OWNER/$REPO/$REF/lab-stack/scripts/$f" -o "$f"
 done
 chmod +x prod-backup-*.sh secrets-push.sh
-unset GH_TOKEN                                    # do not leave the token in the environment
 ```
 
 Then set the vault config via env (secrets-push reads env before `../.env`) and run keysetup:

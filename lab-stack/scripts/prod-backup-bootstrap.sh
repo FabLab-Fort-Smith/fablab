@@ -7,7 +7,7 @@
 # Run this as root OR a sudo-capable user (it auto-detects; on bare root it uses no sudo). It:
 #   1. Installs any missing dependencies and creates a dedicated, unprivileged
 #      system user (fablab-offbox) to own and run everything at runtime.
-#   2. Downloads keysetup + its sibling scripts from the private repo (curl only, no
+#   2. Downloads keysetup + its sibling scripts from the public repo over HTTPS (curl only, no
 #      git/gh needed), pinned to an immutable commit, into the service user's home.
 #   3. Runs prod-backup-keysetup.sh AS that user, which:
 #        - creates the ed25519 puller keypair in the service user's home (idempotent;
@@ -22,9 +22,9 @@
 # key stays on this box (the timer needs it); the vault copy is the recovery backup. The
 # key only grants read-only rsync of age-ENCRYPTED artifacts (forced rrsync -ro).
 #
-# SECURITY: this committed copy is a TEMPLATE (placeholders only). Copy it out, fill the
-# EDIT block, run the copy — then `shred -u` it. NEVER commit a filled copy: it holds a
-# real GitHub token. (Keep the filled copy OUTSIDE the repo so `git add` can't grab it.)
+# The repo is PUBLIC, so the scripts are fetched over anonymous HTTPS — no token needed. Fill the
+# VAULT_URL in the EDIT block and run. The only secret this touches is the vault master password,
+# which bw prompts for at runtime and is never stored in this file.
 # ============================================================================
 set -euo pipefail
 # Minimal Debian/root often omits /usr/local/{s,}bin from PATH — where bw and the puller install to.
@@ -32,10 +32,6 @@ set -euo pipefail
 export PATH="/usr/local/sbin:/usr/local/bin:$PATH"
 
 # ===================== EDIT THESE =====================
-# Fine-grained PAT: resource owner FabLab-Fort-Smith, repo fablab,
-# Repository permissions -> Contents: Read-only, short expiry.
-GH_TOKEN='REPLACE_with_fine_grained_PAT'
-
 # Vaultwarden URL on the ZeroTier overlay, and your vault login email.
 VAULT_URL='https://REPLACE_vault_zerotier_ip:8000'
 VAULT_EMAIL='johnannis@fablabfortsmith.org'
@@ -65,8 +61,7 @@ SVC_HOME='/var/lib/fablab-offbox'          # also the mirror/restic parent (pull
 SVC_SCRIPTS="$SVC_HOME/scripts"
 PULL_KEY="$SVC_HOME/.ssh/backup_pull"      # key lives in the service user's home, NOT /root
 
-# --- guard: refuse to run with placeholders still in place -------------------
-case "$GH_TOKEN" in *REPLACE*) echo "ERROR: edit GH_TOKEN first" >&2; exit 1 ;; esac
+# --- guard: refuse to run with the placeholder still in place ----------------
 case "$VAULT_URL" in *REPLACE*) echo "ERROR: edit VAULT_URL first" >&2; exit 1 ;; esac
 
 # --- privilege model: bare root (no sudo) OR a sudo-capable user -------------
@@ -196,13 +191,9 @@ TMPD="$(mktemp -d)"
 trap 'rm -rf "$TMPD"' EXIT
 for f in "${FILES[@]}"; do
   echo "fetching $f ..."
-  curl -fsSL \
-    -H "Authorization: Bearer $GH_TOKEN" \
-    -H "Accept: application/vnd.github.raw" \
-    "https://api.github.com/repos/$OWNER/$REPO/contents/lab-stack/scripts/$f?ref=$REF" \
-    -o "$TMPD/$f"
+  # Public repo -> anonymous raw fetch, no auth header, no token.
+  curl -fsSL "https://raw.githubusercontent.com/$OWNER/$REPO/$REF/lab-stack/scripts/$f" -o "$TMPD/$f"
 done
-unset GH_TOKEN   # token was only needed for the download
 
 "${SUDO[@]}" install -d -o "$SVC_USER" -g "$SVC_USER" -m 0750 "$SVC_SCRIPTS"
 for f in "${FILES[@]}"; do
