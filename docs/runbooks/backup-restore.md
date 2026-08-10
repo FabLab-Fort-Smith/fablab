@@ -210,7 +210,8 @@ account whose authorized_keys entry is
 only read-only-rsync one directory: no shell, no writes, no forwarding, and only from the overlay.
 Artifacts become `640 root:fablab-backup-read`, which is safe because they are **ciphertext**; the
 age identity stays solely in Vaultwarden. Everything stays inert until `BACKUP_PULL_PUBKEY` is set
-in `../.env`, then `make converge`.
+in `../.env`, then `make converge-backups` (scoped to the backups role — skips harden/sshd/ufw, so
+it is not a lockout-capable change; use full `make converge` only when other roles also changed).
 
 **Getting the scripts onto prod-backup (curl only — no git/gh on that box).** The repo is **public**,
 so everything is fetched over anonymous HTTPS — no token. Easiest: curl the bootstrap and run it — it
@@ -270,7 +271,8 @@ install deps, create the user, and drop the puller into `/usr/local/sbin`. The
 - [ ] As that user, create + **vault** the keypair (key lands in its home, not `/root`):
       `sudo -H -u fablab-offbox env VAULT_URL=… VAULT_EMAIL=… bash prod-backup-keysetup.sh` — also
       prints the pre-flight report (expect the key not-yet-authorised until the next step).
-- [ ] Put the printed `BACKUP_PULL_PUBKEY='ssh-ed25519 …'` line in `../.env`; `make converge` on the VPS.
+- [ ] Put the printed `BACKUP_PULL_PUBKEY='ssh-ed25519 …'` line in `../.env`; `make converge-backups`
+      (scoped — skips harden/sshd/ufw; run `make converge-backups-check` first to preview).
 - [ ] Re-run `sudo -H -u fablab-offbox env PULL_KEY=/var/lib/fablab-offbox/.ssh/backup_pull bash prod-backup-preflight.sh`.
       It must report the key **reached the VPS and was confined** — if it ever reports
       `the key got a SHELL on the VPS`, stop: the forced command is not in place.
