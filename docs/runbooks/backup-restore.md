@@ -219,7 +219,7 @@ commit so the download can't drift:
 
 ```bash
 export GH_TOKEN='github_pat_...'                 # fine-grained, Contents:read, repo fablab
-REF='e38bb2f'                                    # pinned: keysetup + siblings (branch feat/offbox-backup-pull)
+REF='2a81d15'                                    # pinned: least-privileged keysetup + siblings (branch feat/offbox-backup-pull)
 OWNER=FabLab-Fort-Smith; REPO=fablab
 mkdir -p ~/fablab-backup/scripts && cd ~/fablab-backup/scripts
 for f in _lib.sh secrets-push.sh prod-backup-preflight.sh prod-backup-pull.sh prod-backup-keysetup.sh; do
