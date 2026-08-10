@@ -53,7 +53,12 @@ fi
 
 # --- authenticate (reuse an existing session, else config + login + unlock) ---
 if [ -z "${BW_SESSION:-}" ]; then
-  "$BW" config server "$VAULT_URL" >/dev/null 2>&1 || die "could not point bw at $VAULT_URL"
+  # bw refuses `config server` while logged in, so only set it when it actually differs — otherwise
+  # an already-authenticated bw (the normal case) dies here with "could not point bw at ...".
+  cur_srv="$("$BW" status 2>/dev/null | jq -r '.serverUrl // empty')"
+  if [ "$cur_srv" != "$VAULT_URL" ]; then
+    "$BW" config server "$VAULT_URL" >/dev/null 2>&1 || die "could not point bw at $VAULT_URL (log out first?)"
+  fi
   st="$("$BW" status 2>/dev/null | jq -r '.status // "unauthenticated"')"
   if [ "$st" = "unauthenticated" ]; then
     [ -n "$VAULT_EMAIL" ] || die "VAULT_EMAIL not set (needed to log in) — add it to $ENVF or the environment."
