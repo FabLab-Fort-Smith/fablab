@@ -253,13 +253,26 @@ the vault reachable over ZeroTier.
 - [ ] `prod-backup-pull.sh` — rsync → restic snapshot → `forget --prune` → `check --read-data-subset`.
       Install per the header comment; systemd service + timer are at the bottom of the file.
 
+**Least privilege:** everything at runtime runs as a dedicated, unprivileged system user
+(`fablab-offbox`, home `/var/lib/fablab-offbox`, `nologin`) — **never root**. It owns the key, the
+mirror and the restic repo; the systemd unit sets `User=fablab-offbox`. `sudo` is used only to
+install deps, create the user, and drop the puller into `/usr/local/sbin`. The
+`prod-backup-bootstrap.sh` one-shot does the whole flow below for you.
+
 **Order of operations:**
-- [ ] On prod-backup: `sudo bash prod-backup-keysetup.sh` — creates + **vaults** the keypair and
+- [ ] Create the service user: `sudo useradd --system --create-home --home-dir /var/lib/fablab-offbox --shell /usr/sbin/nologin fablab-offbox`.
+- [ ] As that user, create + **vault** the keypair (key lands in its home, not `/root`):
+      `sudo -H -u fablab-offbox env VAULT_URL=… VAULT_EMAIL=… bash prod-backup-keysetup.sh` — also
       prints the pre-flight report (expect the key not-yet-authorised until the next step).
 - [ ] Put the printed `BACKUP_PULL_PUBKEY='ssh-ed25519 …'` line in `../.env`; `make converge` on the VPS.
-- [ ] Re-run `sudo bash prod-backup-preflight.sh`. It must report the key **reached the VPS and was
-      confined** — if it ever reports `the key got a SHELL on the VPS`, stop: the forced command is not in place.
-- [ ] Install the puller + timer; run once by hand; confirm a restic snapshot exists.
+- [ ] Re-run `sudo -H -u fablab-offbox env PULL_KEY=/var/lib/fablab-offbox/.ssh/backup_pull bash prod-backup-preflight.sh`.
+      It must report the key **reached the VPS and was confined** — if it ever reports
+      `the key got a SHELL on the VPS`, stop: the forced command is not in place.
+- [ ] Create the restic password file owned by the user:
+      `sudo install -o fablab-offbox -g fablab-offbox -m600 /dev/null /etc/fablab-offbox.env`, then add
+      `RESTIC_PASSWORD=…` (strong; store in Vaultwarden, ≥2 custodians).
+- [ ] Install the puller + the `User=fablab-offbox` timer (unit at the bottom of `prod-backup-pull.sh`);
+      run once by hand (`sudo systemctl start fablab-pull-backups.service`); confirm a restic snapshot exists.
 - [ ] Drill it: restore an artifact **from the restic repo** and decrypt with the vaulted identity.
 
 **Status: not live.** Until the pull runs, **every copy lives on one VPS** — and that VPS now also

@@ -9,23 +9,28 @@
 # and this box only ever receives age-ENCRYPTED artifacts — the decryption identity lives solely in
 # Vaultwarden ("FabLab backup age identity"), never here and never on the VPS.
 #
-# Install (as root on prod-backup):
-#   apt-get install -y rsync restic
-#   bash prod-backup-keysetup.sh   # creates + VAULTS the keypair, prints BACKUP_PULL_PUBKEY, checks the route
+# LEAST PRIVILEGE: this runs as a dedicated unprivileged system user (fablab-offbox), NOT root.
+# It owns the key, the mirror and the restic repo (all under /var/lib/fablab-offbox); nothing here
+# needs root. Install (prod-backup-bootstrap.sh does all of this for you):
+#   sudo apt-get install -y rsync restic
+#   sudo useradd --system --create-home --home-dir /var/lib/fablab-offbox --shell /usr/sbin/nologin fablab-offbox
+#   sudo -H -u fablab-offbox env PULL_KEY=/var/lib/fablab-offbox/.ssh/backup_pull \
+#        bash prod-backup-keysetup.sh    # creates + VAULTS the keypair, prints BACKUP_PULL_PUBKEY, checks route
 #   # put the printed BACKUP_PULL_PUBKEY line in lab-stack/../.env on the VPS -> make converge
-#   install -m700 prod-backup-pull.sh /usr/local/sbin/fablab-pull-backups
-#   printf 'RESTIC_PASSWORD=<strong, stored in Vaultwarden>\n' > /etc/fablab-offbox.env && chmod 600 /etc/fablab-offbox.env
-#   systemctl enable --now fablab-pull-backups.timer     # see the unit at the end of this file
+#   sudo install -o root -g root -m0755 prod-backup-pull.sh /usr/local/sbin/fablab-pull-backups
+#   sudo install -o fablab-offbox -g fablab-offbox -m600 /dev/null /etc/fablab-offbox.env
+#   # then add:  RESTIC_PASSWORD=<strong, stored in Vaultwarden, >=2 custodians>
+#   sudo systemctl enable --now fablab-pull-backups.timer     # see the unit at the end of this file
 #
 # The VPS key is restricted to `rrsync -ro`, so this script can ONLY read that one directory: it
 # cannot get a shell, write to the VPS, or reach anything else there. Verify that yourself with:
-#   ssh -i /root/.ssh/backup_pull backup-pull@10.121.16.235 'echo hi'   # must FAIL
+#   sudo -u fablab-offbox ssh -i /var/lib/fablab-offbox/.ssh/backup_pull backup-pull@10.121.16.235 'echo hi'  # must FAIL
 set -euo pipefail
 IFS=$'\n\t'
 
 VPS_HOST="${VPS_HOST:-10.121.16.235}"        # fablab-prod on the ZeroTier overlay
 VPS_USER="${VPS_USER:-backup-pull}"
-SSH_KEY="${SSH_KEY:-/root/.ssh/backup_pull}"
+SSH_KEY="${SSH_KEY:-/var/lib/fablab-offbox/.ssh/backup_pull}"   # service user's key, not /root
 MIRROR="${MIRROR:-/var/lib/fablab-offbox/mirror}"
 RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/var/lib/fablab-offbox/restic}"
 KEEP_DAILY="${KEEP_DAILY:-14}"
@@ -87,10 +92,21 @@ After=network-online.target zerotier-one.service
 
 [Service]
 Type=oneshot
+# Runs unprivileged as the dedicated service user — never root (least privilege).
+User=fablab-offbox
+Group=fablab-offbox
+Environment=SSH_KEY=/var/lib/fablab-offbox/.ssh/backup_pull
+EnvironmentFile=/etc/fablab-offbox.env
 ExecStart=/usr/local/sbin/fablab-pull-backups
 # The VPS backup cron runs 03:00-03:40 UTC; pull afterwards.
 Nice=10
 IOSchedulingClass=idle
+# Sandboxing: the puller only needs its own state dir writable.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/fablab-offbox
 
 # /etc/systemd/system/fablab-pull-backups.timer
 [Unit]

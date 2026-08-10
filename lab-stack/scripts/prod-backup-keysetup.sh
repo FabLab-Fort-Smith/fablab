@@ -5,9 +5,10 @@
 # into Vaultwarden with read-back verification, print the public half to hand to the VPS operator,
 # then run the read-only pre-flight so you see the route/connectivity report in the same pass.
 #
-#   sudo bash prod-backup-keysetup.sh                 # create-if-missing, vault, verify, pre-flight
-#   sudo bash prod-backup-keysetup.sh --dry-run       # show what WOULD happen; changes nothing
-#   sudo bash prod-backup-keysetup.sh --no-preflight  # skip the connectivity report at the end
+# Run it AS the unprivileged service user that will own the key (least privilege — NOT root):
+#   sudo -H -u fablab-offbox env VAULT_URL=… VAULT_EMAIL=… bash prod-backup-keysetup.sh
+#   ...                                               (add --dry-run to preview, --no-preflight to skip the route check)
+# The key defaults to that user's home (PULL_KEY below); override PULL_KEY to place it elsewhere.
 #
 # WHY VAULT THE PRIVATE KEY: it is the puller's identity into the VPS. It lives on THIS box so the
 # unattended timer can use it — but if prod-backup is lost and it lived nowhere else, recovery would
@@ -24,7 +25,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE/.."   # -> lab-stack/
 
 # Config (none secret). Env-overridable to match prod-backup-preflight.sh / prod-backup-pull.sh.
-PULL_KEY="${PULL_KEY:-/root/.ssh/backup_pull}"
+PULL_KEY="${PULL_KEY:-/var/lib/fablab-offbox/.ssh/backup_pull}"   # service user's home, not /root
 VPS_ZT="${VPS_ZT:-10.121.16.235}"
 KEY_COMMENT="${KEY_COMMENT:-backup-pull@$(hostname -s 2>/dev/null || hostname)}"
 VAULT_ITEM="${VAULT_ITEM:-FabLab off-box backup pull key}"
@@ -67,8 +68,8 @@ else
   [ "$DRY" = 1 ] && { info "would create an ed25519 keypair at $PULL_KEY (comment: $KEY_COMMENT)"; }
   if [ "$DRY" = 0 ]; then
     # Fail loud instead of prompting for a password if we cannot write the key dir (usually: not root).
-    if [ ! -d "$KEY_DIR" ]; then mkdir -p "$KEY_DIR" 2>/dev/null || die "cannot create $KEY_DIR — re-run with sudo"; fi
-    [ -w "$KEY_DIR" ] || die "cannot write $KEY_DIR — re-run with sudo (the key lives in root's ~/.ssh)"
+    if [ ! -d "$KEY_DIR" ]; then mkdir -p "$KEY_DIR" 2>/dev/null || die "cannot create $KEY_DIR — run as the user that owns it (e.g. sudo -u fablab-offbox), or set PULL_KEY"; fi
+    [ -w "$KEY_DIR" ] || die "cannot write $KEY_DIR — run as the user that owns it (e.g. sudo -u fablab-offbox), or set PULL_KEY"
     chmod 700 "$KEY_DIR" 2>/dev/null || true
     # -N '' : no passphrase — the puller runs unattended via a systemd timer; the key is protected by
     # file mode (below), root-only ownership, and the vaulted backup copy, not by a passphrase.

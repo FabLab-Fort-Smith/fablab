@@ -16,7 +16,7 @@ IFS=$'\n\t'
 VPS_ZT="${VPS_ZT:-10.121.16.235}"          # fablab-prod on the ZeroTier overlay
 VPS_PUBLIC="${VPS_PUBLIC:-107.173.52.204}" # its public address (fallback path only)
 VPS_USER="${VPS_USER:-backup-pull}"
-PULL_KEY="${PULL_KEY:-/root/.ssh/backup_pull}"
+PULL_KEY="${PULL_KEY:-/var/lib/fablab-offbox/.ssh/backup_pull}"   # service user's key, not /root
 WANT_SPACE_GB="${WANT_SPACE_GB:-5}"
 JSON=0; [ "${1:-}" = "--json" ] && JSON=1
 
