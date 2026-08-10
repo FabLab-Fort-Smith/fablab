@@ -1,101 +1,10 @@
 'use client';
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { signOut } from 'next-auth/react';
-
-function navForRole(role, userID) {
-  const id = userID || 'me';
-  if (!role || role === 'user') {
-    return [{
-      title: 'me',
-      items: [
-        { id: `/dashboard/${id}`,              icon: '◉', label: 'home' },
-        { id: `/dashboard/${id}/profile`,      icon: '◊', label: 'profile' },
-        { id: `/dashboard/${id}/stake`,        icon: '§', label: 'stake.ledger', hot: 'magenta' },
-        { id: `/dashboard/${id}/volunteer`,    icon: '✴', label: 'volunteer.log' },
-        { id: `/dashboard/${id}/settings`,     icon: '⚙', label: 'settings' },
-        { id: '/dashboard/checkin',            icon: '⟁', label: 'checkin' },
-        { id: '/dashboard/plans',              icon: '$', label: 'plan.billing' },
-        { id: '/unlock',                       icon: '⋬', label: 'unlock.door', hot: 'green' },
-        { id: '/dashboard/onboarding',         icon: '◐', label: 'onboarding' },
-      ],
-    }, {
-      title: 'activities',
-      items: [
-        { id: '/dashboard/activities/arcade',       icon: '▶', label: 'arcade',     hot: 'magenta' },
-        { id: '/dashboard/activities/holodeck',     icon: '◐', label: 'holodeck',   hot: 'green' },
-        { id: '/dashboard/activities/leaderboard',  icon: '⚑', label: 'leaderboard' },
-        { id: '/dashboard/activities/bounties',     icon: '⚒', label: 'bounty.board' },
-      ],
-    }, {
-      title: 'community',
-      items: [
-        { id: '/dashboard/community/feed',           icon: '⌬', label: 'feed' },
-        { id: '/dashboard/community/directory',      icon: '∷', label: 'directory' },
-        { id: '/dashboard/community/announcements',  icon: '✉', label: 'announcements', hot: 'amber' },
-        { id: '/dashboard/community/code-of-conduct', icon: '§', label: 'conduct.md' },
-        { id: '/dashboard/showcase',                 icon: '✦', label: 'showcase' },
-      ],
-    }, {
-      title: 'resources',
-      items: [
-        { id: '/dashboard/resources',         icon: '▤', label: 'docs.tree' },
-        { id: '/dashboard/resources/badges',  icon: '◈', label: 'my.badges' },
-        { id: '/dashboard/resources/bugs',    icon: '⚠', label: 'bug.board' },
-      ],
-    }, {
-      title: 'public',
-      items: [
-        { id: '/',       icon: '○', label: 'public.home' },
-        { id: '/donate', icon: '$', label: 'donate' },
-      ],
-    }];
-  }
-
-  if (role === 'admin') {
-    return [{
-      title: 'admin',
-      items: [
-        { id: '/dashboard/admin',                     icon: '◉', label: 'admin.home' },
-        { id: '/dashboard/admin/members',             icon: '∷', label: 'members' },
-        { id: '/dashboard/admin/onboarding-reviews',  icon: '◊', label: 'onboarding', hot: 'amber' },
-        { id: '/dashboard/admin/checkin-log',         icon: '⟁', label: 'checkin.log' },
-        { id: '/dashboard/admin/announcements',       icon: '⌬', label: 'announcements' },
-        { id: '/dashboard/admin/analytics',           icon: '▤', label: 'analytics' },
-        { id: '/dashboard/admin/donations',           icon: '$', label: 'donations' },
-        { id: '/dashboard/admin/bounty-ideas',        icon: '⚑', label: 'bounty.ideas', hot: 'magenta' },
-        { id: '/dashboard/admin/badges',              icon: '◈', label: 'badges.registry' },
-        { id: '/dashboard/admin/contact',             icon: '✉', label: 'contact.inbox', hot: 'amber' },
-        { id: '/dashboard/admin/volunteers',          icon: '✦', label: 'volunteers' },
-        { id: '/dashboard/admin/repair',              icon: '⚒', label: 'repair.queue', hot: 'amber' },
-        { id: '/dashboard/admin/emails',              icon: '✉', label: 'email.templates' },
-        { id: '/dashboard/admin/plans',               icon: '◉', label: 'membership.plans', hot: 'cyan' },
-        { id: '/dashboard/admin/square-transactions', icon: '⟁', label: 'square.txns', hot: 'cyan' },
-        { id: '/dashboard/admin/coupons',             icon: '%', label: 'coupons', hot: 'cyan' },
-      ],
-    }, {
-      title: 'member.views',
-      items: [
-        { id: `/dashboard/${id}`,                      icon: '◉', label: 'as.member · home' },
-        { id: '/dashboard/activities/leaderboard',     icon: '⚑', label: 'leaderboard' },
-        { id: '/dashboard/activities/holodeck',        icon: '◐', label: 'holodeck' },
-        { id: '/dashboard/community/feed',             icon: '⌬', label: 'community.feed' },
-        { id: '/dashboard/community/directory',        icon: '∷', label: 'directory' },
-      ],
-    }, {
-      title: 'public',
-      items: [
-        { id: '/',                          icon: '○', label: 'public.site' },
-        { id: '/services/computer-repair',  icon: '⚒', label: 'computer.repair' },
-        { id: '/board',                     icon: '⚖', label: 'governance' },
-      ],
-    }];
-  }
-
-  return [];
-}
+import { navForRole } from './nav';
 
 export default function Sidebar({ session, open, onClose, isMobile }) {
   const pathname = usePathname();
@@ -103,7 +12,39 @@ export default function Sidebar({ session, open, onClose, isMobile }) {
   const userID = session?.user?.userID;
   const name = session?.user?.name || session?.user?.email || 'unknown';
   const initials = name.split(' ').map(p => p[0]).join('').toUpperCase().slice(0, 2);
-  const nav = useMemo(() => navForRole(role, userID), [role, userID]);
+
+  // Enabled plugins that declare an adminNav socket contribute a dynamic "addons" section
+  // (mirrors the admin home grid). Admin-only; /api/v1/admin/plugins enforces authz server-side.
+  const [pluginNav, setPluginNav] = useState([]);
+  useEffect(() => {
+    if (role !== 'admin') return;
+    let active = true;
+    fetch('/api/v1/admin/plugins')
+      .then((r) => (r.ok ? r.json() : { plugins: [] }))
+      .then((d) => {
+        if (!active) return;
+        const items = (d.plugins || [])
+          .filter((p) => p.enabled && p.sockets?.adminNav)
+          .map((p) => ({
+            id: p.sockets.adminNav.path,
+            icon: p.sockets.adminNav.sym || '⧉',
+            label: p.sockets.adminNav.label,
+            hot: 'cyan',
+          }));
+        setPluginNav(items);
+      })
+      .catch(() => { });
+    return () => { active = false; };
+  }, [role]);
+
+  const nav = useMemo(() => {
+    const sections = navForRole(role, userID);
+    if (role === 'admin' && pluginNav.length) {
+      const at = sections.findIndex((s) => s.title === 'admin');
+      sections.splice(at + 1, 0, { title: 'addons', items: pluginNav });
+    }
+    return sections;
+  }, [role, userID, pluginNav]);
 
   const isActive = (id) => {
     if (id === '/') return pathname === '/';
