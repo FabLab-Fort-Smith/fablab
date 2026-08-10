@@ -1,0 +1,24 @@
+---
+# Authoritative authorized-keys for the VPS role accounts — the SINGLE SOURCE OF TRUTH,
+# VERSION-CONTROLLED so it does not drift per operator machine (the trap that let a converge
+# from one maintainer's `all.yml` silently drop another maintainer's key).
+#
+# PUBLIC KEYS ONLY. This file is intentionally tracked (the rest of group_vars/ is git-ignored
+# because it carries host IPs/secrets). SSH public keys are not secret; NEVER put host addresses,
+# private keys, tokens, or any secret here. This repo is public.
+#
+# `group_vars/lab_vps/` (the VPS group) OVERRIDES `group_vars/all.yml`, so these lists win over any
+# stale copy in a per-machine all.yml. To add/remove a maintainer: edit here, open a PR, converge.
+# Applied by the deploy_account (ADR 0008) and automation_account (ADR 0009) roles.
+
+# Maintainers (humans who run full ops) — each independently revocable.
+deploy_authorized_keys:
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMlbIBjfi+vveRckGLej0Gh0ijPC6jXQXgmNI6+qhhCs 0xb007ab1e"
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINykeCelAwDKu0H4cDOCm5aW29b6Vs6I+zw240m1sNgq CritterCodes"
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMniFHv9DLU7fFX/Mq/hGsznaDukWdmn0ybXustTE9A1 CritterCodes"
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILWIY7oQeEFPslWqgrPWG4gM28F0/jEzcN3hsEbS1EaO fablab-deploy"
+
+# CI / scheduled-ops key for the scoped `automation` account (NOT a maintainer; least privilege).
+# Left empty here until a real CI key exists — set it in a PR when provisioning CI.
+# automation_authorized_keys:
+#   - "ssh-ed25519 AAAA... ci@fablab"

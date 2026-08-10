@@ -10,20 +10,17 @@
 deploy_user: deploy
 manage_deploy_account: true
 
-# Authorized keys for the deploy account — the SINGLE SOURCE OF TRUTH. One line per MAINTAINER
-# (humans who run full ops); each independently revocable (remove it and re-run = offboarded).
-# CI/automation does NOT go here — it uses the scoped `automation` account below.
-deploy_authorized_keys:
-  - "ssh-ed25519 AAAA__MAINTAINER_1__ critter"
-  - "ssh-ed25519 AAAA__MAINTAINER_2__ b007ab1e"
+# Authorized keys for the role accounts are the SINGLE SOURCE OF TRUTH and now live in a
+# VERSION-CONTROLLED file so they cannot drift per operator machine:
+#     group_vars/lab_vps/authorized_keys.yml   (public keys only, tracked)
+# Do NOT set deploy_authorized_keys / automation_authorized_keys here in all.yml — the tracked
+# lab_vps file overrides them anyway. Add/remove a maintainer there via PR, then converge.
 
 # --- Automation identity (scoped least-privilege — ADR 0009) for CI / scheduled ops ---
 # A SEPARATE account from `deploy`: NOT in sudo/docker groups; may run as root ONLY the explicit
-# commands in automation_sudo_commands (NOPASSWD). Use this key for CI and cron-driven ops.
+# commands in automation_sudo_commands (NOPASSWD). Its key lives in the tracked lab_vps file above.
 manage_automation_account: true
 automation_user: automation
-automation_authorized_keys:
-  - "ssh-ed25519 AAAA__CI_AUTOMATION_KEY__ ci@fablab"
 # Exact absolute command paths the automation account may run as root — nothing else. Empty = no
 # sudo at all. Keep this list minimal; expand deliberately as scheduled-ops needs appear.
 automation_sudo_commands:
