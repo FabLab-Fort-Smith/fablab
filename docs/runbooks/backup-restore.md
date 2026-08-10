@@ -212,7 +212,11 @@ Artifacts become `640 root:fablab-backup-read`, which is safe because they are *
 age identity stays solely in Vaultwarden. Everything stays inert until `BACKUP_PULL_PUBKEY` is set
 in `../.env`, then `make converge`.
 
-**Getting the scripts onto prod-backup (curl only — no git/gh on that box).** The repo is
+**Getting the scripts onto prod-backup (curl only — no git/gh on that box).** Easiest: copy the
+template `lab-stack/scripts/prod-backup-bootstrap.sh` to the box, fill its EDIT block (PAT +
+`VAULT_URL`), and run it — it installs deps, creates the `fablab-offbox` user, downloads the pinned
+scripts, and runs keysetup as that user (works on bare root without `sudo`). `shred -u` the filled
+copy afterwards. The manual curl-only equivalent (what the bootstrap automates): the repo is
 private, so a plain `raw.githubusercontent.com` fetch 404s; use the Contents API with a
 fine-grained PAT (**Contents: Read-only**, repo `fablab`, short expiry). Pinned to an immutable
 commit so the download can't drift:
