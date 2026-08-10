@@ -11,8 +11,8 @@
 #
 # Install (as root on prod-backup):
 #   apt-get install -y rsync restic
-#   ssh-keygen -t ed25519 -N '' -f /root/.ssh/backup_pull -C 'backup-pull@prod-backup'
-#   # give the .pub to the VPS operator -> BACKUP_PULL_PUBKEY in lab-stack/../.env -> make converge
+#   bash prod-backup-keysetup.sh   # creates + VAULTS the keypair, prints BACKUP_PULL_PUBKEY, checks the route
+#   # put the printed BACKUP_PULL_PUBKEY line in lab-stack/../.env on the VPS -> make converge
 #   install -m700 prod-backup-pull.sh /usr/local/sbin/fablab-pull-backups
 #   printf 'RESTIC_PASSWORD=<strong, stored in Vaultwarden>\n' > /etc/fablab-offbox.env && chmod 600 /etc/fablab-offbox.env
 #   systemctl enable --now fablab-pull-backups.timer     # see the unit at the end of this file

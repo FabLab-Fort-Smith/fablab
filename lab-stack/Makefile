@@ -36,6 +36,7 @@ test: ## Run script unit tests (no network / no VPS needed)
 	bash scripts/secrets-pull.test.sh
 	bash scripts/secrets-push.test.sh
 	bash scripts/provision-provider-keys.test.sh
+	bash scripts/prod-backup-keysetup.test.sh
 	bash ssh-ca/sign-ssh-cert.test.sh
 	bash racknerd/api.test.sh
 

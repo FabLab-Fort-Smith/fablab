@@ -214,18 +214,23 @@ in `../.env`, then `make converge`.
 
 **prod-backup side.** Two scripts in `lab-stack/scripts/`, both run **on prod-backup**, not the VPS:
 
+- [ ] `prod-backup-keysetup.sh` — the turnkey first step. Creates the puller keypair (if absent),
+      **vaults it** (private key + public key) into Vaultwarden with read-back verification, prints
+      the `BACKUP_PULL_PUBKEY` line to hand off, then runs the read-only pre-flight. Idempotent;
+      never overwrites an existing key. The private key stays on the box (the timer needs it) — the
+      vault copy is the recovery backup, so a rebuilt prod-backup is a download, not a VPS re-key.
 - [ ] `prod-backup-preflight.sh` — read-only. Identifies the host and proves the route (ZT address,
       path to the VPS on 22, path MTU, prerequisites, and whether the key is authorised **and
-      correctly confined**). Run it first; its output is safe to paste.
+      correctly confined**). Output is safe to paste. (keysetup runs it for you; also runnable alone.)
 - [ ] `prod-backup-pull.sh` — rsync → restic snapshot → `forget --prune` → `check --read-data-subset`.
       Install per the header comment; systemd service + timer are at the bottom of the file.
 
 **Order of operations:**
-- [ ] On prod-backup: `sudo bash prod-backup-preflight.sh` — expect a warning that no keypair exists.
-- [ ] `ssh-keygen -t ed25519 -N '' -f /root/.ssh/backup_pull -C 'backup-pull@prod-backup'`.
-- [ ] Put the **public** half in `BACKUP_PULL_PUBKEY` in `../.env`; `make converge` on the VPS.
-- [ ] Re-run the pre-flight. It must report the key **reached the VPS and was confined** — if it ever
-      reports `the key got a SHELL on the VPS`, stop: the forced command is not in place.
+- [ ] On prod-backup: `sudo bash prod-backup-keysetup.sh` — creates + **vaults** the keypair and
+      prints the pre-flight report (expect the key not-yet-authorised until the next step).
+- [ ] Put the printed `BACKUP_PULL_PUBKEY='ssh-ed25519 …'` line in `../.env`; `make converge` on the VPS.
+- [ ] Re-run `sudo bash prod-backup-preflight.sh`. It must report the key **reached the VPS and was
+      confined** — if it ever reports `the key got a SHELL on the VPS`, stop: the forced command is not in place.
 - [ ] Install the puller + timer; run once by hand; confirm a restic snapshot exists.
 - [ ] Drill it: restore an artifact **from the restic repo** and decrypt with the vaulted identity.
 

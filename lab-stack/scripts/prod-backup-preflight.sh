@@ -145,8 +145,9 @@ if [ -f "${PULL_KEY}.pub" ]; then
 elif [ -f "$PULL_KEY" ]; then
   note "private key exists but ${PULL_KEY}.pub is missing — regenerate the public half with: ssh-keygen -y -f $PULL_KEY"
 else
-  note "no pull keypair yet. Create one with:
-             ssh-keygen -t ed25519 -N '' -f $PULL_KEY -C 'backup-pull@$(hostname)'"
+  note "no pull keypair yet. Create AND vault one in a single step with:
+             sudo bash prod-backup-keysetup.sh
+         (that generates the key, stores a verified copy in Vaultwarden, and re-runs this check)."
 fi
 if [ -r "$PULL_KEY" ]; then
   out="$(timeout 15 ssh -i "$PULL_KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
