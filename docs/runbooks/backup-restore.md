@@ -283,8 +283,9 @@ install deps, create the user, and drop the puller into `/usr/local/sbin`. The
       run once by hand (`sudo systemctl start fablab-pull-backups.service`); confirm a restic snapshot exists.
 - [ ] Drill it: restore an artifact **from the restic repo** and decrypt with the vaulted identity.
 
-**Status: not live.** Until the pull runs, **every copy lives on one VPS** — and that VPS now also
-holds production. A VPS loss loses all backup history. Tracked: #90.
+**Status: LIVE (2026-08-10).** The off-box pull runs nightly at 05:00 UTC as the unprivileged
+`fablab-offbox` user (forced `rrsync -ro` over ZeroTier) into a restic repo on prod-backup, and has
+been restore-drilled end-to-end (see the drill log below). The single-VPS backup SPOF is closed. (#90)
 
 ## Real restore (recovery)
 1. Pick the archive: `ls -t /var/backups/fablab/mongo-*.archive.gz` → choose the point-in-time.
@@ -317,12 +318,13 @@ first, empty-volume boot). Fix: **re-converge** — the `mongodb` role now recon
   `lab-stack/ansible/roles/backups/`, `lab-stack/ansible/roles/mongodb/`.
 
 ---
-_Last validated: **2026-08-07** — both drills passed; per-database drill covers thelab, thelab_production and thelab_staging. Owner: platform._
+_Last validated: **2026-08-10** — off-box PULL live + restore-drilled (restic → vaulted age identity → valid Mongo BSON). Prior 2026-08-07: on-box + VPS-loss drills passed; per-database drill covers thelab, thelab_production, thelab_staging. Owner: platform._
 
 ## Drill record
 
 | Date | Drill | Result |
 |---|---|---|
+| 2026-08-10 | **Off-box PULL + restore** | **PASSED.** First live pull: 47 age artifacts / 17M over ZeroTier as `fablab-offbox` (forced `rrsync -ro`) → restic repo on prod-backup (snapshot `a8dec32f`). Restore drill: restic restore → age identity fetched from the vault (cert-pinned, master password, never stored on the box) → decrypted `mongo-thelab_staging` → gzip-valid, real BSON (transactions/checkins/bounty_ideas/portfolio) → identity shredded. Off-box pull now LIVE (nightly 05:00 UTC timer). |
 | 2026-08-07 | **B — VPS-loss (off-box)** | **PASSED.** Restored off the VPS using only the vaulted identity + one artifact: 1965 docs, 0 failures; **18/18 collections matched** live counts; `users` content digest **identical** (`44befb0d…`) — faithful, not just count-equal; emails still encrypted at rest. **Achieved RTO 4 min 01 s** (vault unlock → verified restore). |
 | 2026-08-07 | **A — on-box round-trip** | **PASSED** (18 collections, 1965 docs). Enabling age encryption had **broken** this script — it looked for plaintext `mongo-*.archive.gz`, which no longer exists, and failed with `no backup archive`. Fixed to handle `.age` artifacts, plus its image bumped `mongo:7.0`→`mongo:8.0` to match the server. |
 | 2026-07-12 | on-box round-trip | passed; caught + fixed a missing app user |
