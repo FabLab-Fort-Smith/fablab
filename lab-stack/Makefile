@@ -5,7 +5,7 @@
 .DEFAULT_GOAL := help
 ANSIBLE_DIR := ansible
 
-.PHONY: help setup secrets secrets-pull provision-keys deps lint test ping converge converge-check ssh-ca-init ssh-ca-sign racknerd coolify-plan coolify-apply dns access preview-dns
+.PHONY: help setup secrets secrets-pull provision-keys deps lint test ping converge converge-check converge-backups converge-backups-check ssh-ca-init ssh-ca-sign racknerd coolify-plan coolify-apply dns access preview-dns
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -48,6 +48,12 @@ converge-check: ## Dry-run the playbook (no changes) — review the diff first
 
 converge: ## GATED: apply host config (harden + docker + mongodb + coolify + backups) to the VPS
 	if [ -f ../.env ]; then set -a; . ../.env; set +a; fi; cd $(ANSIBLE_DIR) && ansible-playbook playbook.yml
+
+converge-backups-check: ## Dry-run ONLY the backups role (no changes) — e.g. the off-box pull account
+	if [ -f ../.env ]; then set -a; . ../.env; set +a; fi; cd $(ANSIBLE_DIR) && ansible-playbook playbook.yml --tags backups --check --diff
+
+converge-backups: ## GATED: apply ONLY the backups role (skips harden/sshd/ufw — lower lockout risk)
+	if [ -f ../.env ]; then set -a; . ../.env; set +a; fi; cd $(ANSIBLE_DIR) && ansible-playbook playbook.yml --tags backups
 
 dns: ## GATED: create/update Cloudflare DNS for the VPS (deploy/staging/preview; apex untouched)
 	bash cloudflare/dns.sh
