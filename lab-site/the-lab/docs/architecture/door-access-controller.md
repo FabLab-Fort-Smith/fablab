@@ -193,13 +193,24 @@ Migration order: deploy this → enable addon in staging → run `migrate-access
 for real → new pairings enroll automatically via `register-card` → the addon's authorize/shadow now
 resolves real cards → proceed with the parallel-run/cutover from slice 3.
 
+Built + tested (slice 5 — app-triggered unlock):
+- `access/unlock/route.js` instrumented with the same guarded shadow/cutover as `check-access`:
+  computes the live good-standing decision (unchanged responses/audits), then `shadowCompare({user,
+  doorId, credentialType:"app", liveGranted})`. In shadow mode the live decision stands; under cutover
+  the addon decides the gate. The physical unlock (`toggleLight`) fires only on a grant. Also dropped a
+  `console.log` that printed the username + standing detail (minor info-leak reduction).
+- **7 tests** (`accessUnlockParallelRun`): 401/404, shadow-mode grant/deny (community, lapsed), and
+  cutover deny-overrides-grant / grant-overrides-community-deny.
+
+Both live entry points (`check-access` scan + `access/unlock` app tap) now route through the SAME
+addon `shadowCompare`/policy — one decision, no drift — flag-gated by `authoritative`.
+
 Next slices (own branches/PRs):
-1. **App-triggered** — route `access/unlock` through `Service.authorize({credentialType:"app"})`.
-2. **Offline allowlist** — signer + `SOCKET_API_SECRET` push + socket-server local-DB verify path
+1. **Offline allowlist** — signer + `SOCKET_API_SECRET` push + socket-server local-DB verify path
    (`vps/socket-server.js` change).
-3. **Admin UI** at `/dashboard/admin/door-access-controller` (doors, rules, overrides, cards).
-4. **E2E** — DB-backed authorize test (mongodb-memory-server) for the full request→DB→response path.
-5. **Retire plaintext** — once cutover is proven, stop writing `membership.accessKey.code` and drop it.
+2. **Admin UI** at `/dashboard/admin/door-access-controller` (doors, rules, overrides, cards).
+3. **E2E** — DB-backed authorize test (mongodb-memory-server) for the full request→DB→response path.
+4. **Retire plaintext** — once cutover is proven, stop writing `membership.accessKey.code` and drop it.
 
 ## Migration (strangler, not big-bang)
 
