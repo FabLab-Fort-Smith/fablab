@@ -176,13 +176,30 @@ Migration procedure with this slice: enable the addon in staging (shadow only) �
 watch `door-access.shadow` for `diverged` events until they're understood/zero → flip `authoritative`
 → verify → then retire the inline good-standing block from `check-access`.
 
+Built + tested (slice 4 — enrollment + migration):
+- `Service.enrollCard({userID, code})` — encrypt (GCM) + blind index → replace the member's card in
+  the addon store (one active card per member). Raw code never logged/returned.
+- `parallelRun.enrollIfEnabled({userID, code})` — guarded coexistence hook: enrolls into the addon
+  store when the addon is enabled + card keys are set; **never throws**, never logs the code.
+- `internal/register-card/route.js` — now calls `enrollIfEnabled` after the live plaintext save (both
+  stores stay in sync during migration), and **stops logging the card code** (SEC §5 leak fixed).
+- `scripts/migrate-access-cards.mjs` — idempotent, resumable, `--dry-run`, `--limit` backfill of the
+  existing plaintext `membership.accessKey.code` into the encrypted addon store; counts only, never a
+  code. Its inline crypto is locked to `cardCrypto.js` by a **pinned blind-index test vector**.
+- **11 more tests** (pinned vector, `enrollCard` ×2, `enrollIfEnabled` ×3, `register-card` ×4 incl. a
+  no-code-in-logs assertion). Migration script `node --check` clean.
+
+Migration order: deploy this → enable addon in staging → run `migrate-access-cards.mjs --dry-run` then
+for real → new pairings enroll automatically via `register-card` → the addon's authorize/shadow now
+resolves real cards → proceed with the parallel-run/cutover from slice 3.
+
 Next slices (own branches/PRs):
 1. **App-triggered** — route `access/unlock` through `Service.authorize({credentialType:"app"})`.
-3. **Offline allowlist** — signer + `SOCKET_API_SECRET` push + socket-server local-DB verify path
+2. **Offline allowlist** — signer + `SOCKET_API_SECRET` push + socket-server local-DB verify path
    (`vps/socket-server.js` change).
-4. **Enrollment** — pairing writes the encrypted card + blind index (migrate `membership.accessKey.code`).
-5. **Admin UI** at `/dashboard/admin/door-access-controller` (doors, rules, overrides, cards).
-6. **E2E** — DB-backed authorize test (mongodb-memory-server) for the full request→DB→response path.
+3. **Admin UI** at `/dashboard/admin/door-access-controller` (doors, rules, overrides, cards).
+4. **E2E** — DB-backed authorize test (mongodb-memory-server) for the full request→DB→response path.
+5. **Retire plaintext** — once cutover is proven, stop writing `membership.accessKey.code` and drop it.
 
 ## Migration (strangler, not big-bang)
 

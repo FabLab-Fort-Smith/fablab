@@ -6,7 +6,8 @@
 
 import Model from "./model";
 import { factsFromUser } from "./facts";
-import { blindIndex } from "./cardCrypto";
+import { blindIndex, encryptCode } from "./cardCrypto";
+import { newCardDoc } from "./class";
 import { decide } from "./policy";
 import { resolveConfig, PLUGIN_ID } from "./config";
 import UsersService from "@/app/api/v1/users/service";
@@ -70,6 +71,23 @@ const Service = {
     return decision.granted
       ? { granted: true, reason: decision.reason, userID, username: user.username, role: user.role }
       : { granted: false, reason: decision.reason };
+  },
+
+  /**
+   * Enroll (pair) a card to a member: store its GCM ciphertext + blind index, never the
+   * raw code. One active card per member — replaces any previous card (mirrors the single
+   * membership.accessKey.code). The raw code is never logged or returned.
+   * @param {{ userID:string, code:string, credentialType?:("nfc"|"qr") }} p
+   * @returns {Promise<{userID:string, bi:string}>}  bi is a non-secret keyed hash
+   */
+  async enrollCard({ userID, code, credentialType = "nfc" }) {
+    if (!userID || !code) throw new Error("enrollCard requires userID and code");
+    const bi = blindIndex(code);
+    const doc = newCardDoc({ userID, codeEnc: encryptCode(code), bi, credentialType });
+    await Model.deleteCardsByUserID(userID); // replace, so a re-pair invalidates the old card
+    await Model.upsertCard(doc);
+    auditLog("door-access.enroll", { actor: { pluginId: PLUGIN_ID }, target: userID, outcome: "enrolled", credentialType });
+    return { userID, bi };
   },
 
   /** A member was suspended → soft-revoke their cards. (Allowlist re-push: later slice.) */

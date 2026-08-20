@@ -10,8 +10,10 @@
 // swallowed + audited, and the caller falls back to the live path.
 
 import Model from "./model";
+import Service from "./service";
 import { factsFromUser } from "./facts";
 import { decide } from "./policy";
+import { cardCryptoReady } from "./cardCrypto";
 import { resolveConfig, PLUGIN_ID } from "./config";
 import { getPlugin } from "@/lib/plugins/registry";
 import PluginStateModel from "@/lib/plugins/model";
@@ -84,5 +86,31 @@ export async function shadowCompare({ user, doorId, credentialType = "nfc", live
   }
 }
 
-const ParallelRun = { shadowCompare };
+/**
+ * Enroll a card into the addon store IF the addon is enabled + card keys are set. Called
+ * alongside the live plaintext write during migration so both stores stay in sync. NEVER
+ * throws (a coexistence hook must not break card registration) and never logs the raw code.
+ * @param {{ userID:string, code:string, credentialType?:("nfc"|"qr") }} p
+ * @returns {Promise<{ran:boolean}>}
+ */
+export async function enrollIfEnabled({ userID, code, credentialType = "nfc" }) {
+  try {
+    if (!(await addonEnabled())) return { ran: false };
+    if (!cardCryptoReady()) {
+      auditLog("door-access.enroll", { actor: { pluginId: PLUGIN_ID }, target: userID, outcome: "skipped", reason: "card-keys-not-set" });
+      return { ran: false };
+    }
+    await Service.enrollCard({ userID, code, credentialType });
+    return { ran: true };
+  } catch (e) {
+    try {
+      auditLog("door-access.enroll", { actor: { pluginId: PLUGIN_ID }, target: userID, outcome: "error", reason: String((e && e.message) || e) });
+    } catch {
+      /* audit sink failed — nothing safe left to do */
+    }
+    return { ran: false };
+  }
+}
+
+const ParallelRun = { shadowCompare, enrollIfEnabled };
 export default ParallelRun;

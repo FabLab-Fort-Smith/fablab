@@ -42,6 +42,15 @@ test("a tampered ciphertext fails authentication (throws)", () => {
   expect(() => decryptCode(tampered)).toThrow();
 });
 
+test("blind index matches the PINNED vector (locks the algorithm the migration script copies)", () => {
+  // scripts/migrate-access-cards.mjs re-implements this derivation inline; if it changes,
+  // change it there too and update this vector. Computed from key='pin-vector-key', code='PIN-CARD-001'.
+  const saved = process.env.DOOR_CARD_INDEX_KEY;
+  process.env.DOOR_CARD_INDEX_KEY = "pin-vector-key";
+  expect(blindIndex("PIN-CARD-001")).toBe("6dc62c2e1a26057b45e5bbefd7e858a76d4d3189d4a16bc5ad4cce484d0c8ab7");
+  process.env.DOOR_CARD_INDEX_KEY = saved;
+});
+
 test("missing key throws (fail loud, no fallback)", () => {
   const saved = process.env.DOOR_CARD_ENC_KEY;
   delete process.env.DOOR_CARD_ENC_KEY;

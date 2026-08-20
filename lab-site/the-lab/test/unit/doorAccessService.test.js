@@ -25,6 +25,7 @@ const activeMember = { userID: "u1", username: "amy", role: "member", membership
 
 beforeAll(() => {
   process.env.DOOR_CARD_INDEX_KEY = "svc-test-index-key";
+  process.env.DOOR_CARD_ENC_KEY = "svc-test-enc-key";
 });
 beforeEach(() => {
   jest.clearAllMocks();
@@ -68,6 +69,25 @@ test("app-triggered: value is the userID, no card lookup", async () => {
   const r = await Service.authorize({ credentialType: "app", credentialValue: "u1", doorId: "front", now: WED_2PM });
   expect(Model.findCardByBlindIndex).not.toHaveBeenCalled();
   expect(r).toMatchObject({ granted: true, userID: "u1" });
+});
+
+test("enrollCard stores ciphertext + blind index, replaces prior cards, never the raw code", async () => {
+  Model.deleteCardsByUserID = jest.fn().mockResolvedValue();
+  Model.upsertCard = jest.fn().mockResolvedValue();
+  const r = await Service.enrollCard({ userID: "u1", code: "CARD-XYZ-777" });
+  expect(Model.deleteCardsByUserID).toHaveBeenCalledWith("u1");
+  const doc = Model.upsertCard.mock.calls[0][0];
+  expect(doc).toMatchObject({ userID: "u1", credentialType: "nfc", status: "active" });
+  expect(doc.bi).toMatch(/^[0-9a-f]{64}$/);
+  expect(doc.codeEnc.split(":")).toHaveLength(3); // iv:tag:ciphertext
+  expect(JSON.stringify(doc)).not.toContain("CARD-XYZ-777"); // raw code never persisted
+  expect(r).toEqual({ userID: "u1", bi: doc.bi });
+  expect(auditLog).toHaveBeenCalledWith("door-access.enroll", expect.objectContaining({ target: "u1", outcome: "enrolled" }));
+});
+
+test("enrollCard requires userID and code", async () => {
+  await expect(Service.enrollCard({ userID: "", code: "x" })).rejects.toThrow();
+  await expect(Service.enrollCard({ userID: "u1", code: "" })).rejects.toThrow();
 });
 
 test("revocation on suspend soft-revokes the member's cards", async () => {
