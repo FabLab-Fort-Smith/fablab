@@ -171,3 +171,42 @@ export function decide({ facts, door, credentialType, now, policy }) {
     ? { granted: true, reason: REASON.RULE_MATCH, ruleId: match.id }
     : { granted: false, reason: REASON.NO_WINDOW };
 }
+
+/**
+ * Time-independent PROJECTION of a member's access, for the offline allowlist snapshot: which
+ * doors they may enter and the windows for each — everything `decide()` checks EXCEPT `now`.
+ * The device applies the window check offline. Empty `windows` for a door means 24/7.
+ *
+ * @param {Facts} facts
+ * @param {Door[]} doors           the door registry
+ * @param {Policy} policy
+ * @param {("nfc"|"qr")} [credentialType="nfc"]  physical credential the snapshot is for
+ * @returns {Array<{doorId:string, windows:Window[]}>}  empty ⇒ no access
+ */
+export function allowedDoorsForFacts(facts, doors, policy, credentialType = "nfc") {
+  const overrides = policy.accountOverrides || {};
+  if (overrides[facts.userID] === "deny") return [];
+
+  const isAdmin = policy.allowAdminBypass && facts.role === "admin";
+  if (!isAdmin) {
+    const overrideAllow = overrides[facts.userID] === "allow";
+    if (policy.requireGoodStanding && !overrideAllow && !isGoodStanding(facts)) return [];
+  }
+
+  const out = [];
+  for (const door of doors) {
+    if (isAdmin) {
+      out.push({ doorId: door.doorId, windows: [] }); // admin: every door, 24/7
+      continue;
+    }
+    const rules = policy.rules.filter(
+      (r) => matchesRole(r, facts.role) && matchesDoor(r, door.doorId) && matchesCred(r, credentialType)
+    );
+    if (rules.length === 0) continue;
+    // If any matching rule is 24/7 (no windows), the door is 24/7; else union the windows.
+    const anyOpen = rules.some((r) => !r.windows || r.windows.length === 0);
+    const windows = anyOpen ? [] : rules.flatMap((r) => r.windows);
+    out.push({ doorId: door.doorId, windows });
+  }
+  return out;
+}

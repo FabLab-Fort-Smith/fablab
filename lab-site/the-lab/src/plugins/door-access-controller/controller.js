@@ -47,4 +47,23 @@ export default class DoorAccessController {
       return json({ error: "Internal Error" }, 500);
     }
   };
+
+  /** POST /allowlist/refresh — rebuild + push the signed offline allowlist. Internal (a cron/timer). */
+  static refreshAllowlist = async (req) => {
+    const secret = process.env.INTERNAL_API_SECRET;
+    if (!secret) {
+      console.error("door-access: INTERNAL_API_SECRET is not configured");
+      return json({ error: "Server misconfiguration" }, 500);
+    }
+    if (!timingSafeEqualStr(req.headers.get("authorization"), `Bearer ${secret}`)) {
+      return json({ error: "Unauthorized" }, 401);
+    }
+    try {
+      const result = await Service.refreshAllowlist();
+      return json(result, 200);
+    } catch (e) {
+      console.error("door-access allowlist refresh error:", e);
+      return json({ error: "Internal Error" }, 500);
+    }
+  };
 }

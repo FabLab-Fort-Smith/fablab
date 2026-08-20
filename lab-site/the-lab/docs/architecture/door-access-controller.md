@@ -205,9 +205,26 @@ Built + tested (slice 5 — app-triggered unlock):
 Both live entry points (`check-access` scan + `access/unlock` app tap) now route through the SAME
 addon `shadowCompare`/policy — one decision, no drift — flag-gated by `authoritative`.
 
+Built + tested (slice 6 — offline allowlist, app side):
+- `allowlistCrypto.js` — **Ed25519** sign/verify over a canonical (key-order-independent) payload;
+  app holds the private `DOOR_ALLOWLIST_SIGNING_KEY`, the socket-server only the public
+  `DOOR_ALLOWLIST_VERIFY_KEY`. Verify never throws.
+- `policy.allowedDoorsForFacts()` — time-independent projection (which doors + windows a member
+  gets) used to build a snapshot entry per card.
+- `Service.buildSignedAllowlist()` — assembles `{credHash: card.bi, entries:[{doorId, windows}]}`
+  per active card (facts via `UsersService`), stamps `issuedAt`/`expiresAt` (TTL), signs.
+  `Service.refreshAllowlist()` builds + `pushAllowlist()` to the socket-server (skips, audited, if
+  unsigned). Revocation hooks now best-effort re-push.
+- `offlineDecision.decideOffline()` — the **canonical** offline check (verify sig + TTL → credHash →
+  door → window; deny-by-default) the socket-server ports.
+- Guarded refresh route `POST /api/v1/plugins/door-access-controller/allowlist/refresh`
+  (`requirePluginEnabled` + `INTERNAL_API_SECRET`), for a timer to call every `offlineRefreshMinutes`.
+- **27 tests** (crypto 7, projection 7, offline-decision 6, service 4, route 3).
+
 Next slices (own branches/PRs):
-1. **Offline allowlist** — signer + `SOCKET_API_SECRET` push + socket-server local-DB verify path
-   (`vps/socket-server.js` change).
+1. **socket-server wiring** (`vps/socket-server.js`) — store the pushed snapshot in a local DB and,
+   when the app core is unreachable on a scan, decide via a port of `decideOffline`. Needs the device
+   WS protocol + the vps test harness (separate from jest); the addon side is the signed contract.
 2. **Admin UI** at `/dashboard/admin/door-access-controller` (doors, rules, overrides, cards).
 3. **E2E** — DB-backed authorize test (mongodb-memory-server) for the full request→DB→response path.
 4. **Retire plaintext** — once cutover is proven, stop writing `membership.accessKey.code` and drop it.
@@ -243,7 +260,8 @@ route 404 (fail-closed).
 |---|---|---|
 | `DOOR_CARD_ENC_KEY` | `cardCrypto.js` | secret → AES-256-GCM key (SHA-256 derived) encrypting card codes at rest |
 | `DOOR_CARD_INDEX_KEY` | `cardCrypto.js` | secret → HMAC key for the card blind index (lookup without a reversible ciphertext) |
-| `DOOR_ALLOWLIST_SIGNING_KEY` | addon signer / socket-server verify | Ed25519 key for the offline allowlist (Flow C) |
+| `DOOR_ALLOWLIST_SIGNING_KEY` | addon (`allowlistCrypto.js`) | Ed25519 **private** key (base64 pkcs8 DER) — signs the offline allowlist (Flow C) |
+| `DOOR_ALLOWLIST_VERIFY_KEY` | socket-server / device | Ed25519 **public** key (base64 spki DER) — verifies the snapshot; app-side tests also use it |
 
 Both card keys are required to enable the addon (`checkReady`), and must be provisioned from the
 secret store per environment — never committed (`workflow-secrets`).

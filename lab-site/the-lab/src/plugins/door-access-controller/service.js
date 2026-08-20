@@ -8,9 +8,11 @@ import Model from "./model";
 import { factsFromUser } from "./facts";
 import { blindIndex, encryptCode } from "./cardCrypto";
 import { newCardDoc } from "./class";
-import { decide } from "./policy";
+import { decide, allowedDoorsForFacts } from "./policy";
+import { signAllowlist, allowlistSigningReady } from "./allowlistCrypto";
 import { resolveConfig, PLUGIN_ID } from "./config";
 import UsersService from "@/app/api/v1/users/service";
+import { pushAllowlist } from "@/lib/access-control";
 import { auditLog } from "@/lib/audit";
 
 /** Effective policy = structured rules/overrides (DB) + flat knobs (manifest/config). */
@@ -90,20 +92,83 @@ const Service = {
     return { userID, bi };
   },
 
-  /** A member was suspended → soft-revoke their cards. (Allowlist re-push: later slice.) */
+  /**
+   * Build a signed, TTL'd offline allowlist snapshot from the current cards + policy + facts.
+   * Each entry is { credHash (the card's blind index), entries:[{doorId, windows}] } — no PII,
+   * no raw codes. The device replays this offline; the signature + TTL stop replay/forgery.
+   * @param {{ now?:Date, ttlMinutes?:number }} [opts]
+   * @returns {Promise<{payload:object, sig:string, alg:string}>}
+   */
+  async buildSignedAllowlist({ now = new Date(), ttlMinutes } = {}) {
+    const cfg = await resolveConfig();
+    const ttl = ttlMinutes || cfg.offlineTtlMinutes || 30;
+    const policyDoc = await Model.getPolicyDoc();
+    const policy = {
+      rules: policyDoc.rules || [],
+      accountOverrides: policyDoc.accountOverrides || {},
+      requireGoodStanding: cfg.requireGoodStanding,
+      allowAdminBypass: cfg.allowAdminBypass,
+      defaultTimezone: cfg.defaultTimezone,
+    };
+    const doors = await Model.listDoors();
+    const cards = await Model.listCards({ status: "active" });
+
+    const entries = [];
+    for (const card of cards) {
+      const facts = factsFromUser(await UsersService.getUserByQuery({ userID: card.userID }));
+      if (!facts) continue;
+      const allowed = allowedDoorsForFacts(facts, doors, policy, card.credentialType || "nfc");
+      if (allowed.length) entries.push({ credHash: card.bi, entries: allowed });
+    }
+
+    const payload = {
+      version: 1,
+      issuedAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + ttl * 60000).toISOString(),
+      doorCount: doors.length,
+      entryCount: entries.length,
+      entries,
+    };
+    return signAllowlist(payload);
+  },
+
+  /** Build + push the signed allowlist to the socket-server. Skips (audited) if unsigned. */
+  async refreshAllowlist({ now = new Date() } = {}) {
+    if (!allowlistSigningReady()) {
+      auditLog("door-access.allowlist", { actor: { pluginId: PLUGIN_ID }, outcome: "skipped", reason: "signing-key-not-set" });
+      return { pushed: false, reason: "signing-key-not-set" };
+    }
+    const signed = await this.buildSignedAllowlist({ now });
+    await pushAllowlist(signed);
+    auditLog("door-access.allowlist", { actor: { pluginId: PLUGIN_ID }, outcome: "pushed", entries: signed.payload.entryCount, expiresAt: signed.payload.expiresAt });
+    return { pushed: true, entries: signed.payload.entryCount, expiresAt: signed.payload.expiresAt };
+  },
+
+  /** Best-effort re-push so a change propagates to offline doors promptly; never throws. */
+  async _repushBestEffort() {
+    try {
+      if (allowlistSigningReady()) await this.refreshAllowlist();
+    } catch (e) {
+      auditLog("door-access.allowlist", { actor: { pluginId: PLUGIN_ID }, outcome: "error", reason: String((e && e.message) || e) });
+    }
+  },
+
+  /** A member was suspended → soft-revoke their cards + re-push the offline allowlist. */
   async onMembershipSuspended(payload) {
     const userID = payload?.userID;
     if (!userID) return;
     await Model.revokeCardsByUserID(userID);
     auditLog("door-access.revoke", { actor: { pluginId: PLUGIN_ID }, target: userID, outcome: "revoked", reason: "membership-suspended" });
+    await this._repushBestEffort();
   },
 
-  /** A member was deleted → hard-delete their cards. */
+  /** A member was deleted → hard-delete their cards + re-push the offline allowlist. */
   async onMemberDeleted(payload) {
     const userID = payload?.userID;
     if (!userID) return;
     await Model.deleteCardsByUserID(userID);
     auditLog("door-access.revoke", { actor: { pluginId: PLUGIN_ID }, target: userID, outcome: "deleted", reason: "member-deleted" });
+    await this._repushBestEffort();
   },
 };
 

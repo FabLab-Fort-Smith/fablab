@@ -67,6 +67,21 @@ export async function toggleLight(deviceId) {
     }
 }
 
+// Push a signed offline allowlist snapshot to the socket-server (door-access addon, Flow C).
+// The socket-server stores it and decides locally when the app core is unreachable.
+export async function pushAllowlist(signed) {
+    const res = await fetch(`${controlApiUrl()}/api/v2/allowlist`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(signed),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to push allowlist');
+    }
+    return res.json().catch(() => ({}));
+}
+
 export async function getDeviceStatus(deviceId) {
     try {
         const res = await fetch(`${controlApiUrl()}/api/status/${deviceId}`, {
