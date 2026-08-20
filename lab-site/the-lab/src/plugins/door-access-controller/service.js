@@ -1,40 +1,91 @@
-// door-access-controller service — business logic layer (no HTTP here; that's
-// controller.js). SCAFFOLD: the lifecycle handlers currently audit the revocation
-// intent. Wiring them to the card model (clear the pairing) and re-pushing a fresh
-// signed offline allowlist lands with the model/route slice — see the design doc,
-// "Migration". Keeping them as audited no-ops means enabling the addon is safe today.
+// door-access-controller service — business logic (no HTTP; that's controller.js).
+// Resolves a credential → member, asks the CORE for facts, loads policy + door, and
+// runs the pure engine (policy.js). Also handles lifecycle revocation. Persistence is
+// isolated in model.js; identity/membership is read via the users SERVICE, never its
+// model (the-lab/CLAUDE.md §4).
 
-import { PLUGIN_ID } from "./config";
+import Model from "./model";
+import { factsFromUser } from "./facts";
+import { blindIndex } from "./cardCrypto";
+import { decide } from "./policy";
+import { resolveConfig, PLUGIN_ID } from "./config";
+import UsersService from "@/app/api/v1/users/service";
+import { auditLog } from "@/lib/audit";
+
+/** Effective policy = structured rules/overrides (DB) + flat knobs (manifest/config). */
+async function loadPolicy() {
+  const cfg = await resolveConfig();
+  const doc = await Model.getPolicyDoc();
+  return {
+    rules: doc.rules || [],
+    accountOverrides: doc.accountOverrides || {},
+    requireGoodStanding: cfg.requireGoodStanding,
+    allowAdminBypass: cfg.allowAdminBypass,
+    defaultTimezone: cfg.defaultTimezone,
+  };
+}
+
+/**
+ * Resolve a presented credential to a userID.
+ * - nfc/qr: look up the keyed blind index in the card model (raw code never stored/logged).
+ * - app: the value IS the session-derived userID (the caller already authenticated it).
+ * @returns {Promise<string|null>}
+ */
+async function resolveUserID(credentialType, credentialValue) {
+  if (credentialType === "app") return credentialValue || null;
+  const card = await Model.findCardByBlindIndex(blindIndex(credentialValue));
+  return card && card.status !== "revoked" ? card.userID : null;
+}
 
 const Service = {
   /**
-   * A member was suspended → their door access must be revoked.
-   * @param {{ userID?: string }} payload  IDs only (no PII) — see hooks.js
-   * @param {{ audit?: Function }} [ctx]
+   * The core authorize decision for a scan (socket-server → app). Deny-by-default;
+   * every outcome (grant AND deny) is audited with IDs + reason, never the raw code.
+   * @param {{ credentialType:("nfc"|"qr"|"app"), credentialValue:string, doorId:string,
+   *           now?:Date, source?:string }} input
+   * @returns {Promise<{granted:boolean, reason:string, userID?:string, username?:string, role?:string}>}
    */
-  async onMembershipSuspended(payload, ctx) {
-    ctx?.audit?.("door-access.revoke", {
-      target: payload?.userID,
-      outcome: "pending",
-      reason: "membership-suspended",
-      plugin: PLUGIN_ID,
-    });
-    // TODO(model): clear the member's card pairing + re-push the offline allowlist.
+  async authorize({ credentialType = "nfc", credentialValue, doorId, now = new Date(), source }) {
+    const audit = (outcome, extra) =>
+      auditLog("door-access.authorize", { actor: { pluginId: PLUGIN_ID }, target: doorId, outcome, source, credentialType, ...extra });
+
+    const userID = await resolveUserID(credentialType, credentialValue);
+    if (!userID) {
+      audit("denied", { reason: "unknown-credential" });
+      return { granted: false, reason: "unknown-credential" };
+    }
+
+    const user = await UsersService.getUserByQuery({ userID });
+    const facts = factsFromUser(user);
+    if (!facts) {
+      audit("denied", { reason: "unknown-user", user: userID });
+      return { granted: false, reason: "unknown-user" };
+    }
+
+    const door = (await Model.findDoor(doorId)) || { doorId };
+    const policy = await loadPolicy();
+    const decision = decide({ facts, door, credentialType, now, policy });
+
+    audit(decision.granted ? "granted" : "denied", { user: userID, reason: decision.reason, ruleId: decision.ruleId });
+    return decision.granted
+      ? { granted: true, reason: decision.reason, userID, username: user.username, role: user.role }
+      : { granted: false, reason: decision.reason };
   },
 
-  /**
-   * A member was deleted → remove any door credentials.
-   * @param {{ userID?: string }} payload
-   * @param {{ audit?: Function }} [ctx]
-   */
-  async onMemberDeleted(payload, ctx) {
-    ctx?.audit?.("door-access.revoke", {
-      target: payload?.userID,
-      outcome: "pending",
-      reason: "member-deleted",
-      plugin: PLUGIN_ID,
-    });
-    // TODO(model): delete the member's card record + re-push the offline allowlist.
+  /** A member was suspended → soft-revoke their cards. (Allowlist re-push: later slice.) */
+  async onMembershipSuspended(payload) {
+    const userID = payload?.userID;
+    if (!userID) return;
+    await Model.revokeCardsByUserID(userID);
+    auditLog("door-access.revoke", { actor: { pluginId: PLUGIN_ID }, target: userID, outcome: "revoked", reason: "membership-suspended" });
+  },
+
+  /** A member was deleted → hard-delete their cards. */
+  async onMemberDeleted(payload) {
+    const userID = payload?.userID;
+    if (!userID) return;
+    await Model.deleteCardsByUserID(userID);
+    auditLog("door-access.revoke", { actor: { pluginId: PLUGIN_ID }, target: userID, outcome: "deleted", reason: "member-deleted" });
   },
 };
 

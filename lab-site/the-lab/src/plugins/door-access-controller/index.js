@@ -7,19 +7,20 @@ import manifest from "./plugin.manifest";
 import Service from "./service";
 import { CORE_EVENTS } from "@/lib/plugins/hooks";
 import { accessControlReady } from "@/lib/access-control";
+import { cardCryptoReady } from "./cardCrypto";
 
 export { manifest };
 
 /**
- * Readiness gate: the platform refuses to enable this plugin unless the VPS
- * socket-server is configured (URL + control secret), so an admin can't turn on a
- * feature that can't reach any door.
+ * Readiness gate: the platform refuses to enable this plugin unless it can actually
+ * reach a door (socket-server configured) AND protect card codes (both card keys set),
+ * so an admin can't turn on a half-configured access system.
  * @returns {{ ok: boolean, reason?: string }}
  */
 export function checkReady() {
-  return accessControlReady()
-    ? { ok: true }
-    : { ok: false, reason: "ACCESS_CONTROL_API_URL / SOCKET_API_SECRET not set" };
+  if (!accessControlReady()) return { ok: false, reason: "ACCESS_CONTROL_API_URL / SOCKET_API_SECRET not set" };
+  if (!cardCryptoReady()) return { ok: false, reason: "DOOR_CARD_ENC_KEY / DOOR_CARD_INDEX_KEY not set" };
+  return { ok: true };
 }
 
 /**

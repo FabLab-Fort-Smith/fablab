@@ -139,25 +139,37 @@ for the flat schema and lives in the addon's own collection(s) (`model.js`, laye
 - **Offline allowlist snapshot** — `{ issuedAt, ttl, entries: [{ credHash, doors[], windows[] }], sig }`,
   signed Ed25519. `credHash` is a keyed hash, not the raw card code.
 
-## Scaffold status (this slice)
+## Scaffold status
 
-Built + tested now:
+Built + tested (slice 1 — policy engine):
 - `policy.js` — pure engine `decide(facts, door, credentialType, now, policy)`; deny-by-default;
   admin-bypass, ban-wins, good-standing gate, role/door/window/credential rules, overnight windows.
-  **21 unit tests** (`test/unit/doorAccessPolicy.test.js`).
-- `plugin.manifest.js`, `index.js`, `config.js`, `service.js` (hook handlers audit revocation intent),
-  registered in `src/plugins/index.js`. Ships `enabledByDefault: false`; `checkReady()` gates enable on
-  `accessControlReady()` (socket-server URL + secret set).
+
+Built + tested (slice 2 — model + authorize route):
+- `cardCrypto.js` — AES-256-GCM (random IV) at rest + keyed HMAC **blind index** for lookup; raw
+  card codes never stored/logged.
+- `facts.js` — pure `user → Facts` projection (the "core presents facts" boundary).
+- `model.js` / `class.js` — `doorAccessCards` (encrypted, unique blind index), `doorAccessDoors`
+  registry, single `doorAccessPolicy` doc. Only file that touches the DB.
+- `service.js` — `authorize({credentialType, credentialValue, doorId, now})`: resolve credential →
+  member (blind index, or session userID for app), read facts via `UsersService`, load policy+door,
+  `decide()`, audit every outcome. Revocation hooks now soft-revoke / delete the member's cards.
+- `controller.js` + `src/app/api/v1/plugins/door-access-controller/authorize/route.js` — machine-to-machine
+  endpoint for the socket-server, guarded by `requirePluginEnabled` (404 when off) + `INTERNAL_API_SECRET`
+  (constant-time). Returns only `{granted}` + minimal identity.
+- `checkReady()` now gates enable on `accessControlReady()` **and** `cardCryptoReady()`.
+- **63 unit tests** total (`test/unit/doorAccess*.test.js`): policy 21, crypto 6, facts 4, service 6,
+  route 5 (+ existing plugin registry/manifest suites still green).
 
 Next slices (own branches/PRs):
-1. **Model + card storage** (encrypted code + blind index) and the door registry.
-2. **Authorize route** — move good-standing out of `internal/check-access` into `policy.decide()`
-   (parallel-run first). Guarded shim under `src/app/api/v1/plugins/door-access-controller/`.
-3. **App-triggered** — route `access/unlock` through `policy.decide()`.
-4. **Offline allowlist** — signer + `SOCKET_API_SECRET` push + socket-server local-DB verify path
+1. **Parallel-run + cutover** — call `Service.authorize()` alongside the live `internal/check-access`,
+   log divergences, then route the panel to the addon and retire the inline good-standing check.
+2. **App-triggered** — route `access/unlock` through `Service.authorize({credentialType:"app"})`.
+3. **Offline allowlist** — signer + `SOCKET_API_SECRET` push + socket-server local-DB verify path
    (`vps/socket-server.js` change).
+4. **Enrollment** — pairing writes the encrypted card + blind index (migrate `membership.accessKey.code`).
 5. **Admin UI** at `/dashboard/admin/door-access-controller` (doors, rules, overrides, cards).
-6. **Revocation** — wire the suspended/deleted hooks to clear the card + re-push the allowlist.
+6. **E2E** — DB-backed authorize test (mongodb-memory-server) for the full request→DB→response path.
 
 ## Migration (strangler, not big-bang)
 
@@ -188,7 +200,12 @@ route 404 (fail-closed).
 
 | Variable | Where | Purpose |
 |---|---|---|
+| `DOOR_CARD_ENC_KEY` | `cardCrypto.js` | secret → AES-256-GCM key (SHA-256 derived) encrypting card codes at rest |
+| `DOOR_CARD_INDEX_KEY` | `cardCrypto.js` | secret → HMAC key for the card blind index (lookup without a reversible ciphertext) |
 | `DOOR_ALLOWLIST_SIGNING_KEY` | addon signer / socket-server verify | Ed25519 key for the offline allowlist (Flow C) |
+
+Both card keys are required to enable the addon (`checkReady`), and must be provisioned from the
+secret store per environment — never committed (`workflow-secrets`).
 
 Existing `ACCESS_CONTROL_API_URL`, `SOCKET_API_SECRET`, `WS_SERVER_URL`, `INTERNAL_API_SECRET`,
 `DEVICE_SECRETS` are reused (`access-control-iot.md`).
