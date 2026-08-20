@@ -16,6 +16,14 @@ function socketApiSecret() {
     return secret;
 }
 
+// Readiness probe (no throw): true only when both the socket-server URL and its
+// control secret are configured. Used by the door-access-controller plugin's
+// checkReady() so the platform refuses to enable a door feature that can't reach
+// any device — mirrors purelymailReady() (no `|| ''` fallbacks; SEC-21).
+export function accessControlReady() {
+    return Boolean(process.env.ACCESS_CONTROL_API_URL && process.env.SOCKET_API_SECRET);
+}
+
 function authHeaders(extra = {}) {
     return {
         ...extra,
