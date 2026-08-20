@@ -161,10 +161,23 @@ Built + tested (slice 2 — model + authorize route):
 - **63 unit tests** total (`test/unit/doorAccess*.test.js`): policy 21, crypto 6, facts 4, service 6,
   route 5 (+ existing plugin registry/manifest suites still green).
 
+Built + tested (slice 3 — parallel-run + cutover):
+- `parallelRun.js` — `shadowCompare({user, doorId, liveGranted})` evaluates the addon policy against
+  the user the LIVE path already resolved (isolating the policy migration from the card-store
+  migration), audits `door-access.shadow` as `agree`/`diverged`, and reports `authoritative` only when
+  the cutover flag is set. **Never throws; never mutates the live decision.**
+- `internal/check-access/route.js` instrumented: computes the live decision as before, then consults
+  `shadowCompare` inside the existing try/catch. Shadow-only by default (no behavior change); returns
+  the addon decision **only** when the addon is enabled AND `config.authoritative === true`.
+- New `authoritative` boolean in the manifest `configSchema` (default false) — the admin-controlled
+  cutover switch. **12 more tests** (`doorAccessParallelRun` 6, `checkAccessParallelRun` 6).
+
+Migration procedure with this slice: enable the addon in staging (shadow only) → seed policy + doors →
+watch `door-access.shadow` for `diverged` events until they're understood/zero → flip `authoritative`
+→ verify → then retire the inline good-standing block from `check-access`.
+
 Next slices (own branches/PRs):
-1. **Parallel-run + cutover** — call `Service.authorize()` alongside the live `internal/check-access`,
-   log divergences, then route the panel to the addon and retire the inline good-standing check.
-2. **App-triggered** — route `access/unlock` through `Service.authorize({credentialType:"app"})`.
+1. **App-triggered** — route `access/unlock` through `Service.authorize({credentialType:"app"})`.
 3. **Offline allowlist** — signer + `SOCKET_API_SECRET` push + socket-server local-DB verify path
    (`vps/socket-server.js` change).
 4. **Enrollment** — pairing writes the encrypted card + blind index (migrate `membership.accessKey.code`).

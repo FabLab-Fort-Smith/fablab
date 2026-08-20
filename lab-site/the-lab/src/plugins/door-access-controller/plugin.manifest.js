@@ -63,6 +63,12 @@ export default defineManifest({
       max: 1440,
       description: "Validity of a pushed offline allowlist; the door denies once it expires (fail-secure)",
     },
+    authoritative: {
+      type: "boolean",
+      default: false,
+      description:
+        "CUTOVER flag: when false the addon only shadow-compares against the live check-access (logs divergences, changes nothing). When true (and enabled) the addon's decision becomes authoritative for internal/check-access. Flip only after parallel-run shows agreement.",
+    },
   },
   requiredPermissions: ["door-access-controller:admin"],
   enabledByDefault: false, // ships disabled; enabling it in the admin panel is the feature flag
