@@ -221,13 +221,32 @@ Built + tested (slice 6 — offline allowlist, app side):
   (`requirePluginEnabled` + `INTERNAL_API_SECRET`), for a timer to call every `offlineRefreshMinutes`.
 - **27 tests** (crypto 7, projection 7, offline-decision 6, service 4, route 3).
 
+Built + tested (slice 7 — socket-server wiring):
+- `vps/lib/offlineAccess.js` — the socket-server's offline decider + in-memory snapshot store: a
+  faithful **port** of the addon's verify + blind-index + decide logic (Ed25519 `DOOR_ALLOWLIST_VERIFY_KEY`,
+  `DOOR_CARD_INDEX_KEY` to recompute a scanned code's `credHash`). `setSnapshot` verifies before storing
+  (a forged push is rejected). A `door-access.tz` in the snapshot carries the window timezone.
+- `vps/socket-server.js` endpoints (all `requireApiSecret`):
+  - `POST /api/v2/allowlist` — store the pushed signed snapshot.
+  - `GET  /api/v2/allowlist/status` — `{hasSnapshot, expiresAt, entryCount, expired}`.
+  - `POST /api/v2/authorize` — authorize a scan **online-first** (calls the app's `check-access` with a
+    4s timeout via `APP_INTERNAL_URL` + `INTERNAL_API_SECRET`), falling back to the offline decision on
+    any failure. Returns `{granted, mode:"online"|"offline", reason?}`. The panel points here instead of
+    calling `check-access` directly, so doors keep working during an app/network outage (fail-secure).
+- **Parity guard**: `doorAccessOfflineParity` asserts the addon (signer/decider) and the vps port agree
+  on blind index + the full decision reason space, so the two can't silently drift.
+- **~20 tests** (`vpsOfflineAccess` + `doorAccessOfflineParity`); the addon signs, the vps verifies
+  (interop proven). `node --check` clean on the socket-server; the existing `apiAuth` vps test still green.
+
+Deferred to the vps deploy: the panel/device points its scan authorization at
+`POST /api/v2/authorize`, and a timer (or the app) calls `.../allowlist/refresh` every
+`offlineRefreshMinutes`. Snapshot persistence across a socket-server restart (currently in-memory →
+fail-secure until the next push) is a follow-up if a restart-during-outage window matters.
+
 Next slices (own branches/PRs):
-1. **socket-server wiring** (`vps/socket-server.js`) — store the pushed snapshot in a local DB and,
-   when the app core is unreachable on a scan, decide via a port of `decideOffline`. Needs the device
-   WS protocol + the vps test harness (separate from jest); the addon side is the signed contract.
-2. **Admin UI** at `/dashboard/admin/door-access-controller` (doors, rules, overrides, cards).
-3. **E2E** — DB-backed authorize test (mongodb-memory-server) for the full request→DB→response path.
-4. **Retire plaintext** — once cutover is proven, stop writing `membership.accessKey.code` and drop it.
+1. **Admin UI** at `/dashboard/admin/door-access-controller` (doors, rules, overrides, cards).
+2. **E2E** — DB-backed authorize test (mongodb-memory-server) for the full request→DB→response path.
+3. **Retire plaintext** — once cutover is proven, stop writing `membership.accessKey.code` and drop it.
 
 ## Migration (strangler, not big-bang)
 
@@ -261,7 +280,9 @@ route 404 (fail-closed).
 | `DOOR_CARD_ENC_KEY` | `cardCrypto.js` | secret → AES-256-GCM key (SHA-256 derived) encrypting card codes at rest |
 | `DOOR_CARD_INDEX_KEY` | `cardCrypto.js` | secret → HMAC key for the card blind index (lookup without a reversible ciphertext) |
 | `DOOR_ALLOWLIST_SIGNING_KEY` | addon (`allowlistCrypto.js`) | Ed25519 **private** key (base64 pkcs8 DER) — signs the offline allowlist (Flow C) |
-| `DOOR_ALLOWLIST_VERIFY_KEY` | socket-server / device | Ed25519 **public** key (base64 spki DER) — verifies the snapshot; app-side tests also use it |
+| `DOOR_ALLOWLIST_VERIFY_KEY` | socket-server (`vps/lib/offlineAccess.js`) | Ed25519 **public** key (base64 spki DER) — verifies the snapshot; app-side tests also use it |
+| `DOOR_CARD_INDEX_KEY` (also on vps) | socket-server | recompute a scanned code's `credHash` offline (same HMAC secret as the app's card index) |
+| `APP_INTERNAL_URL` | socket-server | app base URL for the online `check-access` call in `POST /api/v2/authorize` (offline fallback if unreachable) |
 
 Both card keys are required to enable the addon (`checkReady`), and must be provisioned from the
 secret store per environment — never committed (`workflow-secrets`).

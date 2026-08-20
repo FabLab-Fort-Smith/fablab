@@ -5,6 +5,7 @@ import bodyParser from 'body-parser';
 import cors from 'cors';
 import { verifyDeviceSecret, loadDeviceSecrets } from './lib/deviceAuth.js';
 import { requireApiSecret } from './lib/apiAuth.js';
+import offline from './lib/offlineAccess.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -230,6 +231,51 @@ app.get('/api/status/:deviceId', (req, res) => {
 // Healthcheck
 app.get('/api/status/healthcheck', (req, res) => {
     res.json({ status: 'ok', uptime: process.uptime() });
+});
+
+// --- door-access addon: offline allowlist (Flow C) ---
+// The addon pushes a signed snapshot here; we verify + store it, and fall back to it when the
+// app core is unreachable on a scan. See vps/lib/offlineAccess.js + the door-access design doc.
+
+// Receive + store the signed offline allowlist (verified before storing — a forged push is rejected).
+app.post('/api/v2/allowlist', requireApiSecret, (req, res) => {
+    const result = offline.setSnapshot(req.body);
+    if (!result.stored) return res.status(400).json({ error: 'Invalid allowlist signature' });
+    console.log(`[Allowlist] Stored snapshot: ${result.entryCount} entries, expires ${result.expiresAt}`);
+    return res.json({ stored: true, expiresAt: result.expiresAt, entryCount: result.entryCount });
+});
+
+app.get('/api/v2/allowlist/status', requireApiSecret, (req, res) => {
+    res.json(offline.snapshotStatus());
+});
+
+// Authorize a scan: try the app core first; on ANY failure, decide offline (fail-secure).
+// The panel/device should call THIS instead of the app's check-access directly, so it keeps
+// working during an app/network outage. Returns { granted, mode: 'online'|'offline', reason? }.
+app.post('/api/v2/authorize', requireApiSecret, async (req, res) => {
+    const { cardId, doorId, tz } = req.body || {};
+    if (!cardId || !doorId) return res.status(400).json({ error: 'cardId and doorId are required' });
+
+    const appUrl = process.env.APP_INTERNAL_URL;
+    const internalSecret = process.env.INTERNAL_API_SECRET;
+    if (appUrl && internalSecret) {
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 4000); // don't hang the door on a slow core
+            const url = `${appUrl}/api/internal/check-access?cardId=${encodeURIComponent(cardId)}&doorId=${encodeURIComponent(doorId)}`;
+            const r = await fetch(url, { headers: { authorization: `Bearer ${internalSecret}` }, signal: controller.signal });
+            clearTimeout(timer);
+            if (r.ok) {
+                const body = await r.json();
+                return res.json({ ...body, mode: 'online' });
+            }
+        } catch (e) {
+            console.warn('[Authorize] app core unreachable, falling back offline:', e && e.message ? e.message : e);
+        }
+    }
+    // Offline fallback (fail-secure: no snapshot / expired / no match ⇒ denied).
+    const decision = offline.authorizeOffline({ code: cardId, doorId, tz });
+    return res.json({ granted: decision.granted, reason: decision.reason, mode: 'offline' });
 });
 
 server.listen(PORT, () => {

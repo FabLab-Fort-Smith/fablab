@@ -22,13 +22,14 @@ export const OFFLINE_REASON = {
  *        `publicKey` defaults to DOOR_ALLOWLIST_VERIFY_KEY; `tz` is the door's timezone.
  * @returns {{granted:boolean, reason:string}}
  */
-export function decideOffline(signed, { credHash, doorId, now = new Date(), tz = "UTC", publicKey }) {
+export function decideOffline(signed, { credHash, doorId, now = new Date(), tz, publicKey }) {
   if (!verifyAllowlist(signed, publicKey)) return { granted: false, reason: OFFLINE_REASON.BAD_SIGNATURE };
 
   const p = signed.payload || {};
   if (!p.expiresAt || new Date(p.expiresAt).getTime() <= now.getTime()) {
     return { granted: false, reason: OFFLINE_REASON.EXPIRED };
   }
+  const zone = tz || p.tz || "UTC"; // caller's tz, else the snapshot's, else UTC
   const entry = (p.entries || []).find((e) => e.credHash === credHash);
   if (!entry) return { granted: false, reason: OFFLINE_REASON.UNKNOWN_CREDENTIAL };
 
@@ -36,7 +37,7 @@ export function decideOffline(signed, { credHash, doorId, now = new Date(), tz =
   if (!door) return { granted: false, reason: OFFLINE_REASON.NO_DOOR };
 
   if (!door.windows || door.windows.length === 0) return { granted: true, reason: OFFLINE_REASON.GRANTED };
-  const open = door.windows.some((w) => inWindow(now, tz, w));
+  const open = door.windows.some((w) => inWindow(now, zone, w));
   return open ? { granted: true, reason: OFFLINE_REASON.GRANTED } : { granted: false, reason: OFFLINE_REASON.NO_WINDOW };
 }
 

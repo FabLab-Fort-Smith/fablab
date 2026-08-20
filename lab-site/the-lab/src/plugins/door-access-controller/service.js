@@ -125,6 +125,7 @@ const Service = {
       version: 1,
       issuedAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + ttl * 60000).toISOString(),
+      tz: cfg.defaultTimezone, // window evaluation timezone for the offline decider
       doorCount: doors.length,
       entryCount: entries.length,
       entries,
