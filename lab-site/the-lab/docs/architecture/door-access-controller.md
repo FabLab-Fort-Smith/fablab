@@ -260,10 +260,19 @@ Built + tested (slice 8 — admin UI):
 The `authoritative` cutover flag is edited through the platform's generic plugin **config** panel
 (`adminSettings: true`), not this page.
 
+Built + tested (slice 9 — DB-backed E2E):
+- `test/e2e/doorAccessAuthorize.test.js` — real in-memory MongoDB: seeds users, `enrollCard`
+  (real ciphertext + blind index in Mongo), a door + policy, enables the plugin in the DB, then
+  exercises the FULL path: `Service.authorize` (real blind-index lookup → facts from the users
+  collection → policy) for grant / unknown-card / suspended / account-deny / post-revoke; the HTTP
+  authorize route (401 without the internal secret, 200 with); `buildSignedAllowlist` over the real
+  card set (verifiable, suspended excluded); and the admin route (403 non-admin, 200 admin).
+- Self-skips if the mongo binary can't be provisioned offline (mirrors `db.smoke`); CI runs it.
+  **8 E2E cases**, all green.
+
 Next slices (own branches/PRs):
-1. **E2E** — DB-backed authorize test (mongodb-memory-server) for the full request→DB→response path.
-2. **Retire plaintext** — once cutover is proven, stop writing `membership.accessKey.code` and drop it.
-3. **Manual a11y pass** (keyboard + screen reader) on the admin page before it ships (master a11y mandate).
+1. **Retire plaintext** — once cutover is proven, stop writing `membership.accessKey.code` and drop it.
+2. **Manual a11y pass** (keyboard + screen reader) on the admin page before it ships (master a11y mandate).
 
 ## Migration (strangler, not big-bang)
 
