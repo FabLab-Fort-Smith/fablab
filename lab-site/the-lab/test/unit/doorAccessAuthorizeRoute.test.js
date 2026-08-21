@@ -2,6 +2,7 @@
 // disabled (fail-closed), 401 without a valid INTERNAL_API_SECRET bearer (constant-time),
 // 400 on missing fields, and 200 delegating to the service on a valid machine call.
 
+jest.mock("@/auth", () => ({ __esModule: true, auth: jest.fn() })); // controller imports it; avoid loading real NextAuth
 jest.mock("@/lib/plugins/guard", () => ({ __esModule: true, requirePluginEnabled: jest.fn() }));
 jest.mock("@/plugins/door-access-controller/service", () => ({
   __esModule: true,

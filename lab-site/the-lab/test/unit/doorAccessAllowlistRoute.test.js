@@ -1,6 +1,7 @@
 // The allowlist refresh route + controller gate: 404 when disabled, 401 without the internal
 // bearer, 200 delegating to the service on a valid machine call.
 
+jest.mock("@/auth", () => ({ __esModule: true, auth: jest.fn() })); // controller imports it; avoid loading real NextAuth
 jest.mock("@/lib/plugins/guard", () => ({ __esModule: true, requirePluginEnabled: jest.fn() }));
 jest.mock("@/plugins/door-access-controller/service", () => ({
   __esModule: true,

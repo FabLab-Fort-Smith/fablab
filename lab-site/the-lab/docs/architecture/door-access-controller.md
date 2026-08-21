@@ -243,10 +243,27 @@ Deferred to the vps deploy: the panel/device points its scan authorization at
 `offlineRefreshMinutes`. Snapshot persistence across a socket-server restart (currently in-memory →
 fail-secure until the next push) is a follow-up if a restart-during-outage window matters.
 
+Built + tested (slice 8 — admin UI):
+- Admin API `GET/POST /api/v1/plugins/door-access-controller/admin` (thin shim → controller;
+  `requirePluginEnabled` + session). Service methods `adminOverview`, `adminUpsertDoor`,
+  `adminSavePolicy`, `adminRevokeCard` — **admin-only** via `assertPermission(actor, PERM_ADMIN)`
+  (deny-by-default), input-validated (rejects `$`/dotted override keys = Mongo-injection defense),
+  and **cards are sanitized** (never return `codeEnc`/`bi`). Policy save + card revoke best-effort
+  re-push the allowlist.
+- Admin page `src/app/dashboard/admin/door-access-controller/page.js` (matches the `adminNav` path):
+  doors table + add/update form, policy editor (rules + overrides), paired-cards table with revoke,
+  and an allowlist status + "Refresh now". Accessible: `<main>` + heading order, `<label htmlFor>` on
+  every input, `<th scope>`, an `aria-live` status region. UX gate only — the API enforces authz.
+- **13 tests** (`doorAccessAdminService` 6, `doorAccessAdminRoute` 7): non-admin → 403 on every
+  mutation, validation/injection rejects, card sanitization, 404-when-disabled, 401-no-session.
+
+The `authoritative` cutover flag is edited through the platform's generic plugin **config** panel
+(`adminSettings: true`), not this page.
+
 Next slices (own branches/PRs):
-1. **Admin UI** at `/dashboard/admin/door-access-controller` (doors, rules, overrides, cards).
-2. **E2E** — DB-backed authorize test (mongodb-memory-server) for the full request→DB→response path.
-3. **Retire plaintext** — once cutover is proven, stop writing `membership.accessKey.code` and drop it.
+1. **E2E** — DB-backed authorize test (mongodb-memory-server) for the full request→DB→response path.
+2. **Retire plaintext** — once cutover is proven, stop writing `membership.accessKey.code` and drop it.
+3. **Manual a11y pass** (keyboard + screen reader) on the admin page before it ships (master a11y mandate).
 
 ## Migration (strangler, not big-bang)
 

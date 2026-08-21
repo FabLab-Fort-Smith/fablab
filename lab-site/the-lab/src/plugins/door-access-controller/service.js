@@ -7,13 +7,23 @@
 import Model from "./model";
 import { factsFromUser } from "./facts";
 import { blindIndex, encryptCode } from "./cardCrypto";
-import { newCardDoc } from "./class";
+import { newCardDoc, newDoorDoc } from "./class";
 import { decide, allowedDoorsForFacts } from "./policy";
 import { signAllowlist, allowlistSigningReady } from "./allowlistCrypto";
-import { resolveConfig, PLUGIN_ID } from "./config";
+import { resolveConfig, PLUGIN_ID, PERM_ADMIN } from "./config";
+import { assertPermission } from "@/lib/plugins/permissions";
 import UsersService from "@/app/api/v1/users/service";
 import { pushAllowlist } from "@/lib/access-control";
 import { auditLog } from "@/lib/audit";
+
+const badRequest = (msg) => {
+  const e = new Error(msg);
+  e.status = 400;
+  return e;
+};
+// Card rows for the admin UI — never expose the ciphertext or the blind index.
+const publicCard = (c) => ({ userID: c.userID, credentialType: c.credentialType, status: c.status, createdAt: c.createdAt });
+const isSafeKey = (k) => typeof k === "string" && k.length > 0 && !k.startsWith("$") && !k.includes(".");
 
 /** Effective policy = structured rules/overrides (DB) + flat knobs (manifest/config). */
 async function loadPolicy() {
@@ -152,6 +162,61 @@ const Service = {
     } catch (e) {
       auditLog("door-access.allowlist", { actor: { pluginId: PLUGIN_ID }, outcome: "error", reason: String((e && e.message) || e) });
     }
+  },
+
+  // --- admin surface (all admin-only via assertPermission; deny-by-default) --------------
+
+  /** Everything the admin page needs. Cards are sanitized (no ciphertext / blind index). */
+  async adminOverview(actor) {
+    assertPermission(actor, PERM_ADMIN);
+    const [doors, policy, cards] = await Promise.all([Model.listDoors(), Model.getPolicyDoc(), Model.listCards({})]);
+    return {
+      doors,
+      policy,
+      cards: cards.map(publicCard),
+      allowlist: { signingReady: allowlistSigningReady() },
+    };
+  },
+
+  /** Create/update a door in the registry. */
+  async adminUpsertDoor(actor, { doorId, name, deviceId, timezone = null, enabled = true } = {}) {
+    assertPermission(actor, PERM_ADMIN);
+    if (typeof doorId !== "string" || !doorId.trim()) throw badRequest("doorId is required");
+    if (typeof deviceId !== "string" || !deviceId.trim()) throw badRequest("deviceId is required");
+    const doc = { ...newDoorDoc({ doorId: doorId.trim(), name, deviceId: deviceId.trim(), timezone }), enabled: enabled !== false };
+    await Model.upsertDoor(doc);
+    auditLog("door-access.admin", { actor: { userID: actor.userID }, outcome: "door-upsert", target: doorId });
+    return { ok: true, doorId: doc.doorId };
+  },
+
+  /** Replace the access policy (rules + per-account overrides). Validated + injection-safe. */
+  async adminSavePolicy(actor, { rules, accountOverrides } = {}) {
+    assertPermission(actor, PERM_ADMIN);
+    if (!Array.isArray(rules)) throw badRequest("rules must be an array");
+    for (const r of rules) {
+      if (!r || typeof r.id !== "string" || !r.id) throw badRequest("each rule needs a string id");
+      if (!Array.isArray(r.roles) || !Array.isArray(r.doors)) throw badRequest(`rule ${r.id}: roles and doors must be arrays`);
+    }
+    const overrides = {};
+    for (const [k, v] of Object.entries(accountOverrides || {})) {
+      if (!isSafeKey(k)) throw badRequest("invalid account id in overrides");
+      if (v !== "allow" && v !== "deny") throw badRequest(`override for ${k} must be "allow" or "deny"`);
+      overrides[k] = v;
+    }
+    await Model.savePolicyDoc({ rules, accountOverrides: overrides });
+    auditLog("door-access.admin", { actor: { userID: actor.userID }, outcome: "policy-save", rules: rules.length, overrides: Object.keys(overrides).length });
+    await this._repushBestEffort();
+    return { ok: true };
+  },
+
+  /** Revoke a member's card(s) from the admin UI + re-push the offline allowlist. */
+  async adminRevokeCard(actor, { userID } = {}) {
+    assertPermission(actor, PERM_ADMIN);
+    if (typeof userID !== "string" || !userID) throw badRequest("userID is required");
+    await Model.revokeCardsByUserID(userID);
+    auditLog("door-access.admin", { actor: { userID: actor.userID }, outcome: "card-revoke", target: userID });
+    await this._repushBestEffort();
+    return { ok: true };
   },
 
   /** A member was suspended → soft-revoke their cards + re-push the offline allowlist. */

@@ -8,10 +8,18 @@
 // credential is never echoed or logged.
 
 import Service from "./service";
+import { auth } from "@/auth";
 import { timingSafeEqualStr } from "@/lib/secureCompare";
 
 const json = (body, status) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const unauthorized = () => json({ error: "Unauthorized" }, 401);
+const toActor = (session) => ({ userID: session?.user?.userID ?? null, role: session?.user?.role ?? null });
+function errorResponse(e) {
+  const status = e?.status && Number.isInteger(e.status) ? e.status : 500;
+  if (status === 500) console.error("door-access admin error:", e);
+  return json({ error: status === 500 ? "An unexpected error occurred." : e.message }, status);
+}
 
 export default class DoorAccessController {
   /** POST /authorize — socket-server scan authorization. */
@@ -64,6 +72,46 @@ export default class DoorAccessController {
     } catch (e) {
       console.error("door-access allowlist refresh error:", e);
       return json({ error: "Internal Error" }, 500);
+    }
+  };
+
+  // --- admin UI surface (session; admin authz enforced in the service) ---
+
+  /** GET — everything the admin page renders (doors, policy, sanitized cards). */
+  static adminOverview = async () => {
+    try {
+      const session = await auth();
+      if (!session?.user?.userID) return unauthorized();
+      return json(await Service.adminOverview(toActor(session)), 200);
+    } catch (e) {
+      return errorResponse(e);
+    }
+  };
+
+  /** POST { action, ...payload } — door.upsert | policy.save | card.revoke | allowlist.refresh. */
+  static adminAction = async (req) => {
+    try {
+      const session = await auth();
+      if (!session?.user?.userID) return unauthorized();
+      const actor = toActor(session);
+      const body = await req.json().catch(() => ({}));
+      switch (body.action) {
+        case "door.upsert":
+          return json(await Service.adminUpsertDoor(actor, body), 200);
+        case "policy.save":
+          return json(await Service.adminSavePolicy(actor, body), 200);
+        case "card.revoke":
+          return json(await Service.adminRevokeCard(actor, body), 200);
+        case "allowlist.refresh": {
+          // reuse the same permission gate as the other admin actions
+          await Service.adminOverview(actor); // asserts admin (throws 403 otherwise)
+          return json(await Service.refreshAllowlist(), 200);
+        }
+        default:
+          return json({ error: "Unknown action" }, 400);
+      }
+    } catch (e) {
+      return errorResponse(e);
     }
   };
 }
