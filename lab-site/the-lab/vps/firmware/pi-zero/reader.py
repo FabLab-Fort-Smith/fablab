@@ -25,8 +25,11 @@ def load_config(path):
 
 
 def _drain_pico(link, ui):
-    """Consume any pending lines from the Pico and drive the UI. Returns True if a result was shown."""
+    """Consume pending Pico lines, drive the UI, and report link health.
+    Returns (showed_result, online) where `online` is None (no status seen this drain), True, or
+    False — used to heartbeat the OTA health file (proof the door path works)."""
     showed_result = False
+    online = None
     while True:
         msg = link.read_line()
         if not msg:
@@ -38,12 +41,26 @@ def _drain_pico(link, ui):
             else:
                 ui.denied(msg.get("reason"))
             showed_result = True
+            online = True  # a full scan round-trip proves the Pico link is alive
         elif t == "status":
             if msg.get("online"):
                 ui.idle()
+                online = True
             else:
                 ui.offline(connecting=(msg.get("mode") == "connecting"))
-    return showed_result
+                online = False
+    return showed_result, online
+
+
+def _touch(path):
+    """Update a health file's mtime (fresh = door path proven). Best-effort."""
+    try:
+        import os
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write("ok")
+    except Exception:
+        pass
 
 
 def run(config_path=DEFAULT_CONFIG):
@@ -59,12 +76,24 @@ def run(config_path=DEFAULT_CONFIG):
     ).open()
     ui.idle()
 
+    # OTA (optional): heartbeat a health file while the Pico link is online (the confirm self-test
+    # reads it), and poll for updates periodically.
+    try:
+        import ota
+    except Exception:
+        ota = None
+    health_file = cfg.get("health_file", "/run/door/health")
+    ota_poll_s = int(cfg.get("ota_poll_min", 0) or 0) * 60
+    last_ota = time.monotonic()
+
     last_code = None
     last_time = 0.0
     try:
         while True:
-            # 1) Surface anything the Pico sent (results, link status).
-            _drain_pico(link, ui)
+            # 1) Surface anything the Pico sent (results, link status) + track link health.
+            _shown, online = _drain_pico(link, ui)
+            if online:
+                _touch(health_file)  # door path proven → confirm self-test will pass
 
             # 2) Poll the NFC reader.
             uid = None
@@ -79,6 +108,14 @@ def run(config_path=DEFAULT_CONFIG):
                 # Forward to the Pico; the result comes back asynchronously and is rendered in _drain_pico.
                 # NOTE: never log `uid` — it is the raw card code (PII).
                 link.scan(uid)
+
+            # 3) Periodic OTA check (applies + reboots if an eligible signed update exists).
+            if ota and ota_poll_s and (now - last_ota) > ota_poll_s:
+                last_ota = now
+                try:
+                    ota.check_and_apply(cfg)
+                except Exception as e:
+                    print("[ota] poll error:", e)
 
             time.sleep(0.05)
     except KeyboardInterrupt:

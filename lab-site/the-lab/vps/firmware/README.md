@@ -84,6 +84,37 @@ Wire protocol (both links): **`protocol.md`** — keep it in lockstep with `../s
 - The Pico/Zero code is a thin I/O shell around the protocol — all *decision* logic lives on the
   VPS and is unit/E2E-tested there. Keep firmware changes limited to I/O and protocol framing.
 
+## OTA updates — Pi Zero (A/B via symlink + systemd, confirm-or-rollback)
+
+Signed A/B updates for the Zero (slice 4). Unlike the Pico it uses its **own WiFi/HTTPS** to fetch
+(OTA only — still makes no access decisions) and the **vetted `cryptography` lib** for Ed25519.
+Modules in `pi-zero/`: `ota.py` (fetch/verify/extract/swap), `ota_confirm.py` (boot self-test →
+commit/revert), `otastate.py` (pure transitions), `otacrypto.py` (verify + canonical byte-matching
+the server). Units in `pi-zero/systemd/`.
+
+**Layout:**
+```
+/opt/door/releases/<version>/     # each = a full release (reader.py, ota*.py, config.json, ...)
+/opt/door/current -> releases/<v> # atomic symlink = active release (door-reader runs current/reader.py)
+/var/lib/door-ota/state.json      # {current, previous, pending, tries, committed_version}
+/run/door/health                  # reader touches it while the Pico link is online (self-test signal)
+```
+
+**Update flow:** `reader.py` polls `GET /api/v2/firmware/manifest` (role `pi-zero`, its
+`ota_device_secret` bearer); an eligible **signed** manifest → download the **gzip-tar** blob →
+**verify Ed25519 sig + SHA-256** → extract to `releases/<v>` (tar `filter='data'`, no traversal) →
+**atomically repoint `current`** → mark a pending trial → reboot. On the next boot
+`door-ota-confirm.service` runs after `door-reader`: if the reader has a **fresh health file**
+(Pico link online) it **commits**; otherwise it **reverts** the symlink to the previous release (or
+retries to `ota_max_tries`) and reboots. Default of a failed trial = revert.
+
+**Install (one-time):** copy the release to `/opt/door/releases/<v>`, point `current` at it, install
+the two unit files, `systemctl enable --now door-reader door-ota-confirm`. Set `verify_key`
+(= vaulted `DOOR_FW_VERIFY_KEY`, public) and `ota_device_secret` in `config.json`.
+
+**Blob format (CI, slice 5):** `tar -czf` of the release dir; its SHA-256 is pinned in the signed
+manifest; `size` bounds the download.
+
 ## How it ties to the addon
 
 On a scan the Pico sends `{type:'scan', cred, doorId}` over the existing WSS. The socket-server's
