@@ -1,0 +1,14 @@
+# Only the socket-server runtime is needed in the image.
+node_modules
+npm-debug.log
+firmware/
+missions/
+orchestrator/
+docker-compose.yml
+setup-firewall.sh
+README.md
+*.md
+.env
+.env.*
+*.secret
+config.json
