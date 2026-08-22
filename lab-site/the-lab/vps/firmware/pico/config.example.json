@@ -15,5 +15,12 @@
   "uart_rx": 1,
   "uart_baud": 115200,
   "heartbeat_s": 20,
-  "scan_timeout_s": 6
+  "scan_timeout_s": 6,
+  "_ota": "OTA (design #144). ota_base = socket-server HTTPS base; verify_key = DOOR_FW_VERIFY_KEY (spki DER base64, PUBLIC, from the vault). device_secret above is reused as the OTA fetch bearer.",
+  "ota_base": "https://socket.example.org",
+  "verify_key": "REPLACE_ME",
+  "ota_poll_min": 60,
+  "ota_max_tries": 3,
+  "ota_max_bytes": 524288,
+  "wdt_timeout_ms": 8000
 }

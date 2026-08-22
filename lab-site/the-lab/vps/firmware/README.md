@@ -84,6 +84,37 @@ Wire protocol (both links): **`protocol.md`** — keep it in lockstep with `../s
 - The Pico/Zero code is a thin I/O shell around the protocol — all *decision* logic lives on the
   VPS and is unit/E2E-tested there. Keep firmware changes limited to I/O and protocol framing.
 
+## OTA updates — Pico (A/B, confirm-or-rollback)
+
+Signed A/B firmware updates per `docs/architecture/ota-updates.md` (slice 3). Modules in `pico/`:
+`boot.py` (loader), `ota.py` (check/verify/apply/commit), `otastate.py` (pure A/B transitions),
+`otacrypto.py` + `ed25519.py` + `_sha512.py` (Ed25519 + SHA-256 verify, pure-Python, no build deps).
+
+**Flash layout (A/B):**
+```
+/boot.py /ota.py /otastate.py /otacrypto.py /ed25519.py /_sha512.py /config.json
+/ota/state.json          # {active, pending, tries, committed_version}
+/slots/a/  /slots/b/     # each = a full app (main.py, wsclient.py, manifest.json)
+```
+Migrate a device to A/B by copying the shared modules to `/`, the current app into `/slots/a/`
+(with a `manifest.json` = its role+version), and writing `/ota/state.json`
+`{"active":"a","pending":false,"tries":0,"committed_version":"<v>"}`. Until then `boot.py` runs the
+legacy `/main.py` unchanged (backward compatible).
+
+**Update flow:** on each successful connect the app checks `GET /api/v2/firmware/manifest`; an
+eligible **signed** manifest → download the blob → **verify Ed25519 sig + SHA-256** → write the
+INACTIVE slot atomically → flip `state` to a **pending trial** → reboot. The new slot boots, and
+**only after WiFi + WS-auth succeed** does `ota.commit_if_pending()` mark it good. A crash/hang or
+failed connect before commit → the **watchdog** resets → `boot.py` increments `tries` → after
+`ota_max_tries` it **reverts to the previous slot**. Default of a failed trial = revert.
+
+**Blob format (what CI publishes, slice 5):** JSON `{"files":{"main.py":"<base64>",...},"manifest":{…}}`;
+the signed manifest's `sha256` covers the raw blob bytes; `size` bounds the download.
+
+**Provisioning:** set `ota_base` (socket-server HTTPS base) and `verify_key` (= vaulted
+`DOOR_FW_VERIFY_KEY`, spki-DER base64, PUBLIC) in `config.json`; the device reuses its
+`device_secret` as the OTA fetch bearer. No private key ever touches the device.
+
 ## How it ties to the addon
 
 On a scan the Pico sends `{type:'scan', cred, doorId}` over the existing WSS. The socket-server's
