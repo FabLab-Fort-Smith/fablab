@@ -4,9 +4,11 @@ import { createServer } from 'http';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import { verifyDeviceSecret, loadDeviceSecrets } from './lib/deviceAuth.js';
-import { requireApiSecret } from './lib/apiAuth.js';
+import { requireApiSecret, verifyApiSecret, timingSafeEqualStr } from './lib/apiAuth.js';
 import offline from './lib/offlineAccess.js';
 import { makeAuthorizeScan } from './lib/scanAuthorize.js';
+import { makeStore } from './lib/otaStore.js';
+import { publish as otaPublish, resolveManifest, setPin as otaSetPin } from './lib/otaServer.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -34,6 +36,22 @@ if (configuredDeviceCount === 0) {
 // Online-first with a fail-secure offline fallback; see vps/lib/scanAuthorize.js. Extracted there
 // so it is unit-testable. `cardId` is Restricted/PII and is NEVER logged.
 const authorizeScan = makeAuthorizeScan({ offline });
+
+// --- OTA firmware store + device-fetch auth (see docs/architecture/ota-updates.md) ---
+// Manifests live under OTA_MANIFEST_DIR (persistent volume); blobs in the object store via
+// OTA_BLOB_BASE. Not-ready (either unset) → the firmware routes fail closed with 503.
+const otaStore = makeStore();
+// A device fetching a manifest authenticates with a Bearer that matches its entry in either
+// OTA_DEVICE_SECRETS (OTA-only identity, e.g. the Pi Zero) or the door DEVICE_SECRETS (the Pico
+// reuses its WS secret). Constant-time; unknown device / no secret ⇒ false (SEC-06 fail closed).
+function verifyOtaDevice(deviceId, authorizationHeader) {
+    if (!deviceId || typeof authorizationHeader !== 'string') return false;
+    const ota = loadDeviceSecrets(process.env.OTA_DEVICE_SECRETS);
+    const door = loadDeviceSecrets(); // DEVICE_SECRETS
+    const expected = ota[deviceId] || door[deviceId];
+    if (!expected) return false;
+    return timingSafeEqualStr(authorizationHeader, `Bearer ${expected}`);
+}
 
 // --- WebSocket Server ---
 const wss = new WebSocketServer({ server });
@@ -294,6 +312,46 @@ app.post('/api/v2/authorize', requireApiSecret, async (req, res) => {
     // Shared decision path (identical to the WS `scan` handler): online-first, offline fallback.
     const decision = await authorizeScan({ cardId, doorId, tz });
     return res.json(decision);
+});
+
+// --- OTA firmware (see docs/architecture/ota-updates.md) --------------------------------------
+// A device asks what to apply. Device-authed. Returns a signed manifest + blob URL, or {upToDate}.
+// The DEVICE verifies the signature + sha256 before applying; the server only serves + selects.
+app.get('/api/v2/firmware/manifest', async (req, res) => {
+    if (!otaStore.ready()) return res.status(503).json({ error: 'OTA not configured' });
+    const role = req.query.role;
+    const deviceId = req.query.deviceId;
+    const current = req.query.current;
+    if (!role || !deviceId || !current) {
+        return res.status(400).json({ error: 'role, deviceId and current are required' });
+    }
+    if (!verifyOtaDevice(deviceId, req.headers['authorization'])) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const out = await resolveManifest({ store: otaStore, role, deviceId, currentVersion: String(current) });
+    // Audit (§9): device + role + outcome + version; never a secret.
+    console.log(`[OTA] manifest device=${deviceId} role=${role} current=${current} -> ${out.update ? 'update ' + out.version : 'upToDate ' + (out.reason || '')}`);
+    return res.json(out);
+});
+
+// CI publishes a signed manifest (verified here before storing). Authed with FW_PUBLISH_SECRET.
+app.post('/api/v2/firmware/publish', async (req, res) => {
+    if (!otaStore.ready()) return res.status(503).json({ error: 'OTA not configured' });
+    if (!verifyApiSecret(req.headers['authorization'], process.env.FW_PUBLISH_SECRET)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const out = await otaPublish({ store: otaStore, signed: req.body });
+    console.log(`[OTA] publish role=${out.role || '?'} version=${out.version || '?'} ok=${out.ok}${out.reason ? ' reason=' + out.reason : ''}`);
+    return res.status(out.ok ? 200 : 400).json(out);
+});
+
+// Admin pins a role/device to a published target version. Authed with SOCKET_API_SECRET (the app).
+app.post('/api/v2/firmware/pin', requireApiSecret, async (req, res) => {
+    if (!otaStore.ready()) return res.status(503).json({ error: 'OTA not configured' });
+    const { role, deviceId, version } = req.body || {};
+    const out = await otaSetPin({ store: otaStore, role, deviceId, version });
+    console.log(`[OTA] pin role=${role || '?'} device=${deviceId || '*'} version=${version || '?'} ok=${out.ok}${out.reason ? ' reason=' + out.reason : ''}`);
+    return res.status(out.ok ? 200 : 400).json(out);
 });
 
 server.listen(PORT, () => {

@@ -118,10 +118,13 @@ esac
 # APP_INTERNAL_URL (fixed per env) is where the socket-server calls the app core online-first.
 if [ "$APP_TARGET" = socket-server ]; then
   APP_ENV_REQUIRED=(DEVICE_SECRETS INTERNAL_API_SECRET SOCKET_API_SECRET)
-  APP_ENV_OPTIONAL=(DOOR_ALLOWLIST_VERIFY_KEY DOOR_CARD_INDEX_KEY)  # offline allowlist verify keys — optional until offline mode is exercised
+  # Optional until exercised: offline allowlist verify keys; OTA (design #144) fw verify key +
+  # CI publish secret + device OTA-fetch secrets + object-store blob base URL.
+  APP_ENV_OPTIONAL=(DOOR_ALLOWLIST_VERIFY_KEY DOOR_CARD_INDEX_KEY DOOR_FW_VERIFY_KEY FW_PUBLISH_SECRET OTA_DEVICE_SECRETS OTA_BLOB_BASE)
+  # OTA_MANIFEST_DIR is a container path on a Coolify PERSISTENT VOLUME (mount /data) — see coolify/README §7.
   case "$ENV_TARGET" in
-    staging)    APP_ENV_FIXED=(PORT=3001 "APP_INTERNAL_URL=https://staging.${PRIMARY_DOMAIN}") ;;
-    production) APP_ENV_FIXED=(PORT=3001 "APP_INTERNAL_URL=https://${PRIMARY_DOMAIN}") ;;
+    staging)    APP_ENV_FIXED=(PORT=3001 OTA_MANIFEST_DIR=/data/ota "APP_INTERNAL_URL=https://staging.${PRIMARY_DOMAIN}") ;;
+    production) APP_ENV_FIXED=(PORT=3001 OTA_MANIFEST_DIR=/data/ota "APP_INTERNAL_URL=https://${PRIMARY_DOMAIN}") ;;
   esac
 fi
 # =======================================================================================
