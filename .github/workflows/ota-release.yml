@@ -1,0 +1,98 @@
+# Build + sign + publish a door-unit firmware OTA bundle (design #144, slice 5).
+# Manual, controlled release: pick the role + version. The signing key never leaves CI.
+#
+# Required repo secrets (provision from the vault — item "The-Lab firmware signing (OTA)" + the
+# object store + socket-server; one-time, gated):
+#   DOOR_FW_SIGNING_KEY   Ed25519 private key (pkcs8 DER base64) — signs the manifest
+#   OTA_S3_ENDPOINT       SeaweedFS S3 endpoint URL            OTA_S3_BUCKET  firmware bucket
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY                  S3 creds for the bucket (least-priv)
+#   OTA_SOCKET_BASE       socket-server HTTPS base (e.g. https://socket.fablabfortsmith.org)
+#   FW_PUBLISH_SECRET     bearer for POST /api/v2/firmware/publish
+# The device verifies the Ed25519 signature + SHA-256 itself, so the store/transport are not trusted.
+
+name: OTA firmware release
+
+on:
+  workflow_dispatch:
+    inputs:
+      role:
+        description: "Board role"
+        required: true
+        type: choice
+        options: [pico, pi-zero]
+      version:
+        description: "Firmware version (semver x.y.z)"
+        required: true
+        type: string
+      minVersion:
+        description: "Minimum current version required to accept this update"
+        required: false
+        default: "0.0.0"
+        type: string
+
+concurrency:
+  group: ota-release-${{ inputs.role }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lab-site/the-lab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build + sign the bundle
+        id: build
+        env:
+          # Inputs via env (not inline ${{ }}) to avoid shell script-injection (actionlint).
+          ROLE: ${{ inputs.role }}
+          VERSION: ${{ inputs.version }}
+          MINVER: ${{ inputs.minVersion }}
+          DOOR_FW_SIGNING_KEY: ${{ secrets.DOOR_FW_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          out="$(mktemp -d)"
+          result="$(node scripts/ota-build.mjs \
+            --role "$ROLE" --version "$VERSION" --min "$MINVER" \
+            --src "vps/firmware/$ROLE" --out "$out" --commit "$GITHUB_SHA")"
+          echo "$result"
+          {
+            echo "blobPath=$(echo "$result" | jq -r .blobPath)"
+            echo "manifestPath=$(echo "$result" | jq -r .manifestPath)"
+            echo "blobKey=$(echo "$result" | jq -r .blobKey)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload blob to the object store (SeaweedFS)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          OTA_S3_ENDPOINT: ${{ secrets.OTA_S3_ENDPOINT }}
+          OTA_S3_BUCKET: ${{ secrets.OTA_S3_BUCKET }}
+          BLOB_PATH: ${{ steps.build.outputs.blobPath }}
+          BLOB_KEY: ${{ steps.build.outputs.blobKey }}
+        run: |
+          set -euo pipefail
+          aws --endpoint-url "$OTA_S3_ENDPOINT" s3 cp "$BLOB_PATH" "s3://$OTA_S3_BUCKET/$BLOB_KEY"
+
+      - name: Publish the signed manifest to the socket-server
+        env:
+          OTA_SOCKET_BASE: ${{ secrets.OTA_SOCKET_BASE }}
+          FW_PUBLISH_SECRET: ${{ secrets.FW_PUBLISH_SECRET }}
+          MANIFEST_PATH: ${{ steps.build.outputs.manifestPath }}
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/pub.out -w '%{http_code}' \
+            -X POST "$OTA_SOCKET_BASE/api/v2/firmware/publish" \
+            -H "Authorization: Bearer $FW_PUBLISH_SECRET" \
+            -H "Content-Type: application/json" \
+            --data @"$MANIFEST_PATH")"
+          cat /tmp/pub.out; echo
+          test "$code" = "200" || { echo "publish failed (HTTP $code)"; exit 1; }

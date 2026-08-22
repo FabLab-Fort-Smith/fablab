@@ -84,6 +84,24 @@ Wire protocol (both links): **`protocol.md`** — keep it in lockstep with `../s
 - The Pico/Zero code is a thin I/O shell around the protocol — all *decision* logic lives on the
   VPS and is unit/E2E-tested there. Keep firmware changes limited to I/O and protocol framing.
 
+## OTA release (CI — build + sign + publish)
+
+`scripts/ota-build.mjs` builds + **signs** a bundle (reuses `vps/lib/otaManifest.js` so the exact
+canonical + Ed25519 the device verifies is what we sign):
+```
+DOOR_FW_SIGNING_KEY=... node scripts/ota-build.mjs \
+  --role pico|pi-zero --version X.Y.Z [--min X.Y.Z] --src vps/firmware/<role> --out dist
+```
+It writes the blob (pico = JSON files-map of `main.py`+`wsclient.py`; pi-zero = deterministic
+`tar.gz` of the release `.py`) and a signed `*.manifest.json`, and prints the `blobKey`+`sha256`.
+
+The **`OTA firmware release`** GitHub Action (`.github/workflows/ota-release.yml`, `workflow_dispatch`
+role+version) runs the build, uploads the blob to **SeaweedFS** (`aws s3 cp`), and POSTs the signed
+manifest to the socket-server (`/api/v2/firmware/publish`). The signing key stays in CI (secret from
+the vault); the device verifies the signature + SHA-256 itself, so the store/transport aren't trusted.
+Required repo secrets: `DOOR_FW_SIGNING_KEY`, `OTA_S3_ENDPOINT`/`OTA_S3_BUCKET`/`AWS_ACCESS_KEY_ID`/
+`AWS_SECRET_ACCESS_KEY`, `OTA_SOCKET_BASE`, `FW_PUBLISH_SECRET`.
+
 ## How it ties to the addon
 
 On a scan the Pico sends `{type:'scan', cred, doorId}` over the existing WSS. The socket-server's
