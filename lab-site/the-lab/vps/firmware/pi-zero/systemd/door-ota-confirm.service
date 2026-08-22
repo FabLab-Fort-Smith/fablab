@@ -1,0 +1,15 @@
+[Unit]
+Description=FabLab door OTA confirm (commit or rollback a firmware trial)
+After=door-reader.service
+Requires=door-reader.service
+
+[Service]
+Type=oneshot
+# Give the reader time to bring up the Pico link + write a fresh health file before we judge.
+ExecStartPre=/bin/sleep 20
+# Commits the pending trial iff the self-test passes (fresh health file); else reverts to the
+# previous release (or retries to ota_max_tries) and reboots. No-op when not a pending trial.
+ExecStart=/usr/bin/python3 /opt/door/current/ota_confirm.py /opt/door/current/config.json
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,21 @@
+[Unit]
+Description=FabLab door reader (Pi Zero: NFC + UI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Runs the CURRENT release (an A/B symlink → releases/<version>). OTA repoints this symlink.
+ExecStart=/usr/bin/python3 /opt/door/current/reader.py /opt/door/current/config.json
+Restart=on-failure
+RestartSec=3
+# Crash-loop guard: if it fails 5x in 60s, stop (the OTA confirm/boot-count will then revert a bad
+# trial to the previous release rather than flapping forever).
+StartLimitIntervalSec=60
+StartLimitBurst=5
+# reader writes a health file while the Pico link is online — the OTA confirm reads it (see
+# ota_confirm.py). RuntimeDirectory gives it /run/door owned by this service.
+RuntimeDirectory=door
+
+[Install]
+WantedBy=multi-user.target

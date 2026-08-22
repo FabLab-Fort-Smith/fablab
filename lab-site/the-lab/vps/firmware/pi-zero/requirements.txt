@@ -5,3 +5,5 @@ pyserial>=3.5,<4          # UART link to the Pico
 adafruit-circuitpython-pn532>=2.0,<3
 # GPIO LED/buzzer UI — only needed when ui.driver = "gpio":
 gpiozero>=2.0,<3
+# OTA: Ed25519 manifest verification (vetted lib; the Zero is full Linux). Download uses stdlib urllib.
+cryptography>=42,<44
