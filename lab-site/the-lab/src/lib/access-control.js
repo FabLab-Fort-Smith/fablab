@@ -16,6 +16,14 @@ function socketApiSecret() {
     return secret;
 }
 
+// Readiness probe (no throw): true only when both the socket-server URL and its
+// control secret are configured. Used by the door-access-controller plugin's
+// checkReady() so the platform refuses to enable a door feature that can't reach
+// any device — mirrors purelymailReady() (no `|| ''` fallbacks; SEC-21).
+export function accessControlReady() {
+    return Boolean(process.env.ACCESS_CONTROL_API_URL && process.env.SOCKET_API_SECRET);
+}
+
 function authHeaders(extra = {}) {
     return {
         ...extra,
@@ -57,6 +65,21 @@ export async function toggleLight(deviceId) {
         console.error('Error toggling light:', error.message);
         throw new Error(error.message || 'Failed to toggle light');
     }
+}
+
+// Push a signed offline allowlist snapshot to the socket-server (door-access addon, Flow C).
+// The socket-server stores it and decides locally when the app core is unreachable.
+export async function pushAllowlist(signed) {
+    const res = await fetch(`${controlApiUrl()}/api/v2/allowlist`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(signed),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to push allowlist');
+    }
+    return res.json().catch(() => ({}));
 }
 
 export async function getDeviceStatus(deviceId) {
