@@ -178,6 +178,24 @@ def run():
     cfg = load_config()
     relay = Relay(cfg.get("relay_pin", 15), cfg.get("relay_active_high", True), cfg.get("unlock_ms", 3000))
     zero = ZeroLink(cfg)
+
+    # OTA: arm a watchdog (a hang before the trial commits → reset → loader increments tries →
+    # eventual revert). `ota` is optional (legacy single-slot builds may not ship it).
+    wdt = None
+    wdt_ms = int(cfg.get("wdt_timeout_ms", 0) or 0)
+    if wdt_ms:
+        try:
+            import machine
+            wdt = machine.WDT(timeout=wdt_ms)
+        except Exception as e:
+            print("[wdt] arm failed:", e)
+    try:
+        import ota
+    except Exception:
+        ota = None
+    ota_poll_ms = int(cfg.get("ota_poll_min", 0) or 0) * 60000
+    last_ota = time.ticks_ms()
+
     wifi_connect(cfg)
 
     backoff = 1
@@ -190,6 +208,18 @@ def run():
             ws_authenticate(ws, cfg)
             print("[ws] authenticated")
             zero.status(True)
+            # e2e self-test passed (WiFi associated + WS authenticated). COMMIT any pending OTA
+            # trial now — otherwise the loader reverts on the next reboot. Then check for an update.
+            if ota:
+                try:
+                    ota.commit_if_pending()
+                except Exception as e:
+                    print("[ota] commit error:", e)
+                try:
+                    ota.check_and_apply(cfg)  # reboots into the trial slot if one is applied
+                except Exception as e:
+                    print("[ota] update check error:", e)
+                last_ota = time.ticks_ms()
             backoff = 1  # reset after a clean connect
             last_ping = time.ticks_ms()
             hb_ms = int(cfg.get("heartbeat_s", 20) * 1000)
@@ -214,6 +244,16 @@ def run():
                     ws.send(json.dumps({"type": "ping"}))
                     last_ping = time.ticks_ms()
 
+                # 4) Watchdog + periodic OTA poll.
+                if wdt:
+                    wdt.feed()
+                if ota and ota_poll_ms and time.ticks_diff(time.ticks_ms(), last_ota) > ota_poll_ms:
+                    last_ota = time.ticks_ms()
+                    try:
+                        ota.check_and_apply(cfg)  # reboots if it applies
+                    except Exception as e:
+                        print("[ota] poll error:", e)
+
         except wsclient.WSError as e:
             print("[ws] error:", e)
         except OSError as e:
@@ -226,7 +266,12 @@ def run():
 
         # Reconnect with capped exponential backoff; make sure WiFi is still up.
         print("[ws] reconnecting in %ds" % backoff)
-        time.sleep(backoff)
+        _slept = 0
+        while _slept < backoff:
+            if wdt:
+                wdt.feed()  # keep feeding during the backoff so we don't reset while reconnecting
+            time.sleep(1)
+            _slept += 1
         backoff = min(backoff * 2, 30)
         try:
             wifi_connect(cfg)
