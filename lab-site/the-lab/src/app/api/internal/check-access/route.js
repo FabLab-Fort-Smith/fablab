@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { db } from "@/lib/database";
 import { API_SECRET_KEY } from '@/lib/constants';
 import { timingSafeEqualStr } from '@/lib/secureCompare';
-import { shadowCompare } from '@/plugins/door-access-controller/parallelRun';
+import { shadowCompare, authoritativeDecision } from '@/plugins/door-access-controller/parallelRun';
 
 // Required via env — no hardcoded fallback (SEC-04).
 const SECRET = process.env.INTERNAL_API_SECRET;
@@ -27,6 +27,19 @@ export async function GET(req) {
 
         if (!cardId) {
             return NextResponse.json({ error: 'Missing cardId' }, { status: 400 });
+        }
+
+        const source = req.headers.get('x-forwarded-for') || undefined;
+
+        // --- Post-cutover: the addon is authoritative → resolve + decide ENTIRELY in the addon
+        // (credential → member via the encrypted card store), with NO plaintext lookup here. Returns
+        // {handled:false} pre-cutover so the legacy path below still runs. Fails closed on error.
+        const authoritative = await authoritativeDecision({ cardId, doorId, credentialType: 'nfc', source });
+        if (authoritative.handled) {
+            const idFields = authoritative.granted
+                ? { userId: authoritative.userID, username: authoritative.username, role: authoritative.role }
+                : {};
+            return NextResponse.json({ granted: authoritative.granted, reason: authoritative.reason, ...idFields });
         }
 
         const dbUsers = await db.dbUsers();

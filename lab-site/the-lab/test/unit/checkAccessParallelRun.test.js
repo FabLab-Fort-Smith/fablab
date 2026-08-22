@@ -4,10 +4,10 @@
 // it's imported dynamically after the env is set.
 
 jest.mock("@/lib/database", () => ({ __esModule: true, db: { dbUsers: jest.fn() } }));
-jest.mock("@/plugins/door-access-controller/parallelRun", () => ({ __esModule: true, shadowCompare: jest.fn() }));
+jest.mock("@/plugins/door-access-controller/parallelRun", () => ({ __esModule: true, shadowCompare: jest.fn(), authoritativeDecision: jest.fn() }));
 
 import { db } from "@/lib/database";
-import { shadowCompare } from "@/plugins/door-access-controller/parallelRun";
+import { shadowCompare, authoritativeDecision } from "@/plugins/door-access-controller/parallelRun";
 
 const SECRET = "check-access-test-secret";
 let GET;
@@ -24,6 +24,7 @@ beforeAll(async () => {
 beforeEach(() => {
   jest.clearAllMocks();
   shadowCompare.mockResolvedValue({ ran: false }); // default: shadow only, no cutover
+  authoritativeDecision.mockResolvedValue({ handled: false }); // default: pre-retire, legacy path runs
 });
 
 test("missing bearer → 401", async () => {
@@ -64,4 +65,21 @@ test("cutover: addon authoritative grant returns identity", async () => {
   shadowCompare.mockResolvedValue({ ran: true, authoritative: true, granted: true, reason: "rule-match" });
   const res = await get({ authorization: `Bearer ${SECRET}` }, "cardId=abc&doorId=front");
   expect(await res.json()).toMatchObject({ granted: true, reason: "rule-match", userId: "u1", role: "member" });
+});
+
+test("retire: authoritative addon resolves the credential itself — NO plaintext lookup", async () => {
+  authoritativeDecision.mockResolvedValue({ handled: true, granted: true, reason: "rule-match", userID: "u1", username: "amy", role: "member" });
+  const res = await get({ authorization: `Bearer ${SECRET}` }, "cardId=abc&doorId=front");
+  expect(await res.json()).toMatchObject({ granted: true, reason: "rule-match", userId: "u1", role: "member" });
+  expect(db.dbUsers).not.toHaveBeenCalled(); // the plaintext membership.accessKey.code path was skipped
+  expect(shadowCompare).not.toHaveBeenCalled();
+});
+
+test("retire: authoritative deny returns no identity + no plaintext lookup", async () => {
+  authoritativeDecision.mockResolvedValue({ handled: true, granted: false, reason: "not-in-good-standing" });
+  const res = await get({ authorization: `Bearer ${SECRET}` }, "cardId=abc&doorId=front");
+  const body = await res.json();
+  expect(body).toMatchObject({ granted: false, reason: "not-in-good-standing" });
+  expect(body.userId).toBeUndefined();
+  expect(db.dbUsers).not.toHaveBeenCalled();
 });

@@ -270,9 +270,36 @@ Built + tested (slice 9 — DB-backed E2E):
 - Self-skips if the mongo binary can't be provisioned offline (mirrors `db.smoke`); CI runs it.
   **8 E2E cases**, all green.
 
+Built + tested (slice 10 — retire plaintext):
+- New manifest flag `retirePlaintextCode` (default false).
+- `parallelRun.authoritativeDecision()` — post-cutover, `check-access` resolves the credential
+  ENTIRELY in the addon (blind-index lookup, **no plaintext read**) and fails **closed** on error.
+  `check-access` calls it first; pre-cutover it returns `{handled:false}` and the legacy plaintext +
+  shadow path runs unchanged.
+- `parallelRun.plaintextRetired()` + `register-card`: enrolls into the encrypted store first, then —
+  only if the enroll landed AND the retire flag is on — writes `accessKey.{issued, pairedAt}` WITHOUT
+  the raw code (fail-safe: a card is never stored nowhere). The pairing UI now confirms on
+  `code || pairedAt`.
+- `scripts/purge-plaintext-card-codes.mjs` — idempotent, dry-run-by-default (`--apply`) purge of the
+  stored `membership.accessKey.code`, but ONLY for users whose card is confirmed in the encrypted
+  store (never orphans a credential); counts only, never a code.
+- **~13 tests** (retire helpers, check-access no-plaintext-read under cutover, register-card retire
+  mode + fail-safe). E2E + full unit suite still green; purge/migrate scripts `node --check` clean.
+
+### Rollout order (operational — do in sequence, verify each)
+1. Deploy the branch. Provision env: card keys + Ed25519 allowlist keys (+ on the socket-server the
+   verify key, `DOOR_CARD_INDEX_KEY`, `APP_INTERNAL_URL`).
+2. Enable the addon in **staging** (shadow only) → seed doors + policy → run `migrate-access-cards.mjs`
+   → watch `door-access.shadow` until `diverged` events are understood/zero.
+3. Flip `authoritative` → verify scans + app-unlock decide via the addon; point the panel at the
+   socket-server `POST /api/v2/authorize`; start the `allowlist/refresh` timer.
+4. Flip `retirePlaintextCode` → confirm new pairings enroll without a raw code.
+5. Run `purge-plaintext-card-codes.mjs --dry-run`, then `--apply` → the plaintext codes are gone.
+6. Repeat 2–5 in **production**. Then the legacy plaintext path in `check-access` can be deleted.
+
 Next slices (own branches/PRs):
-1. **Retire plaintext** — once cutover is proven, stop writing `membership.accessKey.code` and drop it.
-2. **Manual a11y pass** (keyboard + screen reader) on the admin page before it ships (master a11y mandate).
+1. **Manual a11y pass** (keyboard + screen reader) on the admin page before it ships (a11y mandate).
+2. **Delete the legacy plaintext block** in `check-access` once production has retired + purged.
 
 ## Migration (strangler, not big-bang)
 

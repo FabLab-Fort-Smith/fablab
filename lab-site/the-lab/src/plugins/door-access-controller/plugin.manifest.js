@@ -69,6 +69,12 @@ export default defineManifest({
       description:
         "CUTOVER flag: when false the addon only shadow-compares against the live check-access (logs divergences, changes nothing). When true (and enabled) the addon's decision becomes authoritative for internal/check-access. Flip only after parallel-run shows agreement.",
     },
+    retirePlaintextCode: {
+      type: "boolean",
+      default: false,
+      description:
+        "RETIRE flag: when true (and the addon is enabled + ready), stop persisting the raw card code in membership.accessKey.code — new pairings live ONLY in the encrypted addon store. Flip AFTER cutover (authoritative) is proven and the backfill has run; then run scripts/purge-plaintext-card-codes.mjs to remove the old codes.",
+    },
   },
   requiredPermissions: ["door-access-controller:admin"],
   enabledByDefault: false, // ships disabled; enabling it in the admin panel is the feature flag

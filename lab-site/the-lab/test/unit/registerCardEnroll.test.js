@@ -3,10 +3,10 @@
 // Reads INTERNAL_API_SECRET at module load, so it's imported dynamically after env is set.
 
 jest.mock("@/app/api/v1/users/service", () => ({ __esModule: true, default: { updateUser: jest.fn() } }));
-jest.mock("@/plugins/door-access-controller/parallelRun", () => ({ __esModule: true, enrollIfEnabled: jest.fn().mockResolvedValue({ ran: true }) }));
+jest.mock("@/plugins/door-access-controller/parallelRun", () => ({ __esModule: true, enrollIfEnabled: jest.fn().mockResolvedValue({ ran: true }), plaintextRetired: jest.fn().mockResolvedValue(false) }));
 
 import UserService from "@/app/api/v1/users/service";
-import { enrollIfEnabled } from "@/plugins/door-access-controller/parallelRun";
+import { enrollIfEnabled, plaintextRetired } from "@/plugins/door-access-controller/parallelRun";
 
 const SECRET = "register-card-test-secret";
 const CODE = "SECRET-CARD-CODE-42";
@@ -25,6 +25,8 @@ beforeAll(async () => {
 });
 beforeEach(() => {
   jest.clearAllMocks();
+  enrollIfEnabled.mockResolvedValue({ ran: true });
+  plaintextRetired.mockResolvedValue(false);
   UserService.updateUser.mockResolvedValue({ userID: "u1", membership: { accessKey: { code: CODE } } });
 });
 
@@ -42,8 +44,27 @@ test("success saves the code AND enrolls it into the addon store", async () => {
   const res = await post({ authorization: `Bearer ${SECRET}` }, { userId: "u1", cardId: CODE });
   expect(res.status).toBe(200);
   expect(await res.json()).toMatchObject({ success: true, userId: "u1" });
-  expect(UserService.updateUser).toHaveBeenCalled();
   expect(enrollIfEnabled).toHaveBeenCalledWith(expect.objectContaining({ userID: "u1", code: CODE }));
+  // pre-retire: the plaintext code IS still written
+  const written = UserService.updateUser.mock.calls[0][1].membership.accessKey;
+  expect(written.code).toBe(CODE);
+});
+
+test("retire mode: the raw code is NOT persisted (enrolled + pairedAt marker only)", async () => {
+  plaintextRetired.mockResolvedValue(true);
+  enrollIfEnabled.mockResolvedValue({ ran: true }); // confirmed stored in the addon
+  await post({ authorization: `Bearer ${SECRET}` }, { userId: "u1", cardId: CODE });
+  const written = UserService.updateUser.mock.calls[0][1].membership.accessKey;
+  expect(written.code).toBeUndefined();
+  expect(written.issued).toBe(true);
+  expect(written.pairedAt).toBeTruthy();
+});
+
+test("retire mode but enroll did NOT land → still writes the code (fail-safe, never store nowhere)", async () => {
+  plaintextRetired.mockResolvedValue(true);
+  enrollIfEnabled.mockResolvedValue({ ran: false }); // addon off / not ready
+  await post({ authorization: `Bearer ${SECRET}` }, { userId: "u1", cardId: CODE });
+  expect(UserService.updateUser.mock.calls[0][1].membership.accessKey.code).toBe(CODE);
 });
 
 test("SEC §5: the card code is never written to the logs", async () => {

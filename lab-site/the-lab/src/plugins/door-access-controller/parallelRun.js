@@ -112,5 +112,49 @@ export async function enrollIfEnabled({ userID, code, credentialType = "nfc" }) 
   }
 }
 
-const ParallelRun = { shadowCompare, enrollIfEnabled };
+/** Is the addon the authoritative decider (enabled + cutover flag on)? Never throws. */
+async function isAuthoritative() {
+  try {
+    if (!(await addonEnabled())) return false;
+    return (await resolveConfig()).authoritative === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Post-cutover authorization: when the addon is authoritative, resolve + decide entirely in the
+ * addon (credential → member via the encrypted card store, no plaintext read) and return the
+ * decision. Otherwise `{handled:false}` so the caller keeps its legacy (plaintext) path. Never throws.
+ * @param {{ cardId:string, doorId:string, credentialType?:string, source?:string }} q
+ * @returns {Promise<{handled:false} | {handled:true, granted:boolean, reason?:string, userID?:string, username?:string, role?:string}>}
+ */
+export async function authoritativeDecision({ cardId, doorId, credentialType = "nfc", source }) {
+  try {
+    if (!(await isAuthoritative())) return { handled: false };
+    const r = await Service.authorize({ credentialType, credentialValue: cardId, doorId, source });
+    return { handled: true, ...r };
+  } catch (e) {
+    // A failure here must NOT fall back to the (being-retired) plaintext path silently granting;
+    // report handled with a denial so the door fails closed, and audit.
+    try {
+      auditLog("door-access.authorize", { actor: { pluginId: PLUGIN_ID }, target: doorId, outcome: "error", reason: String((e && e.message) || e) });
+    } catch {
+      /* audit sink failed */
+    }
+    return { handled: true, granted: false, reason: "authorize-error" };
+  }
+}
+
+/** Should register-card stop persisting the raw code? (addon enabled + retire flag). Never throws. */
+export async function plaintextRetired() {
+  try {
+    if (!(await addonEnabled())) return false;
+    return (await resolveConfig()).retirePlaintextCode === true;
+  } catch {
+    return false;
+  }
+}
+
+const ParallelRun = { shadowCompare, enrollIfEnabled, authoritativeDecision, plaintextRetired };
 export default ParallelRun;
