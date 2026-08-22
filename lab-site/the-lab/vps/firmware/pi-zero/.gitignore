@@ -1,0 +1,5 @@
+# On-device config — never commit. Ship config.example.json.
+config.json
+*.secret
+__pycache__/
+*.pyc

@@ -1,0 +1,19 @@
+{
+  "_comment": "Copy to config.json on the Pi Zero (git-ignored). No secrets live here — the Zero never authenticates to the VPS; the device secret is on the Pico only.",
+  "uart_port": "/dev/serial0",
+  "uart_baud": 115200,
+  "debounce_s": 3,
+  "nfc": {
+    "driver": "pn532",
+    "read_timeout": 0.5,
+    "_mock_note": "set driver to 'mock' and add \"codes\": [\"AABBCCDD\"] to test without hardware"
+  },
+  "ui": {
+    "driver": "gpio",
+    "green_pin": 17,
+    "red_pin": 27,
+    "buzzer_pin": 22,
+    "hold_s": 2,
+    "_console_note": "set driver to 'console' for headless bring-up"
+  }
+}
