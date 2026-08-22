@@ -1,0 +1,19 @@
+{
+  "_comment": "Copy to config.json on the Pico (git-ignored). Real WiFi + device secret NEVER go in git. The device_secret must match this device's entry in the socket-server DEVICE_SECRETS map.",
+  "wifi_ssid": "REPLACE_ME",
+  "wifi_password": "REPLACE_ME",
+  "ws_url": "wss://socket.example.org",
+  "device_id": "door-front",
+  "device_secret": "REPLACE_ME",
+  "door_id": "door-front",
+  "timezone": "America/Chicago",
+  "relay_pin": 15,
+  "relay_active_high": true,
+  "unlock_ms": 3000,
+  "uart_id": 0,
+  "uart_tx": 0,
+  "uart_rx": 1,
+  "uart_baud": 115200,
+  "heartbeat_s": 20,
+  "scan_timeout_s": 6
+}

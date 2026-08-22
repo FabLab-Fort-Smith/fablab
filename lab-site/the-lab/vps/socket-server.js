@@ -6,6 +6,7 @@ import cors from 'cors';
 import { verifyDeviceSecret, loadDeviceSecrets } from './lib/deviceAuth.js';
 import { requireApiSecret } from './lib/apiAuth.js';
 import offline from './lib/offlineAccess.js';
+import { makeAuthorizeScan } from './lib/scanAuthorize.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -29,6 +30,11 @@ if (configuredDeviceCount === 0) {
     console.log(`Loaded secrets for ${configuredDeviceCount} device(s).`);
 }
 
+// --- Scan authorization (shared by the WS `scan` handler and the HTTP /api/v2/authorize) ---
+// Online-first with a fail-secure offline fallback; see vps/lib/scanAuthorize.js. Extracted there
+// so it is unit-testable. `cardId` is Restricted/PII and is NEVER logged.
+const authorizeScan = makeAuthorizeScan({ offline });
+
 // --- WebSocket Server ---
 const wss = new WebSocketServer({ server });
 
@@ -37,7 +43,7 @@ wss.on('connection', (ws, req) => {
     console.log(`[WS] New connection from ${ip}`);
     let authenticatedDeviceId = null;
 
-    ws.on('message', (message) => {
+    ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
 
@@ -61,6 +67,35 @@ wss.on('connection', (ws, req) => {
                 }
             } else if (data.type === 'ping') {
                 ws.send(JSON.stringify({ type: 'pong' }));
+            } else if (data.type === 'scan') {
+                // Door scan (Flow A): the Pico forwards a card read here; we decide (online-first,
+                // offline fallback) and return the result. The Pico fires its OWN relay on a granted
+                // result (fail-secure — if this reply never arrives, the door stays locked). We do NOT
+                // push an UNLOCK command for scans; server-push UNLOCK stays reserved for the app-tap
+                // path (Flow B, /api/unlock).
+                if (!authenticatedDeviceId) {
+                    // Unauthenticated device must never get a decision (spoofing / DoS). Fail closed.
+                    ws.send(JSON.stringify({ type: 'scan_result', requestId: data.requestId, granted: false, reason: 'UNAUTHENTICATED' }));
+                    return;
+                }
+                const cardId = data.cred;
+                const doorId = data.doorId || authenticatedDeviceId; // default the door to the device
+                if (!cardId) {
+                    ws.send(JSON.stringify({ type: 'scan_result', requestId: data.requestId, granted: false, reason: 'MISSING_CRED' }));
+                    return;
+                }
+                const decision = await authorizeScan({ cardId, doorId, tz: data.tz });
+                // SEC §9 audit event: device scan decision — actor(device)+door+outcome, NEVER the card code.
+                console.log(`[WS] scan device=${authenticatedDeviceId} door=${doorId} granted=${decision.granted} mode=${decision.mode}${decision.reason ? ' reason=' + decision.reason : ''}`);
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'scan_result',
+                        requestId: data.requestId,
+                        granted: Boolean(decision.granted),
+                        reason: decision.reason,
+                        mode: decision.mode,
+                    }));
+                }
             }
 
         } catch (e) {
@@ -255,27 +290,9 @@ app.get('/api/v2/allowlist/status', requireApiSecret, (req, res) => {
 app.post('/api/v2/authorize', requireApiSecret, async (req, res) => {
     const { cardId, doorId, tz } = req.body || {};
     if (!cardId || !doorId) return res.status(400).json({ error: 'cardId and doorId are required' });
-
-    const appUrl = process.env.APP_INTERNAL_URL;
-    const internalSecret = process.env.INTERNAL_API_SECRET;
-    if (appUrl && internalSecret) {
-        try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 4000); // don't hang the door on a slow core
-            const url = `${appUrl}/api/internal/check-access?cardId=${encodeURIComponent(cardId)}&doorId=${encodeURIComponent(doorId)}`;
-            const r = await fetch(url, { headers: { authorization: `Bearer ${internalSecret}` }, signal: controller.signal });
-            clearTimeout(timer);
-            if (r.ok) {
-                const body = await r.json();
-                return res.json({ ...body, mode: 'online' });
-            }
-        } catch (e) {
-            console.warn('[Authorize] app core unreachable, falling back offline:', e && e.message ? e.message : e);
-        }
-    }
-    // Offline fallback (fail-secure: no snapshot / expired / no match ⇒ denied).
-    const decision = offline.authorizeOffline({ code: cardId, doorId, tz });
-    return res.json({ granted: decision.granted, reason: decision.reason, mode: 'offline' });
+    // Shared decision path (identical to the WS `scan` handler): online-first, offline fallback.
+    const decision = await authorizeScan({ cardId, doorId, tz });
+    return res.json(decision);
 });
 
 server.listen(PORT, () => {

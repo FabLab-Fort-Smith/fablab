@@ -1,0 +1,7 @@
+# Pi Zero door application deps. Install on the device: pip install -r requirements.txt
+# Pin exact versions when deploying (supply chain — CLAUDE §12); ranges shown for the reference impl.
+pyserial>=3.5,<4          # UART link to the Pico
+# NFC (PN532 over I2C) — only needed when nfc.driver = "pn532":
+adafruit-circuitpython-pn532>=2.0,<3
+# GPIO LED/buzzer UI — only needed when ui.driver = "gpio":
+gpiozero>=2.0,<3

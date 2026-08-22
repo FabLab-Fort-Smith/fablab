@@ -1,0 +1,2 @@
+# Installed deps — never commit; package-lock.json pins them.
+node_modules/
