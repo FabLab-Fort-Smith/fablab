@@ -79,7 +79,7 @@ esac
 case "${APP_TARGET}:${ENV_TARGET}" in
   the-lab:staging)          APP_NAME="the-lab-staging";          DOMAINS="https://staging.${PRIMARY_DOMAIN}" ;;
   the-lab:production)       APP_NAME="the-lab-production";       DOMAINS="https://${PRIMARY_DOMAIN},https://www.${PRIMARY_DOMAIN}" ;;
-  socket-server:staging)    APP_NAME="socket-server-staging";    DOMAINS="https://socket.staging.${PRIMARY_DOMAIN}" ;;
+  socket-server:staging)    APP_NAME="socket-server-staging";    DOMAINS="https://socket-staging.${PRIMARY_DOMAIN}" ;;  # single-label: CF Universal SSL (*.domain) doesn't cover 2-level socket.staging.<domain>
   socket-server:production) APP_NAME="socket-server-production"; DOMAINS="https://socket.${PRIMARY_DOMAIN}" ;;
 esac
 # Per-PR preview URL. SINGLE-label host under the apex so Cloudflare Universal SSL's

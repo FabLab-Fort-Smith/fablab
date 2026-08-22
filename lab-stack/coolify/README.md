@@ -103,7 +103,7 @@ value to use and manages everything else.)
 ## 7. Socket-server (IoT access-control tier)
 The door/access WebSocket server (`lab-site/the-lab/vps/`, `Dockerfile` → port 3001) is a **second
 Coolify app**, reconciled by the same script with `--app socket-server` (default `--app the-lab`):
-- **Domains:** `socket.staging.fablabfortsmith.org` (staging), `socket.fablabfortsmith.org` (prod).
+- **Domains:** `socket-staging.fablabfortsmith.org` (staging), `socket.fablabfortsmith.org` (prod).
   Add a **proxied Cloudflare DNS record** for each (→ the VPS) before first deploy, like the app.
 - **Env (from the vault → `.env`):** `DEVICE_SECRETS` (deviceId→secret JSON; item *The-Lab
   socket-server (IoT)*), `INTERNAL_API_SECRET`, `SOCKET_API_SECRET`; fixed `PORT=3001` +
