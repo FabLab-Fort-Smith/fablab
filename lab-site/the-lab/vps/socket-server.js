@@ -254,6 +254,12 @@ app.post('/api/toggle-light', requireApiSecret, (req, res) => {
     }
 });
 
+// Healthcheck — MUST be declared before the '/api/status/:deviceId' param route below, or
+// Express matches "healthcheck" as a deviceId and shadows it (container HEALTHCHECK relies on this).
+app.get('/api/status/healthcheck', (req, res) => {
+    res.json({ status: 'ok', uptime: process.uptime() });
+});
+
 // Endpoint to get status of a device
 app.get('/api/status/:deviceId', (req, res) => {
     const { deviceId } = req.params;
@@ -261,11 +267,6 @@ app.get('/api/status/:deviceId', (req, res) => {
     const ws = data ? (data.ws || data) : null;
     const isConnected = ws && ws.readyState === WebSocket.OPEN;
     res.json({ deviceId, connected: isConnected });
-});
-
-// Healthcheck
-app.get('/api/status/healthcheck', (req, res) => {
-    res.json({ status: 'ok', uptime: process.uptime() });
 });
 
 // --- door-access addon: offline allowlist (Flow C) ---
