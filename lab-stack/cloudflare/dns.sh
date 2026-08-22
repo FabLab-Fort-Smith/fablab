@@ -44,6 +44,7 @@ upsert() {
 echo "• upserting VPS records (apex/www left untouched — Vercel stays production):"
 upsert "deploy.${LAB_PRIMARY_DOMAIN}"  "${LAB_VPS_HOST}" true
 upsert "staging.${LAB_PRIMARY_DOMAIN}" "${LAB_VPS_HOST}" true
+upsert "socket.staging.${LAB_PRIMARY_DOMAIN}" "${LAB_VPS_HOST}" true  # IoT socket-server (staging)
 # NOTE: a *proxied* wildcard needs Cloudflare Enterprise. On Free/Pro this wildcard is created
 # DNS-only (grey-cloud); Traefik still issues its TLS via DNS-01. PR previews therefore hit the
 # origin directly — either accept that for non-prod, allow the preview host through the origin
