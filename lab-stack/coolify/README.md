@@ -113,6 +113,11 @@ Coolify app**, reconciled by the same script with `--app socket-server` (default
 - **Deploy:** `bash coolify/reconcile.sh --app socket-server --env staging --deploy` (then
   `--env production --confirm-production`). Pairs with the app's `WS_SERVER_URL` (now synced).
 - The Pico's `config.json` `device_secret` must equal this device's value in `DEVICE_SECRETS`.
+- **OTA (design #144):** the firmware routes (`/api/v2/firmware/{manifest,publish,pin}`) need
+  `DOOR_FW_VERIFY_KEY` (vaulted), `FW_PUBLISH_SECRET` (CI), `OTA_DEVICE_SECRETS`, and `OTA_BLOB_BASE`
+  (object-store base for blobs) — all synced by reconcile when set. `OTA_MANIFEST_DIR=/data/ota` is
+  fixed; **add a Coolify persistent volume mounted at `/data`** to this app so published manifests +
+  pins survive redeploys (until then the routes still fail closed with 503 if unset).
 
 ## Automated app config (config-as-code)
 - **`reconcile.sh`** — idempotent, API-driven reconciliation of a Coolify application over the
