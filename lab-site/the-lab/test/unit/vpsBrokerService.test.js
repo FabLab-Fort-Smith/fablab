@@ -50,6 +50,13 @@ describe("handleScan ladder", () => {
     expect(cloudAuthorize).toHaveBeenCalledWith({ doorId: "front", code: CODE });
   });
 
+  test("cloud authoritative DENY is honored, not overridden by a grant-capable offline envelope", async () => {
+    await ingestEnvelope(store, cloudEnvelope()); // offline WOULD grant this code
+    const cloudAuthorize = jest.fn(async () => ({ granted: false, reason: "denied" }));
+    // the cloud revoked access → the online deny wins; we must NOT fall through to the stale offline grant
+    expect(await handleScan({ store, cloudAuthorize }, { doorId: "front", code: CODE })).toEqual({ granted: false, reason: "denied", mode: "online" });
+  });
+
   test("cloud unreachable (throws) → offline fallback", async () => {
     await ingestEnvelope(store, cloudEnvelope());
     const cloudAuthorize = jest.fn(async () => { throw new Error("ECONNREFUSED"); });

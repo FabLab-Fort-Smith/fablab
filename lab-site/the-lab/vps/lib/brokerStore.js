@@ -60,7 +60,12 @@ export function makeBrokerStore({ dir = process.env.BROKER_ENVELOPE_DIR } = {}) 
     await fs.mkdir(path.dirname(p), { recursive: true });
     const tmp = `${p}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`; // unique → no writer collision
     await fs.writeFile(tmp, JSON.stringify(value), { mode: 0o640 });
-    await fs.rename(tmp, p); // atomic replace
+    try {
+      await fs.rename(tmp, p); // atomic replace
+    } catch (e) {
+      await fs.rm(tmp, { force: true }).catch(() => {}); // best-effort: don't leave an orphan tmp (N-2/F-2)
+      throw e;
+    }
   }
 
   return {
