@@ -423,6 +423,18 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
    - **S2b prep ✅** `brokerConfig`: fail-closed load/validate of the runtime config.
    - **S2b-2 → folded into S2c** (transport needs live peers): the mTLS **Link-A** listener, the **Link-B**
      WSS uplink client, and the cloud-side envelope sender are built + integration-tested with the container.
+   - **S2c-1 ✅** broker runtime (`broker-server.js`): mTLS Link-A listener (doorId from client-cert CN)
+     + Link-B WSS uplink client (cloud cert validated + pinned, bearer post-TLS) + bounded framing/replay.
+   - **S2c-2 ✅** *cloud side* of Link-B (`vps/lib/brokerUplink.js` + `socket-server.js`): the broker's
+     dial-out endpoint (`/broker`, path-routed off the device WS). Constant-time **bearer** → brokerId
+     (deny-by-default), **authn-before-act**, **owned-door scope** (BOLA) on both `authz` and the envelope
+     relay, per-broker **rate limit**. `authz` proxies to the shared `authorizeScan` (online-first,
+     fail-secure). Envelope relay: the app POSTs signed envelopes to
+     `POST /api/v2/broker/:brokerId/envelopes` (apiAuth) → scoped to owned doors → pushed down the live
+     uplink (503 if the broker isn't connected). Env: `BROKER_UPLINK_SECRETS` (JSON `{brokerId:secret}`),
+     `BROKER_DOOR_MAP` (JSON `{brokerId:[doorId]}`). The scan `code` is never logged/echoed.
+     **Remaining S2c-2b** (app side): a job that calls `buildDoorEnvelope` per broker×door (re-keyed to
+     each `brokerIndexKey`) and POSTs to the relay on card/allowlist change + on broker reconnect.
    - **Decisions (locked 2026-08-24):** (a) broker mTLS material is loaded from **file paths**
      (`BROKER_TLS_CERT`/`BROKER_TLS_KEY`/`BROKER_CA_ROOT`, internal-CA-issued, mounted — never in the
      image); (b) **the app builds** per-broker×door envelopes (`buildDoorEnvelope`, re-keyed with the
