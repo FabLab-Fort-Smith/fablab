@@ -168,7 +168,7 @@ function safeSend(ws, obj) {
  * @param {(event:string,fields?:object)=>void} [deps.log]
  * @returns {(ws:object, meta?:object)=>{message:(raw:any)=>Promise<void>, close:()=>void, brokerId:()=>string|null}}
  */
-export function makeUplinkConnection({ uplink, brokers, log = () => {} }) {
+export function makeUplinkConnection({ uplink, brokers, log = () => {}, onConnect = () => {} }) {
   return function accept(ws, meta = {}) {
     let brokerId = null; // null until the bearer authenticates (authn-before-act)
     const emit = (event, fields = {}) => log(event, { ...meta, ...fields }); // meta = e.g. { ip } for forensics
@@ -189,6 +189,7 @@ export function makeUplinkConnection({ uplink, brokers, log = () => {} }) {
           brokers.set(brokerId, ws); // newer conn replaces old (HA failover / reconnect)
           emit("broker.authenticated", { brokerId });
           safeSend(ws, { t: "auth_result", ok: true });
+          try { onConnect(brokerId); } catch { /* best-effort resync trigger — never break the conn */ }
         } else if (m.t === "authz") {
           const resp = await uplink.handleAuthz({ brokerId, id: m.id, doorId: m.doorId, code: m.code, tz: m.tz });
           emit("broker.authz", { brokerId: brokerId || "?", doorId: m.doorId, granted: resp.granted, reason: resp.reason });

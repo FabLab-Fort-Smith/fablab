@@ -440,9 +440,13 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      trigger (door/policy/card/membership) now also refreshes the brokers. Fail-secure: skips if the
      signing key isn't set; a not-connected broker (503) is noted, not fatal (it re-syncs on reconnect);
      one broker's failure never aborts the others.
-     **Remaining S2c-2c** (reconnect resync): push a broker its current envelopes when it (re)connects —
-     needs a cloud→app signal on broker connect (the socket-server knows; the app builds). Until then a
-     reconnected broker gets fresh envelopes on the next change trigger or its own TTL-driven refresh.
+   - **S2c-2c ✅** reconnect resync: on a broker's Link-B (re)connect the socket-server fires
+     `onConnect(brokerId)` → `brokerResync` (per-broker cooldown, fire-and-forget) → POSTs the app's
+     `/api/internal/broker-resync` (INTERNAL_API_SECRET bearer) → `Service.refreshBrokerEnvelopes({brokerId})`
+     (single-broker scope; unknown broker = no-op) → builds + pushes that broker's envelopes down the
+     now-live uplink. Best-effort (a failed resync just falls back to the next change/TTL — never blocks
+     the uplink); the brokerId is the socket-server-authenticated one; the app still re-scopes to a
+     configured broker so a bad value can't fan out.
    - **S2c-3 ✅** broker container packaging + hardening: `vps/Dockerfile.broker` (multi-stage, non-root,
      entrypoint `broker-server.js`) + `vps/docker-compose.broker.yml` for the **Proxmox** host (Link-A
      bound to `BROKER_LAN_IP` only; read-only rootfs, `cap_drop: ALL`, `no-new-privileges`; envelope

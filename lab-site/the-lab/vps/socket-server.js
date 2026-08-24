@@ -12,6 +12,7 @@ import {
     loadBrokerSecrets, loadBrokerDoorMap, makeBrokerAuth, makeRateLimiter, makeBrokerUplink,
     makeUplinkConnection, relayEnvelopes,
 } from './lib/brokerUplink.js';
+import { makeRequestBrokerResync, makeResyncTrigger } from './lib/brokerResync.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -146,7 +147,10 @@ if (brokerConnCount === 0) {
 const brokers = new Map();
 // The security logic lives in the pure driver (vps/lib/brokerUplink.js); this is just socket glue.
 const brokerLog = (event, fields = {}) => console.log(`[Broker] ${event} ${JSON.stringify(fields)}`);
-const acceptBrokerConn = makeUplinkConnection({ uplink: brokerUplink, brokers, log: brokerLog });
+// On a broker (re)connect, ask the app to rebuild+push that broker's envelopes (S2c-2c). Best-effort +
+// per-broker cooldown so a flapping broker can't storm the app; fire-and-forget (never blocks auth).
+const resyncTrigger = makeResyncTrigger({ resync: makeRequestBrokerResync({ log: brokerLog }), log: brokerLog });
+const acceptBrokerConn = makeUplinkConnection({ uplink: brokerUplink, brokers, log: brokerLog, onConnect: resyncTrigger });
 
 brokerWss.on('connection', (ws, req) => {
     const ip = req.socket.remoteAddress;
