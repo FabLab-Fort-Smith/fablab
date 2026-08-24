@@ -433,8 +433,16 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      `POST /api/v2/broker/:brokerId/envelopes` (apiAuth) → scoped to owned doors → pushed down the live
      uplink (503 if the broker isn't connected). Env: `BROKER_UPLINK_SECRETS` (JSON `{brokerId:secret}`),
      `BROKER_DOOR_MAP` (JSON `{brokerId:[doorId]}`). The scan `code` is never logged/echoed.
-     **Remaining S2c-2b** (app side): a job that calls `buildDoorEnvelope` per broker×door (re-keyed to
-     each `brokerIndexKey`) and POSTs to the relay on card/allowlist change + on broker reconnect.
+   - **S2c-2b ✅** *app side* (`Service.refreshBrokerEnvelopes` + `pushBrokerEnvelopes`): for each broker
+     in `BROKER_DOOR_MAP`, build one `buildDoorEnvelope` per owned door **re-keyed to that broker**
+     (`recipientId = brokerId` → its own `brokerIndexKey`; master `DOOR_CARD_INDEX_KEY` never leaves the
+     cloud) and POST them to the relay. Fanned out from `_repushBestEffort`, so every existing change
+     trigger (door/policy/card/membership) now also refreshes the brokers. Fail-secure: skips if the
+     signing key isn't set; a not-connected broker (503) is noted, not fatal (it re-syncs on reconnect);
+     one broker's failure never aborts the others.
+     **Remaining S2c-2c** (reconnect resync): push a broker its current envelopes when it (re)connects —
+     needs a cloud→app signal on broker connect (the socket-server knows; the app builds). Until then a
+     reconnected broker gets fresh envelopes on the next change trigger or its own TTL-driven refresh.
    - **Decisions (locked 2026-08-24):** (a) broker mTLS material is loaded from **file paths**
      (`BROKER_TLS_CERT`/`BROKER_TLS_KEY`/`BROKER_CA_ROOT`, internal-CA-issued, mounted — never in the
      image); (b) **the app builds** per-broker×door envelopes (`buildDoorEnvelope`, re-keyed with the

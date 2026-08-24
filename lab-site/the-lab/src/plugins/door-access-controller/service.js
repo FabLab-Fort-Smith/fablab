@@ -13,7 +13,7 @@ import { signAllowlist, signEnvelope, allowlistSigningReady } from "./allowlistC
 import { resolveConfig, PLUGIN_ID, PERM_ADMIN } from "./config";
 import { assertPermission } from "@/lib/plugins/permissions";
 import UsersService from "@/app/api/v1/users/service";
-import { pushAllowlist } from "@/lib/access-control";
+import { pushAllowlist, pushBrokerEnvelopes } from "@/lib/access-control";
 import { auditLog } from "@/lib/audit";
 
 const badRequest = (msg) => {
@@ -24,6 +24,26 @@ const badRequest = (msg) => {
 // Card rows for the admin UI — never expose the ciphertext or the blind index.
 const publicCard = (c) => ({ userID: c.userID, credentialType: c.credentialType, status: c.status, createdAt: c.createdAt });
 const isSafeKey = (k) => typeof k === "string" && k.length > 0 && !k.startsWith("$") && !k.includes(".");
+
+/**
+ * The on-site broker → owned-doors map, from BROKER_DOOR_MAP (JSON `{brokerId:[doorId,...]}`). This is
+ * the app-side source for which per-door envelopes to build for each broker; the socket-server holds
+ * the same map and re-scopes on relay (defense-in-depth, #157). Malformed → {} (fail-closed: build for
+ * no broker rather than guess). S3 provisioning will unify this with the door registry.
+ */
+function resolveBrokerDoorMap(raw = process.env.BROKER_DOOR_MAP) {
+  if (!raw) return {};
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch { return {}; }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const out = {};
+  for (const [brokerId, doors] of Object.entries(parsed)) {
+    if (isSafeKey(brokerId) && Array.isArray(doors)) {
+      out[brokerId] = doors.filter((d) => typeof d === "string" && d);
+    }
+  }
+  return out;
+}
 
 /** Effective policy = structured rules/overrides (DB) + flat knobs (manifest/config). */
 async function loadPolicy() {
@@ -269,10 +289,57 @@ const Service = {
     return { pushed: true, entries: signed.payload.entryCount, expiresAt: signed.payload.expiresAt };
   },
 
+  /**
+   * Build + push per-door SIGNED envelopes to each on-site broker (door-controller-wifi.md §13 S2c-2b).
+   * For every broker in BROKER_DOOR_MAP, builds one envelope per owned door — re-keyed to that broker
+   * (`recipientId = brokerId` → its own `brokerIndexKey`, so a leaked broker key scopes to its site only)
+   * — and relays them down the broker's uplink via the cloud (#157). Fail-secure: skips (audited) if the
+   * signing key isn't set; a broker that isn't connected (503) is noted, not fatal (it re-syncs on
+   * reconnect). Never lets one broker's failure abort the rest.
+   * @param {{ now?:Date }} [args]
+   */
+  async refreshBrokerEnvelopes({ now = new Date() } = {}) {
+    if (!allowlistSigningReady()) {
+      auditLog("door-access.allowlist", { actor: { pluginId: PLUGIN_ID }, outcome: "skipped", reason: "signing-key-not-set" });
+      return { pushed: false, reason: "signing-key-not-set" };
+    }
+    const doorMap = resolveBrokerDoorMap(); // { brokerId: [doorId,...] } from config
+    const brokerIds = Object.keys(doorMap);
+    if (!brokerIds.length) return { pushed: false, reason: "no-brokers" };
+
+    let brokersPushed = 0;
+    let brokersOffline = 0;
+    for (const brokerId of brokerIds) {
+      try {
+        const envelopes = [];
+        for (const doorId of doorMap[brokerId]) {
+          envelopes.push(await this.buildDoorEnvelope({ doorId, recipientId: brokerId, now }));
+        }
+        const r = await pushBrokerEnvelopes(brokerId, envelopes);
+        if (r.connected) brokersPushed += 1; else brokersOffline += 1;
+        auditLog("door-access.allowlist", {
+          actor: { pluginId: PLUGIN_ID }, target: brokerId,
+          outcome: r.connected ? "broker-pushed" : "broker-offline",
+          envelopes: envelopes.length, relayed: r.relayed, rejected: r.rejected,
+        });
+      } catch (e) {
+        // One broker's transport/build failure must not stop the others (fail-secure per broker).
+        auditLog("door-access.allowlist", { actor: { pluginId: PLUGIN_ID }, target: brokerId, outcome: "broker-error", reason: String((e && e.message) || e) });
+      }
+    }
+    return { pushed: true, brokers: brokerIds.length, brokersPushed, brokersOffline };
+  },
+
   /** Best-effort re-push so a change propagates to offline doors promptly; never throws. */
   async _repushBestEffort() {
     try {
       if (allowlistSigningReady()) await this.refreshAllowlist();
+    } catch (e) {
+      auditLog("door-access.allowlist", { actor: { pluginId: PLUGIN_ID }, outcome: "error", reason: String((e && e.message) || e) });
+    }
+    // Fan the same change out to the tiered brokers (independent of the monolithic addon push above).
+    try {
+      await this.refreshBrokerEnvelopes();
     } catch (e) {
       auditLog("door-access.allowlist", { actor: { pluginId: PLUGIN_ID }, outcome: "error", reason: String((e && e.message) || e) });
     }
