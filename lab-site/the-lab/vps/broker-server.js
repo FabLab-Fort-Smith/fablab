@@ -23,6 +23,7 @@ import { edgeListenerTlsOptions, uplinkTlsOptions } from "./lib/brokerTls.js";
 import { handleEdgeMessage } from "./lib/brokerProtocol.js";
 import { makeLineDecoder, makeReplayGuard } from "./lib/brokerFraming.js";
 import { ingestEnvelope } from "./lib/brokerService.js";
+import { startHealthServer } from "./lib/brokerHealth.js";
 
 const EDGE_IDLE_MS = 60000;         // drop an idle/held edge connection (fail-secure)
 const UPLINK_MAX_PAYLOAD = 512 * 1024; // an envelope push is small; cap it (CWE-400)
@@ -93,7 +94,11 @@ function startUplink(cfg, store) {
   }
 
   connect();
-  return { cloudAuthorize, close: () => { try { ws?.close(); } catch { /* noop */ } } };
+  return {
+    cloudAuthorize,
+    up: () => Boolean(ws && ws.readyState === WebSocket.OPEN), // rung-1 uplink reachable? (health #6)
+    close: () => { try { ws?.close(); } catch { /* noop */ } },
+  };
 }
 function redactUrl(u) { try { const x = new URL(u); return `${x.protocol}//${x.host}${x.pathname}`; } catch { return "?"; } }
 
@@ -142,6 +147,11 @@ export function run() {
   const registry = loadRegistry();
   const uplink = startUplink(cfg, store);
   startEdgeListener(cfg, store, registry, uplink.cloudAuthorize);
+  // Loopback-only health for the container HEALTHCHECK (#6) — NEVER bound to the LAN.
+  startHealthServer(
+    () => ({ ready: true, uplinkUp: uplink.up(), doors: Object.keys(registry).length }),
+    { port: Number(process.env.BROKER_HEALTH_PORT) || 9090 },
+  );
   log("broker.started", { envelopeDir: cfg.envelopeDir, doors: Object.keys(registry).length });
 }
 

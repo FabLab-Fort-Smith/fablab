@@ -19,6 +19,7 @@ beforeEach(() => {
   const cert = path.join(dir, "broker.crt"), key = path.join(dir, "broker.key"), ca = path.join(dir, "ca.crt");
   fs.writeFileSync(cert, "CERTDATA");
   fs.writeFileSync(key, "KEYDATA");
+  fs.chmodSync(key, 0o600); // private key must be 0600 (#4); loose perms are tested separately
   fs.writeFileSync(ca, "CADATA");
   const { publicKey } = crypto.generateKeyPairSync("ed25519");
   process.env.BROKER_TLS_CERT = cert;
@@ -59,6 +60,16 @@ test("fail-closed: a missing required var throws a specific error", () => {
 test("fail-closed: an unreadable/missing cert file throws", () => {
   process.env.BROKER_TLS_KEY = path.join(dir, "does-not-exist.key");
   expect(() => loadBrokerConfig()).toThrow(/BROKER_TLS_KEY: cannot read file/);
+});
+
+test("fail-closed: a group/other-accessible key file is rejected (#4)", () => {
+  fs.chmodSync(process.env.BROKER_TLS_KEY, 0o644); // world-readable private key
+  expect(() => loadBrokerConfig()).toThrow(/BROKER_TLS_KEY: key file .* group\/other-accessible .* require 0600/);
+});
+
+test("a 0400 (read-only owner) key is accepted", () => {
+  fs.chmodSync(process.env.BROKER_TLS_KEY, 0o400);
+  expect(() => loadBrokerConfig()).not.toThrow();
 });
 
 test("fail-closed: an empty cert file throws", () => {

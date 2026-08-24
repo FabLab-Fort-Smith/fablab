@@ -20,7 +20,7 @@ function req(name) {
   return v;
 }
 
-function readFileStrict(name) {
+function readFileStrict(name, { secret = false } = {}) {
   const p = req(name);
   let data;
   try {
@@ -29,6 +29,15 @@ function readFileStrict(name) {
     throw new Error(`${name}: cannot read file at "${p}" (${e.code || e.message})`);
   }
   if (!data.length) throw new Error(`${name}: file at "${p}" is empty`);
+  // A private key must not be group/other-accessible (expect 0600/0400). Fail-closed on loose perms
+  // (S2c-3 #4) — a world/group-readable key on the mounted volume is a misprovisioned broker.
+  if (secret) {
+    let st;
+    try { st = fs.statSync(p); } catch (e) { throw new Error(`${name}: cannot stat "${p}" (${e.code || e.message})`); }
+    if (st.mode & 0o077) {
+      throw new Error(`${name}: key file "${p}" is group/other-accessible (mode ${(st.mode & 0o777).toString(8)}); require 0600`);
+    }
+  }
   return data;
 }
 
@@ -59,7 +68,7 @@ export function loadBrokerConfig() {
   const cfg = {
     tls: {
       cert: readFileStrict("BROKER_TLS_CERT"),
-      key: readFileStrict("BROKER_TLS_KEY"),
+      key: readFileStrict("BROKER_TLS_KEY", { secret: true }), // perm-checked (#4)
       caRoot: readFileStrict("BROKER_CA_ROOT"),
       listenPort,
       listenHost: process.env.BROKER_LISTEN_HOST || "0.0.0.0",

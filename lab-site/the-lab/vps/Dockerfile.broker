@@ -1,0 +1,37 @@
+# The-Lab on-site BROKER image (Tier-1) — the mTLS Link-A listener + the cloud WSS uplink
+# (broker-server.js). Runs on the Proxmox host via docker-compose.broker.yml, NOT Coolify. Same vps
+# package as the socket-server; only the entrypoint differs. Certs + secrets are injected/mounted at
+# runtime — NEVER baked (@rules/workflow-secrets.md). Hardened per @rules/topic-container-k8s: minimal
+# base, multi-stage, NON-ROOT.
+# SUPPLY-CHAIN TODO (@rules/std-supplychain.md): pin the base image by digest before production.
+
+# ---- deps: prod-only from the committed lockfile ----
+FROM node:22-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# ---- runner: minimal, non-root runtime ----
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production \
+    BROKER_LISTEN_PORT=8443 \
+    BROKER_HEALTH_PORT=9090
+RUN apk add --no-cache curl && addgroup -g 1001 -S nodejs && adduser -S brokersvc -u 1001
+COPY --from=deps /app/node_modules ./node_modules
+COPY --chown=brokersvc:nodejs package.json ./
+COPY --chown=brokersvc:nodejs broker-server.js ./
+COPY --chown=brokersvc:nodejs lib ./lib
+# Pre-create the envelope cache dir owned by the non-root user, so a FRESH named volume mounted here
+# inherits that ownership (Docker seeds an empty volume from the image path). Without this the volume
+# is root:root and the uid-1001 broker can't write — putEnvelope fails closed (io-error) while health
+# still reports ready, silently caching nothing (S2c-3 review M1, CWE-732).
+RUN mkdir -p /data/envelopes && chown -R brokersvc:nodejs /data/envelopes
+USER brokersvc
+# Only Link-A (edges -> broker) is a network surface. The health port (#6) is loopback-only and is
+# deliberately NOT exposed.
+EXPOSE 8443
+# Liveness: the loopback-only health endpoint (127.0.0.1 — never the LAN). 503 until config+listener up.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD curl -fsS "http://127.0.0.1:${BROKER_HEALTH_PORT}/" >/dev/null || exit 1
+CMD ["node", "broker-server.js"]
