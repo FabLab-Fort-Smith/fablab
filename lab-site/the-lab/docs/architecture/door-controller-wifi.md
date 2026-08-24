@@ -443,6 +443,14 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      **Remaining S2c-2c** (reconnect resync): push a broker its current envelopes when it (re)connects —
      needs a cloud→app signal on broker connect (the socket-server knows; the app builds). Until then a
      reconnected broker gets fresh envelopes on the next change trigger or its own TTL-driven refresh.
+   - **S2c-3 ✅** broker container packaging + hardening: `vps/Dockerfile.broker` (multi-stage, non-root,
+     entrypoint `broker-server.js`) + `vps/docker-compose.broker.yml` for the **Proxmox** host (Link-A
+     bound to `BROKER_LAN_IP` only; read-only rootfs, `cap_drop: ALL`, `no-new-privileges`; envelope
+     cache on a named volume; required-env `:?` guards) + `vps/.env.broker.example` + README deploy
+     section. **#4** `brokerConfig` fails closed on a group/other-accessible `BROKER_TLS_KEY` (require
+     0600). **#6** a **loopback-only** (`127.0.0.1`) health endpoint (`brokerHealth`, default port 9090,
+     never published) drives the container `HEALTHCHECK`; Link-A stays the only LAN surface. The scan
+     `code`/keys/bearer never appear in the health payload.
    - **Decisions (locked 2026-08-24):** (a) broker mTLS material is loaded from **file paths**
      (`BROKER_TLS_CERT`/`BROKER_TLS_KEY`/`BROKER_CA_ROOT`, internal-CA-issued, mounted — never in the
      image); (b) **the app builds** per-broker×door envelopes (`buildDoorEnvelope`, re-keyed with the

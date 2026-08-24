@@ -1,0 +1,45 @@
+# On-site BROKER (Tier-1) — deploy on the Proxmox host (door-controller-wifi.md §13 S2c-3).
+# Single-instance unit; HA (a 2nd broker + keepalived VIP sharing one brokerId) is S5.
+# Secrets/certs are provided at runtime via ./certs + an .env file — NEVER commit them.
+#   Required env (fail-closed here and in brokerConfig): CLOUD_UPLINK_URL (wss://), BROKER_UPLINK_SECRET,
+#   BROKER_INDEX_KEY (32B base64), DOOR_ALLOWLIST_VERIFY_KEY (ed25519 spki base64), BROKER_LAN_IP.
+#   ./certs must hold: broker.crt, broker.key (mode 0600 — #4), ca.crt, registry.json (edgeCN -> doorId).
+
+services:
+  broker:
+    build:
+      context: .
+      dockerfile: Dockerfile.broker
+    container_name: door-broker
+    restart: unless-stopped
+    # Link-A (edges -> broker, mTLS) bound to the host's LAN IP only — never 0.0.0.0/public
+    # (@rules/topic-tailnet-dev-access spirit: private surface). The health port stays loopback-only
+    # inside the container and is intentionally not published.
+    ports:
+      - "${BROKER_LAN_IP:?set BROKER_LAN_IP to the Proxmox host LAN IP}:${BROKER_LISTEN_PORT:-8443}:8443"
+    environment:
+      CLOUD_UPLINK_URL: ${CLOUD_UPLINK_URL:?wss:// cloud uplink required}
+      BROKER_UPLINK_SECRET: ${BROKER_UPLINK_SECRET:?broker bearer required}
+      BROKER_INDEX_KEY: ${BROKER_INDEX_KEY:?32-byte base64 index key required}
+      DOOR_ALLOWLIST_VERIFY_KEY: ${DOOR_ALLOWLIST_VERIFY_KEY:?ed25519 verify key required}
+      BROKER_ENVELOPE_DIR: /data/envelopes
+      BROKER_REGISTRY: /certs/registry.json
+      BROKER_TLS_CERT: /certs/broker.crt
+      BROKER_TLS_KEY: /certs/broker.key
+      BROKER_CA_ROOT: /certs/ca.crt
+      BROKER_LISTEN_PORT: "8443"
+      BROKER_HEALTH_PORT: "9090"
+    volumes:
+      - ./certs:/certs:ro                      # internal-CA cert/key/ca + registry; broker.key = 0600 (#4)
+      - broker-envelopes:/data/envelopes       # writable cache (read_only rootfs below)
+    # CIS container hardening (@rules/topic-container-k8s, @rules/std-cis):
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  broker-envelopes:
