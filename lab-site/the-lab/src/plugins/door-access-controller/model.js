@@ -9,6 +9,7 @@ import { EMPTY_POLICY } from "./class";
 const CARDS = "doorAccessCards";
 const DOORS = "doorAccessDoors";
 const POLICY = "doorAccessPolicy";
+const COUNTERS = "doorAccessCounters"; // monotonic per-door envelope version (anti-rollback, F5)
 const POLICY_ID = "policy:door-access-controller"; // single well-known doc
 
 let indexesEnsured = false;
@@ -98,9 +99,29 @@ export async function savePolicyDoc(policy) {
     );
 }
 
+// --- envelope version counter (per door; monotonic, survives restart — anti-rollback F5) ---
+/**
+ * Atomically increment and return the next envelope version for a door. Strictly monotonic per
+ * doorId (a persisted counter, NOT wall-clock / not a constant — door-controller-wifi.md §2 F5).
+ * @param {string} doorId @returns {Promise<number>}
+ */
+export async function nextEnvelopeVersion(doorId) {
+  await cards(); // ensure connection
+  const col = (await database()).collection(COUNTERS);
+  const doc = await col.findOneAndUpdate(
+    { _id: `env:${doorId}` },
+    { $inc: { version: 1 } },
+    { upsert: true, returnDocument: "after" }
+  );
+  // mongodb driver v6+ returns the updated document directly (no {value} wrapper).
+  if (!doc || typeof doc.version !== "number") throw new Error(`nextEnvelopeVersion failed for ${doorId}`);
+  return doc.version;
+}
+
 const Model = {
   findCardByBlindIndex,
   upsertCard,
+  nextEnvelopeVersion,
   revokeCardsByUserID,
   deleteCardsByUserID,
   listCards,

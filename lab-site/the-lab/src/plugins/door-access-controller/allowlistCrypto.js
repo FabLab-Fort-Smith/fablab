@@ -41,13 +41,16 @@ export function canonical(value) {
 function sortKeys(v) {
   if (Array.isArray(v)) return v.map(sortKeys);
   if (v && typeof v === "object") {
+    // Object.create(null): a "__proto__" key becomes an OWN property (serialized), not a prototype
+    // mutation that silently drops it from the signed bytes (CWE-1321 canonicalization gap).
     return Object.keys(v).sort().reduce((acc, k) => {
       acc[k] = sortKeys(v[k]);
       return acc;
-    }, {});
+    }, Object.create(null));
   }
   return v;
 }
+const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 /**
  * Sign a payload → a self-contained signed envelope.
@@ -56,6 +59,49 @@ function sortKeys(v) {
 export function signAllowlist(payload) {
   const sig = crypto.sign(null, Buffer.from(canonical(payload)), privateKey());
   return { payload, sig: sig.toString("base64"), alg: "ed25519" };
+}
+
+/**
+ * Assert a value is safe for the canonical form to byte-match across languages (door-controller-wifi.md
+ * §2 F3): only plain objects / arrays / strings / integers / booleans / null. Rejects floats, NaN,
+ * Infinity, undefined, functions, and non-finite numbers — the classic cross-language canonicalization
+ * bypass/false-reject traps. Throws on the first offending value.
+ * @param {*} value
+ */
+export function assertCanonicalSafe(value, path = "$") {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return;
+  if (typeof value === "number") {
+    // Only SAFE integers: floats/NaN/Infinity aren't canonical-safe, and ints beyond 2^53 lose
+    // precision on JS round-trip → the cross-language byte-match (F3) would silently diverge.
+    if (!Number.isSafeInteger(value)) throw new Error(`non-safe-integer number at ${path} (floats/NaN/Infinity/|n|>2^53 are not canonical-safe)`);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((v, i) => {
+      if (v === undefined) throw new Error(`undefined array element at ${path}[${i}]`);
+      assertCanonicalSafe(v, `${path}[${i}]`);
+    });
+    return;
+  }
+  if (typeof value === "object") {
+    for (const k of Object.keys(value)) {
+      if (DANGEROUS_KEYS.has(k)) throw new Error(`dangerous key "${k}" at ${path} (prototype-pollution class)`);
+      if (value[k] === undefined) throw new Error(`undefined value at ${path}.${k}`);
+      assertCanonicalSafe(value[k], `${path}.${k}`);
+    }
+    return;
+  }
+  throw new Error(`unsupported type ${typeof value} at ${path}`);
+}
+
+/**
+ * Sign a per-door envelope payload (door-controller-wifi.md §2). Same Ed25519 + canonical form as
+ * signAllowlist, but validates the payload is canonical-safe first (F3) so the on-device (Python)
+ * verifier can byte-match deterministically. @param {object} payload @returns {{payload,sig,alg}}
+ */
+export function signEnvelope(payload) {
+  assertCanonicalSafe(payload);
+  return signAllowlist(payload);
 }
 
 /**
