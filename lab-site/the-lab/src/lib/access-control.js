@@ -82,6 +82,33 @@ export async function pushAllowlist(signed) {
     return res.json().catch(() => ({}));
 }
 
+// Push a batch of per-door SIGNED envelopes for one broker to the socket-server, which relays them
+// down that broker's live uplink (door-controller-wifi.md §13 S2c; the cloud side is #157). A broker
+// that isn't currently connected returns 503 — that is NOT an error to retry forever: the broker
+// re-syncs on reconnect, so we surface it as { connected:false } for the caller to note and move on.
+// Returns { connected, relayed, rejected }. Throws only on a real transport/4xx failure.
+export async function pushBrokerEnvelopes(brokerId, envelopes) {
+    if (typeof brokerId !== 'string' || !brokerId) throw new Error('brokerId is required');
+    // Bound each push so a hung relay can't stall the admin/event path that awaits this across every
+    // broker (topic-reliability: timeout on every network call). 5s is generous for a small batch.
+    const res = await fetch(`${controlApiUrl()}/api/v2/broker/${encodeURIComponent(brokerId)}/envelopes`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(Array.isArray(envelopes) ? envelopes : []),
+        signal: AbortSignal.timeout(5000),
+    });
+    if (res.status === 503) {
+        const data = await res.json().catch(() => ({}));
+        return { connected: false, relayed: 0, rejected: data.rejected || 0 };
+    }
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to push broker envelopes');
+    }
+    const data = await res.json().catch(() => ({}));
+    return { connected: true, relayed: data.relayed || 0, rejected: data.rejected || 0 };
+}
+
 export async function getDeviceStatus(deviceId) {
     try {
         const res = await fetch(`${controlApiUrl()}/api/status/${deviceId}`, {
