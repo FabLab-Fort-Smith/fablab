@@ -38,6 +38,9 @@ _gen_key() { # <path> — Ed25519 private key, 0600, never overwrite
   local path="$1"
   [ -L "$path" ] && die "refusing to write through a symlink: $path" # don't follow a pre-planted link
   [ -e "$path" ] && die "refusing to overwrite existing key: $path"
+  # Residual (accepted): a symlinked PARENT dir or the check→genpkey TOCTOU window (openssl -out has no
+  # O_EXCL) could still redirect/race the write — but $out is an operator arg and exploiting the race
+  # needs concurrent local write access (= host compromise). Bounded by the single-user provisioning host.
   ( umask 077 && openssl genpkey -algorithm ed25519 -out "$path" )
   chmod 600 "$path"
 }
