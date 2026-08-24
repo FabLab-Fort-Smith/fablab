@@ -6,7 +6,8 @@
   "description": "FabLab door/IoT tier: WebSocket access-control socket-server + offline allowlist decider.",
   "main": "socket-server.js",
   "scripts": {
-    "start": "node socket-server.js"
+    "start": "node socket-server.js",
+    "broker": "node broker-server.js"
   },
   "engines": {
     "node": ">=20"
