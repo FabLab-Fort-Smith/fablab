@@ -81,7 +81,33 @@ test("fail-closed: a bad allowlist verify key is rejected at boot", () => {
   expect(() => loadBrokerConfig()).toThrow(/not a valid base64 spki public key/);
 });
 
-test("fail-closed: a bad listen port is rejected", () => {
-  process.env.BROKER_LISTEN_PORT = "70000";
-  expect(() => loadBrokerConfig()).toThrow(/must be a valid port/);
+test("fail-closed: bad listen ports are rejected (0, non-numeric)", () => {
+  for (const bad of ["70000", "0", "abc", "-1", "8443.5"]) {
+    process.env.BROKER_LISTEN_PORT = bad;
+    expect(() => loadBrokerConfig()).toThrow(/must be a valid port/);
+  }
+});
+
+test("BROKER_LISTEN_HOST override is honored", () => {
+  process.env.BROKER_LISTEN_HOST = "127.0.0.1";
+  expect(loadBrokerConfig().tls.listenHost).toBe("127.0.0.1");
+});
+
+test("fail-closed: a non-Ed25519 verify key is rejected at boot", () => {
+  const { publicKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+  process.env.DOOR_ALLOWLIST_VERIFY_KEY = publicKey.export({ type: "spki", format: "der" }).toString("base64");
+  expect(() => loadBrokerConfig()).toThrow(/must be Ed25519/);
+});
+
+test("secret hygiene: a validation error (and the readiness probe) never leak a secret VALUE", () => {
+  process.env.BROKER_UPLINK_SECRET = "SUPERSECRET-uplink-token";
+  process.env.BROKER_INDEX_KEY = "not-32-bytes"; // force a sibling validation error
+  let msg = "";
+  try { loadBrokerConfig(); } catch (e) { msg = String(e.message); }
+  expect(msg).toMatch(/BROKER_INDEX_KEY must decode to 32 bytes/);
+  const probe = JSON.stringify(brokerConfigReady());
+  for (const blob of [msg, probe]) {
+    expect(blob).not.toContain("SUPERSECRET-uplink-token");
+    expect(blob).not.toContain("not-32-bytes"); // not even the offending value, only its length
+  }
 });

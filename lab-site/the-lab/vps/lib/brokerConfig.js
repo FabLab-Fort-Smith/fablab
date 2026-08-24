@@ -32,7 +32,7 @@ function readFileStrict(name) {
   return data;
 }
 
-function base32Key(name) {
+function base64Key(name) {
   const b = Buffer.from(req(name), "base64");
   if (b.length !== 32) throw new Error(`${name} must decode to 32 bytes (got ${b.length})`);
   return b;
@@ -65,15 +65,20 @@ export function loadBrokerConfig() {
       listenHost: process.env.BROKER_LISTEN_HOST || "0.0.0.0",
     },
     uplink: { url, secret: req("BROKER_UPLINK_SECRET") },
-    brokerIndexKey: base32Key("BROKER_INDEX_KEY"),
+    brokerIndexKey: base64Key("BROKER_INDEX_KEY"),
     allowlistVerifyKeyB64: req("DOOR_ALLOWLIST_VERIFY_KEY"),
     envelopeDir: req("BROKER_ENVELOPE_DIR"),
   };
-  // Fail at boot (not per-scan) if the verify key doesn't parse as an Ed25519 spki public key.
+  // Fail at boot (not per-scan) if the verify key isn't a valid Ed25519 spki public key — asserting
+  // the algorithm catches a mis-provisioned RSA/EC key here rather than on the first envelope verify.
+  let pk;
   try {
-    crypto.createPublicKey({ key: Buffer.from(cfg.allowlistVerifyKeyB64, "base64"), format: "der", type: "spki" });
+    pk = crypto.createPublicKey({ key: Buffer.from(cfg.allowlistVerifyKeyB64, "base64"), format: "der", type: "spki" });
   } catch {
     throw new Error("DOOR_ALLOWLIST_VERIFY_KEY is not a valid base64 spki public key");
+  }
+  if (pk.asymmetricKeyType !== "ed25519") {
+    throw new Error(`DOOR_ALLOWLIST_VERIFY_KEY must be Ed25519 (got ${pk.asymmetricKeyType})`);
   }
   return cfg;
 }

@@ -427,9 +427,14 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      (`BROKER_TLS_CERT`/`BROKER_TLS_KEY`/`BROKER_CA_ROOT`, internal-CA-issued, mounted — never in the
      image); (b) **the app builds** per-broker×door envelopes (`buildDoorEnvelope`, re-keyed with the
      target `brokerIndexKey`) and pushes to the **cloud** socket-server, which **relays them down each
-     broker's WSS uplink** (mirrors the existing `pushAllowlist`); (c) **Link-B is `wss://`, mutually
-     authenticated** (`CLOUD_UPLINK_URL` + `BROKER_UPLINK_SECRET`) — an online grant has no signature
-     backstop, so this is the dominant rung-1 control (#151).
+     broker's WSS uplink** (mirrors the existing `pushAllowlist`); (c) **Link-B is `wss://` with
+     verified-TLS-server-auth + a broker bearer** (`CLOUD_UPLINK_URL` + `BROKER_UPLINK_SECRET`) — this
+     is NOT mTLS. `brokerConfig` enforces only the `wss://` *scheme*; **S2c must enforce cloud cert
+     validation** (`rejectUnauthorized: true` + pin the cloud CA — never disable it), send the bearer
+     only post-TLS, and compare it constant-time. That server-auth is the load-bearing part — an online
+     grant has no signature backstop, so a MITM on an unvalidated uplink could forge grants (the
+     dominant rung-1 control, #151). Upgrading Link-B to full mTLS (reuse the broker's cert) is a
+     stronger option, not a blocker.
 3. **S3 — Internal CA + provisioning.** Stand up the CA; the issuance helper (edge cert/secret/
    `edgeIndexKey`; broker cert/`brokerIndexKey`); registry `doorId → { edgeDeviceId, brokerId }`; the
    broker-side `edgeId` **deny-list** (F7) + master-rotation → fleet-re-key runbook.
