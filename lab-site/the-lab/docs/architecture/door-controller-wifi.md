@@ -1,6 +1,6 @@
 ---
 title: Tiered door access — cloud authority · on-site HA broker · autonomous edge nodes
-status: proposed
+status: current
 audience: developers, operators, reviewers
 owners: app dev
 last_reviewed: 2026-08-23
@@ -12,15 +12,10 @@ related:
 
 # Tiered door access — cloud authority · on-site HA broker · autonomous edge nodes
 
-> **Status: PROPOSED (design-first).** No firmware/infra written yet. Records the design + threat
-> model for review, per CLAUDE §3 / master §3 (a change adding a trust boundary is threat-modeled
-> before code). Approve/adjust before implementation.
->
-> **SEC review: converged (3 rounds → APPROVE, build-ready as a design).** Round-1/2 findings F1–F6 and
-> their round-2 refinements (R1–R5) are folded in below; six Low implementation-time items from round-3
-> are folded into §2/§3/§5/§6 and the §12 DoD. Remaining before build: the human's go + the §11 open
-> questions (HA mode, TTLs, Proxmox scope, provisioning, buffer sizing, edge hardware); promote to
-> `status: current` on approval.
+> **Status: CURRENT (accepted design — design-first, no firmware/infra written yet).** Threat-modeled
+> before code per CLAUDE §3 / master §3. **SEC review converged (3 rounds → APPROVE)** and the owner has
+> accepted the design + the §11 decisions (2026-08-23). Implementation follows the §13 slice plan; the
+> remaining hardening (F7 build, F9 secure element, F10/F11 wording) is tracked as issues.
 
 ## 1. Context & confirmed decisions
 
@@ -318,26 +313,34 @@ Very large sites can shard edges across multiple broker containers by zone, stil
    blip) and resume via the standby.
 6. Roll out door-by-door; retire the Pico units. Reversible (re-flash / rebind / re-point the VIP).
 
-## 11. Open questions (for review)
+## 11. Decisions (resolved 2026-08-23)
 
-1. **HA mode:** active/standby via VIP (recommended, no split-brain) vs active/active (needs shared/replicated
-   read cache). Start active/standby?
-2. **Two allowlist TTLs:** broker cache vs edge cache lifetimes. Proposed broker **24h**, edge **72h**
-   (last-resort tier tolerates a longer gap); both refresh on uplink recovery. Confirm.
-3. **Proxmox host:** dedicated to access control, or shared with other on-site workloads? (Blast radius +
-   patch cadence.) Management-network isolation + backup/DR plan for the broker config + registry.
-4. **Provisioning + rotation** of edge certs/secrets + broker creds at fleet scale — a provisioning helper
-   / the internal-CA issuance workflow.
-5. **Audit store-and-forward** buffer size + retention on edge and broker for offline decisions.
-6. **Edge hardware:** Pi Zero W confirmed (needs compute/storage for the rung-3 cache + crypto) + a relay
-   board/HAT **with a battery-backed RTC** (F4) + the SD-vs-secure-element choice for key material.
-7. **Card-code entropy floor (F1) — decided in §5, confirm the numbers:** ≥128-bit for QR/app creds,
-   enforced at enroll; NFC-UID = accepted-risk (leaked edge key → clone that one door's cards). Confirm
-   the bit-length + the NFC acceptance.
-8. **TTL/anti-rollback params (F4/F5):** broker/edge TTLs (24h/72h) hold once the RTC + monotonic floor +
-   monotonic-`version` land; confirm.
-9. **F7 revocation build timing:** the mechanism is committed (§5 — deny-list + short-lived certs); when
-   in the rollout does the deny-list enforcement ship (vs. relying on one-door blast radius + TTL until then)?
+The open questions are now decided by the owner. Values below are binding for implementation; revisit
+only on a material design change.
+
+1. **HA mode → active/standby via a keepalived VIP.** Only the VIP holder serves; the standby takes the
+   cloud-pushed snapshot; Proxmox HA restarts/migrates. No split-brain to reason about. Active/active is
+   not adopted (unneeded — state is light + cloud-sourced).
+2. **Allowlist TTLs → broker 24h, edge 72h.** Edge is the last-resort tier and tolerates a longer gap;
+   both refresh on every uplink recovery. Revocation gap is bounded by these + anti-rollback.
+3. **Proxmox host → dedicated to access control.** Smallest blast radius + independent patch cadence;
+   segmented management network; backup/DR of the broker config + registry. Not shared with other
+   on-site workloads.
+4. **Provisioning & rotation → a scripted internal-CA issuance workflow.** A provisioning helper mints
+   each edge's short-lived cert + per-edge secret + `edgeIndexKey`, and the broker's cert + `brokerIndexKey`,
+   from the on-site CA. **Master `DOOR_CARD_INDEX_KEY` rotation ⇒ a full-fleet envelope re-key** (all
+   recipient copies re-issued) — a documented, staged procedure, not an ad-hoc step.
+5. **Audit buffer → size for the worst tolerated outage + fail loud.** Bound each edge/broker buffer to
+   **≥ 7 days** of expected unlock records (comfortably over the 72h edge TTL), persistent across reboot;
+   **block-and-alert on overflow, never silent-drop** (§3f). Tune the number to measured scan volume.
+6. **Edge hardware → Pi Zero W + a relay HAT with a battery-backed RTC** (e.g. DS3231-class) (F4).
+   SD-card key material access-scoped now; **secure element = the tracked F9 upgrade**.
+7. **Entropy floor → system-issued ≥128-bit CSPRNG token for QR/app credentials, enforced at enroll**
+   (§5). **NFC-UID credentials are an accepted risk** (leaked edge key → clone that one door; leaked
+   broker key → site-wide) — bounded by the hardened broker container + secure-side mount + F7 + short TTL.
+8. **F7 revocation → the deny-list enforcement ships in the first production rollout** (not deferred past
+   GA); the mechanism (broker-side `edgeId` deny-list + short-lived certs + refuse-re-provision) is in §5.
+   Until it ships in a given environment, the interim control is the one-door blast radius + short TTL.
 
 _(Resolved: freeze Pico; three tiers — cloud / on-site HA broker container / edge node; **strike on the
 edge**; hybrid defense-in-depth 4-rung ladder; edge dials the broker VIP over mTLS; **internal CA + mTLS**
@@ -397,6 +400,32 @@ tiers, §3f audit, the Proxmox host + HA).
 14. **HA envelope-copy count (F6/HA):** with N broker containers sharing one `brokerId`, the cloud emits
     exactly **2** envelope copies per door (edge + broker), not N+1.
 
+## 13. Implementation slice plan
+
+Ordered, independently-reviewable slices (mirrors the OTA slice model). Each ships its §12 tests + a
+SEC touch where it crosses a boundary; nothing device-facing lands before the signing changes (S1).
+
+1. **S1 — Cloud/addon signing (no device impact).** Extend `buildSignedAllowlist`: per-door signed
+   envelopes + strictly-monotonic per-`doorId` `version` + per-recipient HKDF re-key (Buffer decrypt →
+   HMAC → `fill(0)`) + the new JS **nested canonicalizer** with golden vectors; enforce the entropy
+   floor at `enrollCard`. Keep the old monolithic path behind a flag until consumers migrate.
+2. **S2 — On-site broker container.** Package the `socket-server` stack as the broker: mTLS listener
+   (Link A) + cloud uplink (Link B) + rung-2 decision (verify + `doorId` + TTL + per-door anti-rollback,
+   match via `brokerIndexKey`) + per-recipient envelope distribution + audit relay. One container on
+   Proxmox first.
+3. **S3 — Internal CA + provisioning.** Stand up the CA; the issuance helper (edge cert/secret/
+   `edgeIndexKey`; broker cert/`brokerIndexKey`); registry `doorId → { edgeDeviceId, brokerId }`; the
+   broker-side `edgeId` **deny-list** (F7) + master-rotation → fleet-re-key runbook.
+4. **S4 — Edge firmware (`pi-zero` edge role).** NFC + strike relay GPIO + mTLS client + rung-3 cache
+   (verify + `doorId` + TTL + anti-rollback + `edgeIndexKey` match) + **RTC + monotonic clock floor** +
+   fail-secure supervisor + **hash-chained store-and-forward audit** (`bootEpoch`). Bench one edge.
+5. **S5 — HA.** Second broker container + keepalived **VIP**, shared `brokerId`; failover drill (kill
+   active → doors keep working via rung 3, VIP moves, no split-brain double-grant).
+6. **S6 — Cloud audit anchor + admin UI.** Server-side seq/chain-tip **anchor** + dedup/gap-alert; the
+   door-access admin UI shows tier + last status + the `edgeDeviceId`/`brokerId` bindings.
+7. **S7 — Parallel-run + cut-over (§10).** Run the full 4-rung ladder + HA drill on one door, then roll
+   out door-by-door; retire the Pico units (reversible).
+
 ## Changelog
 | Date | Change | Author |
 |------|--------|--------|
@@ -408,3 +437,4 @@ tiers, §3f audit, the Proxmox host + HA).
 | 2026-08-23 | **Fold SEC-review F1–F6: per-door signed envelopes (F2), per-edge HKDF index keys (F1), new nested canonicalizer + golden vectors (F3), edge RTC + monotonic clock floor (F4), envelope anti-rollback (F5), hash-chained store-and-forward audit + §3f (F6). F7–F11 deferred to tracked issues.** | app dev |
 | 2026-08-23 | **Fold SEC re-review (round 2): broker-keyed rung-2 envelope (F1 broker gap), strictly-monotonic `version` (F5 no-op fix), `doorId`-binding (F2), cloud server-side audit anchor + boot-epoch (F6), canonicalizer byte-rules (F3), entropy-floor decision (§5), F7 revocation mechanism promoted; fixed the §7 "slice" contradiction; +7 tests.** | app dev |
 | 2026-08-23 | **Round-3 SEC re-review → APPROVE (converged). Fold 6 Low items: Buffer-not-String zeroization, broker-key site-wide blast-radius honesty + §3e protection, per-`doorId` anti-rollback high-water, CSPRNG-issued entropy floor, cloud-authorized bootEpoch reset, HA shares one `brokerId` (2 envelope copies). +tests 9/11/12/13 tightened, +test 14.** | app dev |
+| 2026-08-23 | **Owner-accepted: promote `status: current`; §11 open questions → binding decisions (active/standby HA, 24h/72h TTLs, dedicated Proxmox host, scripted CA provisioning + master-rotation re-key, ≥7-day audit buffer, Pi Zero W + RTC HAT, ≥128-bit CSPRNG floor + NFC accepted-risk, F7 ships in first rollout); add §13 implementation slice plan (S1–S7).** | app dev |
