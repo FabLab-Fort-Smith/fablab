@@ -73,32 +73,47 @@ on recovery (non-repudiation across outages, §8).
 
 ### Offline-match & signing model (SEC review F1–F3, F5)
 
-The naive "reuse `buildSignedAllowlist` as-is" does not survive review — three corrections define how an
-offline tier actually matches a card and trusts a snapshot:
+The naive "reuse `buildSignedAllowlist` as-is" does not survive review — these corrections define how an
+offline tier actually matches a card and trusts a snapshot (round-1 F1–F3/F5 + round-2 refinements):
 
 - **Per-door signed envelopes, not slices (F2).** `buildSignedAllowlist` today emits **one** payload with
   **one** Ed25519 signature — a per-door "slice" of it is not independently verifiable. The cloud instead
   signs a **separate envelope per door** (`{ doorId, version, issuedAt, expiresAt, entries[] }`, one
-  signature each). An edge caches + verifies **only its own door's** envelope; a broker caches the
-  envelopes for the doors it serves. (Alternative kept on record: a single Merkle root signed once, with
-  per-door inclusion proofs — more moving parts; per-door envelopes are the recommended default.)
-- **Per-edge index keys, never a global one (F1).** Entries are keyed by `credHash = HMAC(indexKey, code)`
-  (today `cardCrypto.blindIndex` with the **system-wide** `DOOR_CARD_INDEX_KEY`). Shipping that master key
-  to every SD-card-based edge would let one stolen node enumerate/forge card matches **system-wide**. So
-  the cloud re-keys each door's envelope with a **per-edge key** `edgeIndexKey = HKDF(DOOR_CARD_INDEX_KEY,
-  edgeDeviceId)` (it decrypts stored `codeEnc` at build time to recompute the HMAC); the edge holds only
-  **its own** derived key and matches `HMAC(edgeIndexKey, scannedCode)` locally. A stolen edge compromises
-  **only its own door**, and never the master key (HKDF is one-way). Requires a **card-code entropy floor**
-  (else a leaked per-edge key still allows a local dictionary) — set it as a provisioning rule.
-- **A new nested canonicalizer, not the OTA one (F3).** The on-device OTA verify (`otacrypto.canonical`) is
-  **flat-only** — it raises on arrays/nested objects. The allowlist payload is deeply nested, so the edge/
-  broker need a **new** canonical-JSON serializer that byte-matches the JS signer (`allowlistCrypto.canonical`:
-  recursive key-sort + array handling). This is a classic cross-language signature-bypass trap → it ships
-  with **golden-vector tests** (§12). The allowlist verify key stays distinct from the OTA verify key
+  signature each), and the **verifier asserts `payload.doorId` == the door it is deciding** (a valid
+  door-A envelope must not satisfy a door-B decision — matters at the broker, which verifies many doors
+  under one key). (Alternative on record: one Merkle root signed once + per-door inclusion proofs — more
+  moving parts; per-door envelopes are the default.)
+- **Per-recipient index keys, never a global one (F1 + round-2 broker fix).** Entries key on
+  `credHash = HMAC(indexKey, code)` (today `cardCrypto.blindIndex` with the **system-wide**
+  `DOOR_CARD_INDEX_KEY`). Shipping that master to every SD-card edge = a global enumeration/forgery key.
+  So the cloud re-keys each door's envelope with a key derived **per recipient**:
+  `HKDF(ikm = DOOR_CARD_INDEX_KEY, info = "dooraccess/index/v1|" + recipientId, len = 32)` — an
+  **`edgeIndexKey`** (recipient = `edgeDeviceId`) for the edge's own rung-3 copy, **and** a distinct
+  **`brokerIndexKey`** (recipient = `brokerId`) for the broker's rung-2 copy. Each recipient holds only
+  **its own** derived key. *This closes the round-2 gap:* the broker matches with its own `brokerIndexKey`
+  and **never holds any edge's key**, so a broker compromise doesn't yield per-door edge keys. (Rejected
+  alternative: the edge sends a locally-computed `credHash` to the broker — breaks the online-proxy path,
+  which needs the raw `cred` at the cloud to authorize.) The cloud must **decrypt each `codeEnc` at build
+  time** to recompute the HMAC per recipient — a new exposure (raw codes in cloud memory) and an
+  O(doors × members × recipients) cost: state both, and **zeroize** decrypted codes after use
+  (`topic-resource-management`). Requires a **card-code entropy floor** — see the decision in §5/§11.
+- **A new nested canonicalizer, not the OTA one (F3).** The OTA verify (`otacrypto.canonical`) is
+  **flat-only** (raises on arrays/nested). The allowlist is deeply nested → a **new** canonical-JSON
+  serializer byte-matching the JS signer (`allowlistCrypto.canonical` = `JSON.stringify(sortKeys(v))`).
+  Pin the byte-match rules (classic bypass traps): **integers only** (forbid float / `NaN` / `Infinity`);
+  **no `undefined`** (JS drops it / arrays→`null`); **explicit `null`**; **parse-then-canonicalize** so
+  duplicate keys can't diverge; the signature is over `canonical(payload)` only, in a `{payload, sig, alg}`
+  envelope. Ships with **cross-language golden-vector tests** (§12). Verify key stays distinct
   (`DOOR_ALLOWLIST_VERIFY_KEY` ≠ `DOOR_FW_VERIFY_KEY`).
-- **Anti-rollback on the envelope (F5).** TTL alone lets an attacker who can write the cache replay an
-  older-but-unexpired envelope (re-enabling a since-revoked card). Each tier persists the newest
-  `version`/`issuedAt` it has seen and **rejects any older envelope**, mirroring the OTA anti-rollback.
+- **Anti-rollback on a MONOTONIC version (F5 + round-2 fix).** TTL alone lets a writable-cache attacker
+  replay an older-but-unexpired envelope. Each tier persists the newest `version` and **rejects any older
+  envelope**. **The builder must emit a strictly-monotonic `version`** (a persisted counter / `max(prev)+1`)
+  — today it emits a constant `version: 1`, which makes anti-rollback a **no-op**, and `issuedAt` alone is
+  unsafe (wall-clock, non-monotonic across a cloud restart). This is a must-fix in `buildSignedAllowlist`.
+- **The "newest seen" floor lives on the edge SD (F4/F5 caveat).** Both the anti-rollback high-water mark
+  and the F4 monotonic time floor persist on attacker-writable storage → they defend **drift and logical/
+  remote rollback, not a physical SD-tamper attacker**. That residual is accepted **only** because the edge
+  is mounted secure-side (§3a) and a secure element is the tracked upgrade (F9).
 
 **Why containerize the broker:** HA/failover (your redundancy ask), no GPIO/wiring ceiling, one place to
 patch/deploy/observe the brain, and it reuses the `socket-server` code. The cost — the Proxmox host + LAN
@@ -125,18 +140,20 @@ signed data), plus the **Proxmox host + HA** as infrastructure to harden.
 
 | STRIDE | Threat | Mitigation |
 |---|---|---|
-| **T**ampering (signature) | Forged/edited envelope grants access when the edge is isolated. | Per-door envelope is **Ed25519-signed by the cloud**, verified on the edge with `DOOR_ALLOWLIST_VERIFY_KEY` via a **nested canonicalizer that byte-matches the JS signer** — a **new** primitive, NOT the flat OTA `otacrypto.canonical` (F3). Golden-vector tested. Invalid → rejected; unknown creds locked. |
-| **Offline match** (F1) | Matching a scan offline needs a keyed HMAC of the card code — a system-wide `DOOR_CARD_INDEX_KEY` on every SD-card edge would be a global-enumeration/forgery key. | The cloud re-keys each envelope with a **per-edge** `edgeIndexKey = HKDF(DOOR_CARD_INDEX_KEY, edgeDeviceId)`; the edge holds only its own derived key and computes `HMAC(edgeIndexKey, scannedCode)`. Stolen edge ⇒ **its door only**, master key never leaves the cloud. Enforce a **card-code entropy floor** so a leaked per-edge key can't be dictionaried. |
-| **Replay / stale + rollback** (F5) | A stale or rolled-back envelope re-enables a revoked card offline. | `issuedAt`/`expiresAt` → **TTL** enforced (edge TTL may exceed the broker's — last-resort tier); **plus anti-rollback**: reject any envelope with `version`/`issuedAt` older than the newest persisted. Refresh on every broker contact. |
+| **T**ampering (signature) | Forged/edited envelope, or a valid envelope from **another door**, grants access when isolated. | Per-door envelope is **Ed25519-signed by the cloud**, verified with `DOOR_ALLOWLIST_VERIFY_KEY` via the **new nested canonicalizer** (byte-match rules per §2), NOT the flat OTA `otacrypto.canonical` (F3). **Also assert `payload.doorId` == this door** (cross-door replay guard, F2). Golden-vector tested. Invalid → locked. |
+| **Offline match** (F1) | Matching a scan offline needs a keyed HMAC of the code — a system-wide `DOOR_CARD_INDEX_KEY` on every SD-card node would be a global-enumeration/forgery key. | The cloud re-keys each envelope **per recipient** — `edgeIndexKey`/`brokerIndexKey = HKDF(DOOR_CARD_INDEX_KEY, "…|"+recipientId)` (§2); each node holds only its own, so a stolen node ⇒ **its door only** and the broker never holds edge keys. Bounded by a **card-code entropy floor** (§5 decision) — note NFC-UID codes can't meet it (accepted-risk). |
+| **Replay / stale + rollback** (F5) | A stale or rolled-back envelope re-enables a revoked card offline. | `issuedAt`/`expiresAt` → **TTL** (edge TTL may exceed the broker's); **plus anti-rollback on a strictly-monotonic `version`** (§2 — the builder's constant `version:1` must become a real counter, else this is inert): reject any envelope older than the newest persisted. Refresh on every broker contact. |
 | **Clock trust** (F4) | The Pi Zero W has **no battery-backed RTC**; on the exact rung-3 case (power-loss → boot, no NTP) the clock is wrong — a **backwards** clock makes an expired/revoked snapshot look valid; window checks go wrong too. | Add a **hardware RTC** to the edge BOM; persist a **monotonic last-known-good time floor** and reject any wall-clock earlier than it (anti clock-rollback); an **unsynced/implausible clock → treat as ambiguity → LOCKED** (added to the fail-secure invariant). |
 | **I**nfo disclosure | Cached envelope leaks member data at rest on the SD card. | Envelope carries **no PII / raw codes** — only per-edge keyed hashes + door/window entries. Note `credHash` is still a **stable pseudonymous** identifier (personal data) → store access-scoped, restrictive perms; per-door envelopes minimize what any one edge holds. |
 
 ### 3c. Broker offline decision — rung 2
 
 Same as 3b, one tier up: the broker verifies (same nested canonicalizer + `DOOR_ALLOWLIST_VERIFY_KEY`),
-TTL-checks, and **anti-rollback-checks** the per-door envelopes it caches. Identical guarantees; shorter
-TTL (it refreshes from the cloud more often than an edge refreshes from a broker). A containerized broker
-has a real clock (NTP), so the F4 RTC concern is edge-specific — but the broker still applies the
+asserts `doorId`, TTL-checks, and **anti-rollback-checks** the per-door envelopes it caches. It matches
+scans with its **own `brokerIndexKey`** (its rung-2 envelope copy is re-keyed for `brokerId`, §2) and
+**holds no edge index keys** — so a broker compromise yields at most its own re-keyed door set, not any
+edge's key. Identical guarantees to the edge; shorter TTL (refreshes from the cloud more often). A
+containerized broker has a real NTP clock, so the F4 RTC concern is edge-specific; it still applies the
 monotonic-version anti-rollback (F5).
 
 ### 3d. Broker ⇄ cloud (existing boundary — extended)
@@ -161,9 +178,9 @@ buffer is a new boundary — without integrity it breaks non-repudiation (CLAUDE
 
 | STRIDE | Threat | Mitigation |
 |---|---|---|
-| **R**epudiation / **T**ampering | A compromised edge edits or drops buffered unlock records to hide an entry. | Append-only, **sequence-numbered + hash-chained** buffer (or per-record signed with the edge identity); the cloud verifies chain continuity and **alerts on a sequence gap** (a gap is a tamper/loss signal, not silence). |
+| **R**epudiation / **T**ampering | A compromised edge edits or drops buffered unlock records to hide an entry. | Append-only, **sequence-numbered + hash-chained** buffer. **Honest bound:** a key-holding compromised edge can rewrite a *self-consistent* chain over records **not yet forwarded** — so the achievable guarantees are (a) **drop-detection** via seq gaps, and (b) **immutability of already-forwarded records** *iff* the **cloud anchors server-side** (persists each edge's last-seen `seq` + chain-tip and **enforces monotonic `seq` on ingest**). The cloud **alerts on a sequence gap** (tamper/loss signal, not silence). |
 | **D**enial / loss | Buffer overflow silently drops audit. | Bounded + **persistent across reboot**; on overflow **block-and-alert, never silent-drop**. |
-| Replay / dup | Re-sent records double-count at the cloud. | Cloud **dedups by `(edgeId, seq)`** and orders by it. |
+| Replay / dup / **re-provision** | Re-sent records double-count; a reflashed edge restarts `seq` at 0 → collides with old `(edgeId, seq)` keys (dropped as dups) or trips a false gap. | Cloud **dedups + orders by `(edgeId, bootEpoch, seq)`** — a **boot-epoch / chain-genesis nonce** in the dedup key + chain baseline distinguishes a legit re-provision from a replay; document the re-provision reset handshake. (A long *offline* backlog is contiguous → no gap, no noise.) |
 | **I**nfo disclosure | Buffered `credHash + doorId + timestamps` = an access-pattern record. | Same at-rest scoping as the envelope (§3b); `credHash` is pseudonymous personal data. |
 
 **Fail-secure invariant (all tiers):** the strike (on the edge) is de-energized/locked at rest; it pulses
@@ -179,8 +196,8 @@ split-brain, or ambiguity → **locked**.
   `result{requestId, granted, reason, mode}`, `status{online}`, **per-door signed-envelope push**; edge →
   hash-chained `audit{seq, ...}` records for backfill (§3f). `cred` is PII — never logged.
 - **Link B — broker ⇄ cloud (WSS):** broker → `auth`(service), `scan`(proxy), `ping`, aggregated
-  `audit{edgeId, seq, ...}` + telemetry, OTA status relay; cloud → `scan_result`, **per-door signed-envelope
-  push** (each re-keyed with the target edge's `edgeIndexKey`, §2). Unchanged shape otherwise.
+  `audit{edgeId, bootEpoch, seq, ...}` + telemetry, OTA status relay; cloud → `scan_result`, **per-door
+  signed-envelope push** (re-keyed **per recipient** — an edge-keyed + a broker-keyed copy, §2). Unchanged shape otherwise.
 - **Decision flow (per the ladder, §2):** edge `scan` → broker: cloud reachable? proxy for the
   authoritative, audited result; else broker cache. Broker unreachable to the edge? the edge decides from
   **its own cached envelope** (verify sig + TTL + anti-rollback, match via its `edgeIndexKey`). Grant →
@@ -189,25 +206,37 @@ split-brain, or ambiguity → **locked**.
 ## 5. Identity, secrets & registry
 
 - **Internal CA + mTLS (resolves the old cert question).** A tiny internal CA signs the **broker**
-  server/client cert and each **edge** cert; both ends pin the CA root. This gives mutual auth on Link A
-  and easy rotation (one root). The CA is offline-capable (on the LAN, not the cloud).
+  server/client cert and each **edge** cert; both ends pin the CA root. Mutual auth on Link A; CA is
+  offline-capable (on the LAN, not the cloud).
+- **Edge-cert revocation (F7 — mechanism now, build deferred).** Because an edge is an autonomous
+  authority holding a cert key + `edgeIndexKey` on a swappable SD, a stolen edge is a standing capability
+  until CA-root rotation (which burns the whole fleet). Design the interim control **now**: **short-lived
+  edge certs** + a broker-side **`edgeId` deny-list** enforced on every mTLS handshake + **refuse to
+  re-provision envelopes to a burned `edgeId`**. Blast radius is one door + TTL-bounded, so *implementing*
+  it may follow the first rollout, but the design commits to the mechanism.
 - **Broker ↔ cloud:** a per-broker service credential (akin to `DEVICE_SECRETS`); WSS.
-- **Edge identity:** per-edge cert (from the CA) + a per-edge secret. The edge carries `DOOR_ALLOWLIST_VERIFY_KEY`
-  (public, distinct from the OTA `DOOR_FW_VERIFY_KEY`) to verify its own cached envelope (rung 3), and its
-  **own `edgeIndexKey = HKDF(DOOR_CARD_INDEX_KEY, edgeDeviceId)`** for offline card matching (F1) — a
-  derived, door-scoped key, **never** the master `DOOR_CARD_INDEX_KEY`. No cloud credential on the edge.
-  Edge key material lives on an SD card → store access-scoped (a secure element is the stronger option;
-  tracked as a deferred hardening item).
-- **Door registry:** `doorId → { edgeDeviceId, brokerId }`. Each edge node **is** one door (reader +
-  strike), so there is no per-broker relay-channel fan-out — the edge knows its own door; the broker maps
-  `edgeDeviceId → doorId` from the registry (server-derived, never client-supplied). The cloud signs a
-  **per-door envelope** (F2) and re-keys it with the target edge's `edgeIndexKey` (F1). Admin UI lists
-  doors + their edge/broker + last status.
+- **Edge identity:** per-edge cert (from the CA) + a per-edge secret. Carries `DOOR_ALLOWLIST_VERIFY_KEY`
+  (public, distinct from the OTA `DOOR_FW_VERIFY_KEY`) to verify its own envelope (rung 3), and its **own**
+  `edgeIndexKey = HKDF(ikm=DOOR_CARD_INDEX_KEY, info="dooraccess/index/v1|"+edgeDeviceId)` for offline
+  matching (F1) — door-scoped, **never** the master. No cloud credential on the edge. SD-card key material
+  is store access-scoped (secure element = the F9 upgrade). A **stolen edge SD = durable one-door
+  compromise until CA rotation** (the F7×F9 residual — accepted given one-door blast radius + secure-side mount).
+- **Door registry:** `doorId → { edgeDeviceId, brokerId }`. Each edge **is** one door; the broker maps
+  `edgeDeviceId → doorId` server-side (never client-supplied). The cloud signs a **per-door envelope** (F2)
+  and re-keys it **per recipient** — an **edge-keyed** copy (`edgeIndexKey`) for the edge and a
+  **broker-keyed** copy (`brokerIndexKey = HKDF(…"|"+brokerId)`) for the broker's rung-2 match (§2), so no
+  node holds another's index key. Admin UI lists doors + edge/broker + last status.
+- **Card-code entropy floor (F1/R3 decision).** The per-edge key only bounds a *leaked* key's damage if the
+  code space is large: set a floor — **QR/app credentials ≥128-bit random**, enforced by **rejecting
+  below-floor codes at `service.js` enroll**. **4-byte NFC-UIDs cannot meet it** → for NFC-UID creds a
+  leaked edge key allows cloning cards **for that one door**; this is an **accepted risk**, compensated by
+  secure-side mount + F7 revocation + short envelope TTL. (Prefer high-entropy QR/app creds where door
+  risk warrants.)
 - **Config:** **edge (`pi-zero` image):** broker VIP host, edge cert+key, pinned CA root, per-edge secret,
   `DOOR_ALLOWLIST_VERIFY_KEY`, **`edgeIndexKey`**, `edge_allowlist_ttl`, **hardware RTC** (F4), NFC + relay
   pins. **broker container:** cloud uplink creds, CA-signed cert, CA root, `DOOR_ALLOWLIST_VERIFY_KEY`,
-  `broker_allowlist_ttl`, registry, HA/VIP config. Master `DOOR_CARD_INDEX_KEY` stays **cloud-only**. WiFi
-  is OS-managed on the Pi Zero.
+  **`brokerIndexKey`**, `broker_allowlist_ttl`, `edgeId` deny-list, registry, HA/VIP config. Master
+  `DOOR_CARD_INDEX_KEY` stays **cloud-only**. WiFi is OS-managed on the Pi Zero.
 
 ## 6. High availability & failover
 
@@ -228,12 +257,12 @@ split-brain, or ambiguity → **locked**.
 | **edge node** (`pi-zero` image) | The whole firmware fleet. NFC read + **strike relay GPIO** + mTLS client to the broker VIP + **local per-door-envelope cache: nested-canonical Ed25519 verify (F3) + TTL + anti-rollback (F5) + `edgeIndexKey` HMAC match (F1)** (rung 3) + **hardware-RTC time source + monotonic clock floor (F4)** + fail-secure supervisor loop (reconnect/backoff, heartbeat, `WatchdogSec`, OTA commit/poll) + **hash-chained store-and-forward audit buffer (F6)**. |
 | **broker container** (new infra) | On-site instance of the `socket-server` stack: mTLS listener (Link A) + cloud uplink (Link B) + cached decision with the same verify + anti-rollback (rung 2) + **per-door signed-envelope distribution, re-keyed per edge** + registry/routing + relays hash-chained audit up. Proxmox (HA). **No relay.** |
 | `pico` firmware | **FROZEN.** No changes; doors migrate to the edge-node unit. |
-| cloud `socket-server.js` | Authenticate brokers (service creds); **build + Ed25519-sign per-door envelopes, each re-keyed with the edge's `edgeIndexKey` (HKDF)** and push to brokers; keep the online scan/authorize path; **aggregate audit** — verify the edge hash-chain, **dedup by `(edgeId, seq)`, alert on gaps** — incl. backfilled offline decisions. |
-| door-access addon | Extend `buildSignedAllowlist` from one monolithic signature to **per-door signed envelopes** + a **per-edge HKDF re-key** of `credHash` (decrypt `codeEnc` at build time to recompute the HMAC). Add a JS **nested canonicalizer** with golden vectors the edge/broker verifiers must byte-match. Registry gains `edgeDeviceId`/`brokerId`; admin UI shows tier + last status. |
+| cloud `socket-server.js` | Authenticate brokers (service creds); **build + Ed25519-sign per-door envelopes with a strictly-monotonic `version`, each re-keyed per recipient (edge + broker HKDF copies)** and push; keep the online authorize path; **aggregate audit with a server-side anchor** — persist each edge's last-seen `seq`+chain-tip, enforce monotonic `seq` on ingest, **dedup by `(edgeId, bootEpoch, seq)`, alert on gaps**. |
+| door-access addon | Extend `buildSignedAllowlist`: one-monolithic-signature → **per-door signed envelopes**; add a **strictly-monotonic `version`** source (today it's a constant `version:1` — anti-rollback is inert until fixed); a **per-recipient HKDF re-key** of `credHash` (decrypt+**zeroize** `codeEnc` at build time); a JS **nested canonicalizer** + golden vectors; and **reject below-entropy-floor codes at enroll** (R3). Registry gains `edgeDeviceId`/`brokerId`; admin UI shows tier + last status. |
 | Proxmox / infra | New host to provision + CIS-harden; broker image signed/SBOM'd, deployed as code; VIP/HA; UPS + redundant switch; backup/restore of broker config + registry (`@rules/topic-iac-cloud`, `std-cis`, `std-supplychain`). |
 | `protocol.md` | Rewrite: retire Link 2; add Link A (edge⇄broker) + Link B (broker⇄cloud) + the ladder. |
 | OTA | **Edge nodes only** (single `pi-zero` image/role; anti-rollback; staged/pinned rollout; status telemetry). Brokers deploy via the container path, not OTA. |
-| Tests | edge unit (mTLS, fail-secure relay, **local offline decision** verify+TTL+revoked-rejected+expired-rejected); broker (cache decision, slice distribution, cloud proxy); the **4-rung degradation ladder** end-to-end; **HA failover** (kill active broker → doors keep working via rung 3, VIP moves); audit backfill; abuse (unauth edge, forged/expired allowlist, replayed grant, split-brain double-grant). |
+| Tests | edge unit (mTLS, fail-secure relay, **local offline decision** verify+TTL+revoked-rejected+expired-rejected); broker (cache decision, **per-door envelope distribution**, `brokerIndexKey` match, cloud proxy); the **4-rung degradation ladder** end-to-end; **HA failover** (kill active broker → doors keep working via rung 3, VIP moves); audit backfill; abuse (unauth edge, forged/expired allowlist, replayed grant, split-brain double-grant) — plus the round-2 tests in §12. |
 
 ## 8. Offline behavior & audit continuity
 
@@ -283,19 +312,24 @@ Very large sites can shard edges across multiple broker containers by zone, stil
 5. **Audit store-and-forward** buffer size + retention on edge and broker for offline decisions.
 6. **Edge hardware:** Pi Zero W confirmed (needs compute/storage for the rung-3 cache + crypto) + a relay
    board/HAT **with a battery-backed RTC** (F4) + the SD-vs-secure-element choice for key material.
-7. **Card-code entropy floor (F1):** minimum code entropy so a leaked per-edge `edgeIndexKey` can't be
-   dictionaried — set as a provisioning rule; confirm the value.
-8. **TTL/anti-rollback params (F4/F5):** the broker/edge TTLs (proposed 24h/72h) hold **once** the RTC +
-   monotonic floor + anti-rollback land; confirm.
+7. **Card-code entropy floor (F1) — decided in §5, confirm the numbers:** ≥128-bit for QR/app creds,
+   enforced at enroll; NFC-UID = accepted-risk (leaked edge key → clone that one door's cards). Confirm
+   the bit-length + the NFC acceptance.
+8. **TTL/anti-rollback params (F4/F5):** broker/edge TTLs (24h/72h) hold once the RTC + monotonic floor +
+   monotonic-`version` land; confirm.
+9. **F7 revocation build timing:** the mechanism is committed (§5 — deny-list + short-lived certs); when
+   in the rollout does the deny-list enforcement ship (vs. relying on one-door blast radius + TTL until then)?
 
 _(Resolved: freeze Pico; three tiers — cloud / on-site HA broker container / edge node; **strike on the
 edge**; hybrid defense-in-depth 4-rung ladder; edge dials the broker VIP over mTLS; **internal CA + mTLS**
 for Link A; one edge firmware role. **SEC review F1–F6 folded in:** per-door signed envelopes (F2),
 per-edge HKDF index keys (F1), a new nested canonicalizer + golden vectors (F3), edge RTC + monotonic
-clock floor (F4), envelope anti-rollback (F5), hash-chained store-and-forward audit (F6). Deferred to
-tracked issues: F7 per-edge cert revocation (broker-side `edgeId` deny-list), F8 honest compromised-edge
-residual wording, F9 at-rest key encryption / secure element, F10 tamper alerting + split-brain wording,
-F11 `credHash` = pseudonymous personal data.)_
+clock floor (F4), envelope anti-rollback (F5), hash-chained store-and-forward audit (F6). **Round-2
+refinements folded:** broker-keyed rung-2 envelope (F1 broker gap), strictly-monotonic `version` (F5
+no-op), `doorId`-binding check (F2), cloud server-side audit anchor + boot-epoch (F6), canonicalizer
+byte-rules (F3), HKDF label + decrypt-zeroize (F1), entropy-floor **decision** (§5), and the **F7
+revocation mechanism promoted to the design** (build deferred). Still-deferred *builds/wording*: F7
+enforcement rollout, F8 wording, F9 secure element, F10 tamper alerting, F11 privacy note.)_
 
 ## 12. Definition of done (when we build)
 
@@ -322,7 +356,23 @@ tiers, §3f audit, the Proxmox host + HA).
 5. **Per-door envelope (F2):** an edge rejects any payload/slice not covered by a valid per-door signature;
    a truncated/edited envelope fails verification.
 6. **Audit tamper/gap (F6):** edit or drop a buffered record → the cloud detects the hash-chain/sequence
-   break and alerts; duplicates dedup by `(edgeId, seq)`; out-of-order arrivals are ordered.
+   break and alerts; duplicates dedup by `(edgeId, bootEpoch, seq)`; out-of-order arrivals are ordered.
+
+**Plus the round-2 tests:**
+7. **Cross-door envelope replay (F2):** a validly-signed door-A envelope presented for a door-B decision
+   at the **broker** → rejected on `doorId` mismatch (not just signature).
+8. **Broker rung-2 key isolation (F1):** the broker matches only with its own `brokerIndexKey` and holds
+   no edge index key — a scan for a door whose key it shouldn't hold can't be matched.
+9. **Monotonic-version enforcement (F5):** two consecutive builds carry strictly increasing `version`; an
+   envelope with an equal-or-lower `version` than persisted → rejected even if `issuedAt` is newer.
+10. **Server-side audit anchor (F6):** after the cloud ingests `seq ≤ N` for an edge, a later chain that
+    rewrites any record `≤ N` → detected/alerted (proves anchoring, not just self-consistent chaining).
+11. **Re-provision seq reset (F6):** a reflashed edge starting `seq` at 0 with a new `bootEpoch` is **not**
+    dedup-dropped and does **not** raise a false gap alert.
+12. **Entropy-floor enforcement (F1/R3):** enrolling a below-floor code is rejected at `service.js` enroll;
+    NFC-UID-class inputs are handled per the §5 accepted-risk decision.
+13. **Decrypted-code zeroization (F1):** the per-recipient build path clears decrypted `code` buffers after
+    the HMAC (no lingering plaintext PII).
 
 ## Changelog
 | Date | Change | Author |
@@ -333,3 +383,4 @@ tiers, §3f audit, the Proxmox host + HA).
 | 2026-08-23 | Add §8 multi-door (one broker board backs a door cluster) | app dev |
 | 2026-08-23 | **Retopology: three tiers — cloud / on-site HA broker CONTAINER (Proxmox) / edge nodes; strike moves to the edge; hybrid defense-in-depth 4-rung ladder; mTLS internal CA; broker HA; firmware = one edge role** | app dev |
 | 2026-08-23 | **Fold SEC-review F1–F6: per-door signed envelopes (F2), per-edge HKDF index keys (F1), new nested canonicalizer + golden vectors (F3), edge RTC + monotonic clock floor (F4), envelope anti-rollback (F5), hash-chained store-and-forward audit + §3f (F6). F7–F11 deferred to tracked issues.** | app dev |
+| 2026-08-23 | **Fold SEC re-review (round 2): broker-keyed rung-2 envelope (F1 broker gap), strictly-monotonic `version` (F5 no-op fix), `doorId`-binding (F2), cloud server-side audit anchor + boot-epoch (F6), canonicalizer byte-rules (F3), entropy-floor decision (§5), F7 revocation mechanism promoted; fixed the §7 "slice" contradiction; +7 tests.** | app dev |
