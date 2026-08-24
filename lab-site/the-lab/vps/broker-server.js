@@ -14,14 +14,18 @@
 
 import fs from "fs";
 import tls from "tls";
-import readline from "readline";
 import crypto from "crypto";
+import { pathToFileURL } from "url";
 import { WebSocket } from "ws";
 import { loadBrokerConfig } from "./lib/brokerConfig.js";
 import { makeBrokerStore } from "./lib/brokerStore.js";
 import { edgeListenerTlsOptions, uplinkTlsOptions } from "./lib/brokerTls.js";
 import { handleEdgeMessage } from "./lib/brokerProtocol.js";
+import { makeLineDecoder, makeReplayGuard } from "./lib/brokerFraming.js";
 import { ingestEnvelope } from "./lib/brokerService.js";
+
+const EDGE_IDLE_MS = 60000;         // drop an idle/held edge connection (fail-secure)
+const UPLINK_MAX_PAYLOAD = 512 * 1024; // an envelope push is small; cap it (CWE-400)
 
 const log = (event, fields = {}) => console.log(JSON.stringify({ ts: new Date().toISOString(), event, ...fields }));
 
@@ -43,8 +47,14 @@ function startUplink(cfg, store) {
   let ws = null;
   let backoff = 1;
 
+  function drainPending(reason) {
+    for (const [, p] of pending) { clearTimeout(p.timer); p.resolve(null); } // null → offline fallback, at once
+    pending.clear();
+    if (reason) log("uplink.pending-drained", { reason });
+  }
+
   function connect() {
-    ws = new WebSocket(cfg.uplink.url, { ...uplinkTlsOptions(cfg) });
+    ws = new WebSocket(cfg.uplink.url, { ...uplinkTlsOptions(cfg), maxPayload: UPLINK_MAX_PAYLOAD });
     ws.on("open", () => {
       backoff = 1;
       ws.send(JSON.stringify({ t: "auth", secret: cfg.uplink.secret })); // bearer, post-TLS
@@ -62,7 +72,7 @@ function startUplink(cfg, store) {
         p.resolve(m && typeof m.granted === "boolean" ? { granted: m.granted, reason: m.reason } : null);
       }
     });
-    ws.on("close", () => { log("uplink.down", {}); scheduleReconnect(); });
+    ws.on("close", () => { drainPending("uplink-closed"); log("uplink.down", {}); scheduleReconnect(); }); // F3: fall to offline at once
     ws.on("error", (e) => { log("uplink.error", { reason: e.code || e.message }); try { ws.close(); } catch { /* noop */ } });
   }
   function scheduleReconnect() {
@@ -94,24 +104,31 @@ function startEdgeListener(cfg, store, registry, cloudAuthorize) {
     const cert = socket.getPeerCertificate?.();
     const edgeId = cert && cert.subject ? cert.subject.CN : null;
     const doorId = edgeId ? registry[edgeId] : undefined; // server-derived; unknown edge → no door → deny
-    const seen = new Set(); // per-connection replay guard (requestId+nonce)
-    const rl = readline.createInterface({ input: socket });
-    rl.on("line", async (line) => {
-      let msg;
-      try { msg = JSON.parse(line); } catch { return; }
-      if (msg.t === "scan") {
-        const key = `${msg.requestId}:${msg.nonce}`;
-        if (seen.has(key)) return; // replay within this connection
-        seen.add(key);
-      }
-      const resp = await handleEdgeMessage(msg, { store, cloudAuthorize, doorId });
-      if (resp) {
-        if (resp.t === "result" && resp.mode === "offline" && typeof cloudAuthorize === "function") {
-          log("scan.offline-fallback", { doorId, reason: resp.reason }); // audit the cloud→offline gap (#151)
+    const decoder = makeLineDecoder({});   // F1: bounded buffer (no newline-less flood)
+    const guard = makeReplayGuard({});     // F2: dedup only when requestId+nonce present; bounded
+    socket.setEncoding("utf8");
+    socket.setTimeout(EDGE_IDLE_MS, () => socket.destroy()); // F1: no indefinitely-held connections
+    socket.on("data", async (chunk) => {
+      const { overflow, lines } = decoder.push(chunk);
+      if (overflow) { log("edge.line-overflow", { doorId }); socket.destroy(); return; } // F1: drop a flooding edge
+      for (const line of lines) {
+        if (!line) continue;
+        let msg;
+        try { msg = JSON.parse(line); } catch { continue; }
+        if (msg.t === "scan" && guard.check(msg.requestId, msg.nonce) === "duplicate") {
+          log("scan.replay-dropped", { doorId }); // F2: log, never silently swallow
+          continue;
         }
-        try { socket.write(JSON.stringify(resp) + "\n"); } catch { /* client gone */ }
+        const resp = await handleEdgeMessage(msg, { store, cloudAuthorize, doorId });
+        if (resp) {
+          // F4: audit the security-relevant event — an OFFLINE GRANT (decided locally, not centrally
+          // audited until reconnect, #151) — rather than every offline result incl. denies.
+          if (resp.t === "result" && resp.mode === "offline" && resp.granted) log("scan.offline-grant", { doorId });
+          try { socket.write(JSON.stringify(resp) + "\n"); } catch { /* client gone */ }
+        }
       }
     });
+    socket.on("timeout", () => socket.destroy());
     socket.on("error", () => { /* transient edge disconnect; fail-secure (nothing pulses) */ });
   });
   server.on("tlsClientError", (e) => log("edge.tls-error", { reason: e.code || e.message })); // rejected certs
@@ -128,5 +145,6 @@ export function run() {
   log("broker.started", { envelopeDir: cfg.envelopeDir, doors: Object.keys(registry).length });
 }
 
-// Entrypoint guard: run() only when executed directly (not when imported by a test).
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) run();
+// Entrypoint guard: run() only when executed directly (not when imported by a test). pathToFileURL
+// handles paths with spaces/non-ASCII correctly (F5).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();
