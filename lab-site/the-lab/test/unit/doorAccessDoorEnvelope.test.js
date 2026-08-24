@@ -92,22 +92,42 @@ describe("buildDoorEnvelope (§2)", () => {
     await expect(Service.buildDoorEnvelope({ recipientId: "edge-1" })).rejects.toMatchObject({ status: 400 });
     await expect(Service.buildDoorEnvelope({ doorId: "front" })).rejects.toMatchObject({ status: 400 });
   });
+
+  test("one corrupt card row is skipped + audited, not fatal (F-2)", async () => {
+    const good = { userID: "u1", codeEnc: encryptCode(CODE), credentialType: "qr", status: "active" };
+    const bad = { userID: "u2", codeEnc: "not:valid:ciphertext", credentialType: "qr", status: "active" };
+    Model.listCards.mockResolvedValue([bad, good]);
+    const env = await Service.buildDoorEnvelope({ doorId: "front", recipientId: "edge-1" });
+    expect(verifyAllowlist(env)).toBe(true);
+    expect(env.payload.entryCount).toBe(1); // the good card still made it in
+    expect(auditLog).toHaveBeenCalledWith("door-access.allowlist", expect.objectContaining({ outcome: "card-skipped", target: "front" }));
+  });
 });
 
-describe("enrollCard entropy floor (§5/R3)", () => {
-  test("rejects a below-floor qr/app credential", async () => {
+describe("enrollCard entropy floor + issueCard (§5/R3, DoD #12)", () => {
+  test("enrollCard REJECTS any externally-supplied qr/app code — incl. long-but-low-entropy", async () => {
     await expect(Service.enrollCard({ userID: "u1", code: "0402", credentialType: "qr" })).rejects.toMatchObject({ status: 400 });
     await expect(Service.enrollCard({ userID: "u1", code: "0402", credentialType: "app" })).rejects.toMatchObject({ status: 400 });
+    // a long "aaaa…" passes the charset/length helper but is NOT server-issued → still rejected (DoD #12)
+    await expect(Service.enrollCard({ userID: "u1", code: "a".repeat(40), credentialType: "qr" })).rejects.toMatchObject({ status: 400 });
+    // even a real CSPRNG token supplied by a caller (not via issueCard) is rejected — "system-issued" is provable only by issuing
+    await expect(Service.enrollCard({ userID: "u1", code: generateCardToken(), credentialType: "qr" })).rejects.toMatchObject({ status: 400 });
     expect(Model.upsertCard).not.toHaveBeenCalled();
   });
 
-  test("accepts a system-issued token for qr/app", async () => {
-    const r = await Service.enrollCard({ userID: "u1", code: generateCardToken(), credentialType: "qr" });
+  test("issueCard server-issues a floor-passing token, enrolls it, returns the code", async () => {
+    const r = await Service.issueCard({ userID: "u1", credentialType: "qr" });
     expect(r.userID).toBe("u1");
+    expect(r.code).toMatch(/^[A-Za-z0-9_-]{22,}$/); // a real ≥128-bit token
     expect(Model.upsertCard).toHaveBeenCalled();
   });
 
-  test("accepts an NFC-UID (accepted risk) and audits it", async () => {
+  test("issueCard rejects a non-qr/app type", async () => {
+    await expect(Service.issueCard({ userID: "u1", credentialType: "nfc" })).rejects.toMatchObject({ status: 400 });
+    await expect(Service.issueCard({})).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("enrollCard accepts an NFC-UID (accepted risk) and audits it", async () => {
     const r = await Service.enrollCard({ userID: "u1", code: "04A2B3C4", credentialType: "nfc" });
     expect(r.userID).toBe("u1");
     expect(auditLog).toHaveBeenCalledWith("door-access.enroll", expect.objectContaining({ outcome: "low-entropy-accepted", credentialType: "nfc" }));

@@ -94,15 +94,27 @@ describe("assertCanonicalSafe (F3)", () => {
   test("accepts int/str/bool/null/array/object", () => {
     expect(() => assertCanonicalSafe({ a: 1, b: "x", c: true, d: null, e: [1, 2, { f: 3 }] })).not.toThrow();
   });
-  test("rejects float / NaN / Infinity / undefined", () => {
-    expect(() => assertCanonicalSafe({ x: 1.5 })).toThrow(/non-integer/);
-    expect(() => assertCanonicalSafe({ x: NaN })).toThrow(/non-integer/);
-    expect(() => assertCanonicalSafe({ x: Infinity })).toThrow(/non-integer/);
+  test("rejects float / NaN / Infinity / undefined / unsafe-int (F-5) / dangerous keys (F-3)", () => {
+    expect(() => assertCanonicalSafe({ x: 1.5 })).toThrow(/non-safe-integer/);
+    expect(() => assertCanonicalSafe({ x: NaN })).toThrow(/non-safe-integer/);
+    expect(() => assertCanonicalSafe({ x: Infinity })).toThrow(/non-safe-integer/);
     expect(() => assertCanonicalSafe({ x: undefined })).toThrow(/undefined/);
     expect(() => assertCanonicalSafe([undefined])).toThrow(/undefined/);
+    // F-5: integers beyond 2^53 round-trip lossily → not canonical-safe
+    expect(() => assertCanonicalSafe({ v: Number.MAX_SAFE_INTEGER + 1 })).toThrow(/non-safe-integer/);
+    expect(() => assertCanonicalSafe({ v: Number.MAX_SAFE_INTEGER })).not.toThrow();
+    // F-3: prototype-pollution-class keys are rejected (JSON.parse produces an own __proto__ key)
+    expect(() => assertCanonicalSafe(JSON.parse('{"__proto__":{"x":1}}'))).toThrow(/dangerous key/);
+    expect(() => assertCanonicalSafe({ constructor: 1 })).toThrow(/dangerous key/);
+  });
+
+  test("canonical no longer silently drops a __proto__ own-key (F-3)", () => {
+    // sortKeys now uses a null-proto accumulator → an own "__proto__" key is serialized, not dropped
+    const obj = JSON.parse('{"a":1,"__proto__":{"x":9},"b":2}');
+    expect(canonical(obj)).toBe('{"__proto__":{"x":9},"a":1,"b":2}');
   });
   test("signEnvelope refuses a canonical-unsafe payload", () => {
-    expect(() => signEnvelope({ doorId: "d1", version: 1, ratio: 0.5 })).toThrow(/non-integer/);
+    expect(() => signEnvelope({ doorId: "d1", version: 1, ratio: 0.5 })).toThrow(/non-safe-integer/);
   });
 });
 

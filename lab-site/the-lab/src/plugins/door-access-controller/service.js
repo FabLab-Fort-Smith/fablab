@@ -6,7 +6,7 @@
 
 import Model from "./model";
 import { factsFromUser } from "./facts";
-import { blindIndex, encryptCode, decryptToBuffer, recipientIndexKey, credHashFor, meetsEntropyFloor } from "./cardCrypto";
+import { blindIndex, encryptCode, decryptToBuffer, recipientIndexKey, credHashFor, meetsEntropyFloor, generateCardToken } from "./cardCrypto";
 import { newCardDoc, newDoorDoc } from "./class";
 import { decide, allowedDoorsForFacts } from "./policy";
 import { signAllowlist, signEnvelope, allowlistSigningReady } from "./allowlistCrypto";
@@ -92,13 +92,15 @@ const Service = {
    * @param {{ userID:string, code:string, credentialType?:("nfc"|"qr") }} p
    * @returns {Promise<{userID:string, bi:string}>}  bi is a non-secret keyed hash
    */
-  async enrollCard({ userID, code, credentialType = "nfc" }) {
+  async enrollCard({ userID, code, credentialType = "nfc", system = false }) {
     if (!userID || !code) throw new Error("enrollCard requires userID and code");
-    // Entropy floor (door-controller-wifi.md §5, F1/R3): high-assurance credential types must be
-    // system-issued ≥128-bit tokens so a leaked per-recipient index key can't be dictionaried.
-    // NFC-UIDs cannot meet it and are an accepted risk (bounded per the design) — allowed but audited.
-    if ((credentialType === "qr" || credentialType === "app") && !meetsEntropyFloor(code)) {
-      throw badRequest(`a ${credentialType} credential must be a system-issued ≥128-bit token (see generateCardToken)`);
+    // Entropy floor (door-controller-wifi.md §5, F1/R3, DoD #12): a qr/app credential MUST be
+    // server-issued (via issueCard) — an externally-supplied code can't be proven high-entropy, and
+    // "system-issued" is not inspectable from the value. Reject non-issued qr/app. NFC-UIDs cannot
+    // meet the floor and are an accepted risk (bounded per the design) — allowed but audited.
+    if (credentialType === "qr" || credentialType === "app") {
+      if (!system) throw badRequest(`a ${credentialType} credential must be server-issued — call issueCard(), external codes are not accepted`);
+      if (!meetsEntropyFloor(code)) throw badRequest(`issued ${credentialType} token failed the entropy floor`); // defensive
     }
     if (credentialType === "nfc") {
       auditLog("door-access.enroll", { actor: { pluginId: PLUGIN_ID }, target: userID, outcome: "low-entropy-accepted", credentialType, reason: "nfc-uid-accepted-risk" });
@@ -109,6 +111,25 @@ const Service = {
     await Model.upsertCard(doc);
     auditLog("door-access.enroll", { actor: { pluginId: PLUGIN_ID }, target: userID, outcome: "enrolled", credentialType });
     return { userID, bi };
+  },
+
+  /**
+   * Issue a NEW qr/app credential: the SERVER generates a ≥128-bit CSPRNG token, enrolls it, and
+   * returns it for the admin/app to render into the QR / app credential (door-controller-wifi.md
+   * §5, F1/R3, DoD #12). This is the only way a high-assurance credential enters the system — so
+   * "system-issued" is a provable property, not an unenforceable inspection of a supplied string.
+   * The raw `code` is returned to the caller once and is NEVER logged.
+   * @param {{ userID:string, credentialType?:("qr"|"app") }} p
+   * @returns {Promise<{userID:string, code:string, credentialType:string}>}
+   */
+  async issueCard({ userID, credentialType = "qr" } = {}) {
+    if (!userID) throw badRequest("userID is required");
+    if (credentialType !== "qr" && credentialType !== "app") {
+      throw badRequest("issueCard is for qr/app credentials (an NFC-UID comes from the physical card)");
+    }
+    const code = generateCardToken();
+    await this.enrollCard({ userID, code, credentialType, system: true });
+    return { userID, code, credentialType };
   },
 
   /**
@@ -188,16 +209,23 @@ const Service = {
     const entries = [];
     try {
       for (const card of cards) {
-        const facts = factsFromUser(await UsersService.getUserByQuery({ userID: card.userID }));
-        if (!facts) continue;
-        const allowed = allowedDoorsForFacts(facts, doors, policy, card.credentialType || "nfc");
-        const forThisDoor = allowed.find((a) => a.doorId === doorId);
-        if (!forThisDoor) continue;
-        const codeBuf = decryptToBuffer(card.codeEnc);
+        // Per-card fail-open FOR THE BUILD (not for access): one corrupt/tampered codeEnc must not
+        // abort the whole door envelope → a single bad row can't cause a site-wide offline denial
+        // (F-2). The bad card is skipped + audited; the door still gets an envelope for the rest.
         try {
-          entries.push({ credHash: credHashFor(recipientKey, codeBuf), windows: forThisDoor.windows || [] });
-        } finally {
-          codeBuf.fill(0); // wipe plaintext PII immediately (§5)
+          const facts = factsFromUser(await UsersService.getUserByQuery({ userID: card.userID }));
+          if (!facts) continue;
+          const allowed = allowedDoorsForFacts(facts, doors, policy, card.credentialType || "nfc");
+          const forThisDoor = allowed.find((a) => a.doorId === doorId);
+          if (!forThisDoor) continue;
+          const codeBuf = decryptToBuffer(card.codeEnc); // throws on GCM tamper → caught below
+          try {
+            entries.push({ credHash: credHashFor(recipientKey, codeBuf), windows: forThisDoor.windows || [] });
+          } finally {
+            codeBuf.fill(0); // wipe plaintext PII immediately (§5)
+          }
+        } catch (e) {
+          auditLog("door-access.allowlist", { actor: { pluginId: PLUGIN_ID }, target: doorId, outcome: "card-skipped", reason: String((e && e.message) || e) });
         }
       }
     } finally {

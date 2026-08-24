@@ -41,13 +41,16 @@ export function canonical(value) {
 function sortKeys(v) {
   if (Array.isArray(v)) return v.map(sortKeys);
   if (v && typeof v === "object") {
+    // Object.create(null): a "__proto__" key becomes an OWN property (serialized), not a prototype
+    // mutation that silently drops it from the signed bytes (CWE-1321 canonicalization gap).
     return Object.keys(v).sort().reduce((acc, k) => {
       acc[k] = sortKeys(v[k]);
       return acc;
-    }, {});
+    }, Object.create(null));
   }
   return v;
 }
+const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 /**
  * Sign a payload → a self-contained signed envelope.
@@ -68,7 +71,9 @@ export function signAllowlist(payload) {
 export function assertCanonicalSafe(value, path = "$") {
   if (value === null || typeof value === "string" || typeof value === "boolean") return;
   if (typeof value === "number") {
-    if (!Number.isInteger(value)) throw new Error(`non-integer number at ${path} (floats/NaN/Infinity are not canonical-safe)`);
+    // Only SAFE integers: floats/NaN/Infinity aren't canonical-safe, and ints beyond 2^53 lose
+    // precision on JS round-trip → the cross-language byte-match (F3) would silently diverge.
+    if (!Number.isSafeInteger(value)) throw new Error(`non-safe-integer number at ${path} (floats/NaN/Infinity/|n|>2^53 are not canonical-safe)`);
     return;
   }
   if (Array.isArray(value)) {
@@ -80,6 +85,7 @@ export function assertCanonicalSafe(value, path = "$") {
   }
   if (typeof value === "object") {
     for (const k of Object.keys(value)) {
+      if (DANGEROUS_KEYS.has(k)) throw new Error(`dangerous key "${k}" at ${path} (prototype-pollution class)`);
       if (value[k] === undefined) throw new Error(`undefined value at ${path}.${k}`);
       assertCanonicalSafe(value[k], `${path}.${k}`);
     }

@@ -108,13 +108,13 @@ export async function savePolicyDoc(policy) {
 export async function nextEnvelopeVersion(doorId) {
   await cards(); // ensure connection
   const col = (await database()).collection(COUNTERS);
-  const res = await col.findOneAndUpdate(
+  const doc = await col.findOneAndUpdate(
     { _id: `env:${doorId}` },
     { $inc: { version: 1 } },
     { upsert: true, returnDocument: "after" }
   );
-  // driver compat: findOneAndUpdate returns {value} on some versions, the doc on others.
-  const doc = res && res.value ? res.value : res;
+  // mongodb driver v6+ returns the updated document directly (no {value} wrapper).
+  if (!doc || typeof doc.version !== "number") throw new Error(`nextEnvelopeVersion failed for ${doorId}`);
   return doc.version;
 }
 

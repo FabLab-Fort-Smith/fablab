@@ -108,6 +108,13 @@ offline tier actually matches a card and trusts a snapshot (round-1 F1–F3/F5 +
   duplicate keys can't diverge; the signature is over `canonical(payload)` only, in a `{payload, sig, alg}`
   envelope. Ships with **cross-language golden-vector tests** (§12). Verify key stays distinct
   (`DOOR_ALLOWLIST_VERIFY_KEY` ≠ `DOOR_FW_VERIFY_KEY`).
+  **Python (S4) contract to byte-match `JSON.stringify(sortKeys(v))`:**
+  `json.dumps(obj, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")` — all four
+  settings are mandatory. Additional constraints: **keys must be ASCII** (JS `sort` orders by UTF-16
+  code unit, Python `sort_keys` by code point — they agree only for ASCII; all payload field names are
+  fixed ASCII, so never admit user-defined keys); **`ensure_ascii=False`** (JS does not `\uXXXX`-escape
+  non-ASCII *values* like `doorId`); reject **integers |n|>2^53** (lossy round-trip) and the keys
+  `__proto__`/`constructor`/`prototype`; **parse-then-canonicalize** and reject duplicate keys on verify.
 - **Anti-rollback on a MONOTONIC version (F5 + round-2 fix).** TTL alone lets a writable-cache attacker
   replay an older-but-unexpired envelope. Each tier persists the newest `version` and **rejects any older
   envelope**. **The builder must emit a strictly-monotonic `version`** (a persisted counter / `max(prev)+1`)
