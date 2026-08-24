@@ -24,6 +24,7 @@ import { handleEdgeMessage } from "./lib/brokerProtocol.js";
 import { makeLineDecoder, makeReplayGuard } from "./lib/brokerFraming.js";
 import { ingestEnvelope } from "./lib/brokerService.js";
 import { startHealthServer } from "./lib/brokerHealth.js";
+import { makeEdgeDenylist } from "./lib/brokerDenylist.js";
 
 const EDGE_IDLE_MS = 60000;         // drop an idle/held edge connection (fail-secure)
 const UPLINK_MAX_PAYLOAD = 512 * 1024; // an envelope push is small; cap it (CWE-400)
@@ -103,11 +104,14 @@ function startUplink(cfg, store) {
 function redactUrl(u) { try { const x = new URL(u); return `${x.protocol}//${x.host}${x.pathname}`; } catch { return "?"; } }
 
 // --- Link A: the edge mTLS listener -------------------------------------------------------------
-function startEdgeListener(cfg, store, registry, cloudAuthorize) {
+function startEdgeListener(cfg, store, registry, cloudAuthorize, denylist = { isDenied: () => false }) {
   const server = tls.createServer(edgeListenerTlsOptions(cfg), (socket) => {
     // rejectUnauthorized already dropped anyone without a CA-signed cert; derive doorId from the cert.
     const cert = socket.getPeerCertificate?.();
     const edgeId = cert && cert.subject ? cert.subject.CN : null;
+    // F7 revocation: a CA-signed cert whose CN is deny-listed is refused here (no CRL yet). Drop the
+    // connection before any door processing — the edge is revoked regardless of its valid cert.
+    if (edgeId && denylist.isDenied(edgeId)) { log("edge.denied", { edgeId }); socket.destroy(); return; }
     const doorId = edgeId ? registry[edgeId] : undefined; // server-derived; unknown edge → no door → deny
     const decoder = makeLineDecoder({});   // F1: bounded buffer (no newline-less flood)
     const guard = makeReplayGuard({});     // F2: dedup only when requestId+nonce present; bounded
@@ -146,7 +150,8 @@ export function run() {
   const store = makeBrokerStore({ dir: cfg.envelopeDir });
   const registry = loadRegistry();
   const uplink = startUplink(cfg, store);
-  startEdgeListener(cfg, store, registry, uplink.cloudAuthorize);
+  const denylist = makeEdgeDenylist({ path: cfg.edgeDenylistPath, log }); // F7 edge revocation (optional)
+  startEdgeListener(cfg, store, registry, uplink.cloudAuthorize, denylist);
   // Loopback-only health for the container HEALTHCHECK (#6) — NEVER bound to the LAN.
   startHealthServer(
     () => ({ ready: true, uplinkUp: uplink.up(), doors: Object.keys(registry).length }),

@@ -24,6 +24,9 @@ services:
       DOOR_ALLOWLIST_VERIFY_KEY: ${DOOR_ALLOWLIST_VERIFY_KEY:?ed25519 verify key required}
       BROKER_ENVELOPE_DIR: /data/envelopes
       BROKER_REGISTRY: /certs/registry.json
+      BROKER_EDGE_DENYLIST: /certs/edge-denylist.json   # optional (F7); absent = no revocations. Edit
+                                                        # this file on the host to revoke an edge CN —
+                                                        # picked up on mtime change, no restart.
       BROKER_TLS_CERT: /certs/broker.crt
       BROKER_TLS_KEY: /certs/broker.key
       BROKER_CA_ROOT: /certs/ca.crt

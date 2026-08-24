@@ -10,6 +10,7 @@
 //   Link B (broker → cloud, WSS):    CLOUD_UPLINK_URL (wss:// only), BROKER_UPLINK_SECRET (service cred)
 //   Crypto:                          BROKER_INDEX_KEY (base64 32B), DOOR_ALLOWLIST_VERIFY_KEY (base64 spki)
 //   Store:                           BROKER_ENVELOPE_DIR
+//   Revocation (optional):           BROKER_EDGE_DENYLIST (file of revoked edge cert CNs; F7)
 
 import fs from "fs";
 import crypto from "crypto";
@@ -77,6 +78,7 @@ export function loadBrokerConfig() {
     brokerIndexKey: base64Key("BROKER_INDEX_KEY"),
     allowlistVerifyKeyB64: req("DOOR_ALLOWLIST_VERIFY_KEY"),
     envelopeDir: req("BROKER_ENVELOPE_DIR"),
+    edgeDenylistPath: process.env.BROKER_EDGE_DENYLIST || null, // optional (F7); absent = no revocations
   };
   // Fail at boot (not per-scan) if the verify key isn't a valid Ed25519 spki public key — asserting
   // the algorithm catches a mis-provisioned RSA/EC key here rather than on the first envelope verify.

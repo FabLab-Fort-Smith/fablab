@@ -50,6 +50,17 @@ bash vps/pki/door-ca.sh issue-edge edge-1 front broker-1 ./ca ./out/edge-1
 - Leaves are short-lived (`DOOR_LEAF_DAYS`, default 825d) — re-issue on rotation.
 
 ## Rotation & revocation
-- **`edgeId` deny-list** (revoke a compromised edge without re-issuing the CA) — **S3b**.
+- **`edgeId` deny-list (S3b ✅)** — revoke a compromised edge **without re-issuing the CA** (there's no
+  CRL yet). Add the edge's cert CN to the broker's deny-list file (`BROKER_EDGE_DENYLIST`, default
+  `/certs/edge-denylist.json` in the broker compose) — a JSON array of CNs, or newline-delimited
+  (`#` comments allowed):
+  ```json
+  ["edge-7-compromised", "edge-12-decommissioned"]
+  ```
+  The broker re-reads it on **mtime change**, so the revocation takes effect on the edge's next
+  connection — no broker restart. The broker refuses a deny-listed CN even though its cert still chains
+  to the CA (`edge.denied` audit event), and drops the connection before any door processing.
+  *Fail-safe:* a **missing** deny-list means "nothing revoked" (not a lockout); a **malformed** file
+  keeps the last-good list and alerts (never silently un-revokes, never denies the whole site).
 - **Master rotation → fleet re-key** runbook (rotate `DOOR_CARD_INDEX_KEY`, re-derive every recipient
   key, re-provision) — **S3c**.
