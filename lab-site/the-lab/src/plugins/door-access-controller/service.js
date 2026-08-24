@@ -299,14 +299,17 @@ const Service = {
    * reconnect). Never lets one broker's failure abort the rest.
    * @param {{ now?:Date }} [args]
    */
-  async refreshBrokerEnvelopes({ now = new Date() } = {}) {
+  async refreshBrokerEnvelopes({ now = new Date(), brokerId = null } = {}) {
     if (!allowlistSigningReady()) {
       auditLog("door-access.allowlist", { actor: { pluginId: PLUGIN_ID }, outcome: "skipped", reason: "signing-key-not-set" });
       return { pushed: false, reason: "signing-key-not-set" };
     }
     const doorMap = resolveBrokerDoorMap(); // { brokerId: [doorId,...] } from config
-    const brokerIds = Object.keys(doorMap);
-    if (!brokerIds.length) return { pushed: false, reason: "no-brokers" };
+    let brokerIds = Object.keys(doorMap);
+    // Optional single-broker scope (S2c-2c reconnect resync): rebuild+push just the broker that
+    // (re)connected, not the whole fleet. An unknown/unmapped brokerId → no-op (fail-closed).
+    if (brokerId != null) brokerIds = brokerIds.filter((b) => b === brokerId);
+    if (!brokerIds.length) return { pushed: false, reason: brokerId != null ? "unknown-broker" : "no-brokers" };
 
     let brokersPushed = 0;
     let brokersOffline = 0;

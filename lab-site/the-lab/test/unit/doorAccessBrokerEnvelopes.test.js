@@ -88,6 +88,20 @@ test("no BROKER_DOOR_MAP → no-brokers no-op", async () => {
   expect(pushBrokerEnvelopes).not.toHaveBeenCalled();
 });
 
+test("brokerId scope (S2c-2c): builds+pushes only that broker", async () => {
+  process.env.BROKER_DOOR_MAP = JSON.stringify({ "broker-a": ["front"], "broker-b": ["front"] });
+  const res = await Service.refreshBrokerEnvelopes({ brokerId: "broker-b" });
+  expect(res).toMatchObject({ pushed: true, brokers: 1 });
+  expect(pushBrokerEnvelopes.mock.calls.map(([id]) => id)).toEqual(["broker-b"]);
+});
+
+test("brokerId scope: an unknown/unmapped broker is a no-op (fail-closed)", async () => {
+  process.env.BROKER_DOOR_MAP = JSON.stringify({ "broker-a": ["front"] });
+  const res = await Service.refreshBrokerEnvelopes({ brokerId: "broker-x" });
+  expect(res).toEqual({ pushed: false, reason: "unknown-broker" });
+  expect(pushBrokerEnvelopes).not.toHaveBeenCalled();
+});
+
 test("a broker that isn't connected (503) is counted offline, not fatal", async () => {
   process.env.BROKER_DOOR_MAP = JSON.stringify({ "broker-a": ["front"] });
   pushBrokerEnvelopes.mockResolvedValue({ connected: false, relayed: 0, rejected: 0 });

@@ -36,6 +36,28 @@ describe("makeUplinkConnection — per-connection state machine", () => {
     expect(conn.brokerId()).toBe("b1");
   });
 
+  test("onConnect fires with brokerId on successful auth — not before, not on a bad bearer (S2c-2c)", async () => {
+    const connected = [];
+    const onConnect = (id) => connected.push(id);
+    const ws = fakeWs();
+    const conn = makeUplinkConnection({ uplink: mkUplink(), brokers: new Map(), onConnect })(ws);
+    await conn.message(JSON.stringify({ t: "authz", id: 1, doorId: "door-a", code: "c" })); // pre-auth
+    expect(connected).toEqual([]);
+    const bad = fakeWs();
+    await makeUplinkConnection({ uplink: mkUplink(), brokers: new Map(), onConnect })(bad)
+      .message(JSON.stringify({ t: "auth", secret: "nope" }));
+    expect(connected).toEqual([]); // wrong bearer → no resync
+    await conn.message(JSON.stringify({ t: "auth", secret: "sek-one" }));
+    expect(connected).toEqual(["b1"]);
+  });
+
+  test("a throwing onConnect never breaks the connection", async () => {
+    const ws = fakeWs();
+    const conn = makeUplinkConnection({ uplink: mkUplink(), brokers: new Map(), onConnect: () => { throw new Error("boom"); } })(ws);
+    await conn.message(JSON.stringify({ t: "auth", secret: "sek-one" }));
+    expect(ws.last()).toEqual({ t: "auth_result", ok: true }); // auth still completed
+  });
+
   test("auth with a wrong bearer → ok:false AND the socket is closed (deny-by-default)", async () => {
     const brokers = new Map();
     const ws = fakeWs();
