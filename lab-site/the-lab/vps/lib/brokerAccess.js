@@ -22,6 +22,7 @@ export const REASON = {
   EXPIRED: "expired",
   UNKNOWN_CREDENTIAL: "unknown-credential",
   NO_WINDOW: "no-window",
+  ERROR: "error",
   GRANTED: "granted",
 };
 
@@ -89,16 +90,22 @@ function inWindow(now, tz, w) {
  * @returns {{granted:boolean, reason:string}}
  */
 export function decideAgainstEnvelope(signed, { doorId, code, now = new Date(), tz }) {
-  if (!verifyEnvelope(signed)) return { granted: false, reason: REASON.BAD_SIGNATURE };
-  const p = signed.payload || {};
-  if (p.doorId !== doorId) return { granted: false, reason: REASON.DOOR_MISMATCH }; // F2 binding
-  if (!p.expiresAt || new Date(p.expiresAt).getTime() <= now.getTime()) return { granted: false, reason: REASON.EXPIRED };
-  const entry = (p.entries || []).find((e) => e.credHash === credHash(code));
-  if (!entry) return { granted: false, reason: REASON.UNKNOWN_CREDENTIAL };
-  const windows = entry.windows || [];
-  if (windows.length === 0) return { granted: true, reason: REASON.GRANTED };
-  const zone = tz || p.tz || "UTC";
-  return windows.some((w) => inWindow(now, zone, w)) ? { granted: true, reason: REASON.GRANTED } : { granted: false, reason: REASON.NO_WINDOW };
+  try {
+    if (!verifyEnvelope(signed)) return { granted: false, reason: REASON.BAD_SIGNATURE };
+    const p = signed.payload || {};
+    if (p.doorId !== doorId) return { granted: false, reason: REASON.DOOR_MISMATCH }; // F2 binding
+    const exp = new Date(p.expiresAt).getTime();
+    if (!p.expiresAt || Number.isNaN(exp) || exp <= now.getTime()) return { granted: false, reason: REASON.EXPIRED }; // NaN → expired (fail-secure)
+    const target = credHash(code); // may throw on a misconfigured BROKER_INDEX_KEY → caught below (deny, not crash)
+    const entry = (p.entries || []).find((e) => e.credHash === target);
+    if (!entry) return { granted: false, reason: REASON.UNKNOWN_CREDENTIAL };
+    const windows = entry.windows || [];
+    if (windows.length === 0) return { granted: true, reason: REASON.GRANTED };
+    const zone = tz || p.tz || "UTC";
+    return windows.some((w) => inWindow(now, zone, w)) ? { granted: true, reason: REASON.GRANTED } : { granted: false, reason: REASON.NO_WINDOW };
+  } catch {
+    return { granted: false, reason: REASON.ERROR }; // fail-secure on any internal error (F-3)
+  }
 }
 
 /**
@@ -108,8 +115,9 @@ export function decideAgainstEnvelope(signed, { doorId, code, now = new Date(), 
  * @returns {Promise<{stored:boolean, reason?:string, version?:number}>}
  */
 export async function setEnvelope(store, signed) {
-  if (!verifyEnvelope(signed)) return { stored: false, reason: REASON.BAD_SIGNATURE };
-  return store.putEnvelope(signed);
+  // Verification runs INSIDE the store's per-door lock (atomic with the version compare + write) so
+  // the stored version can't advance from an unverified/stale envelope (SEC review F-1/F-2).
+  return store.putEnvelope(signed, { verify: verifyEnvelope });
 }
 
 /**

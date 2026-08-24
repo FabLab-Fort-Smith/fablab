@@ -92,3 +92,23 @@ describe("setEnvelope + authorizeOffline (store-backed)", () => {
     expect(await setEnvelope(store, cloudEnvelope({ version: 2 }))).toEqual({ stored: false, reason: "stale-version" });
   });
 });
+
+describe("fail-secure on misconfig / bad data (F-3)", () => {
+  test("a missing/short BROKER_INDEX_KEY denies (error), never throws", () => {
+    const env = cloudEnvelope();
+    const saved = process.env.BROKER_INDEX_KEY;
+    try {
+      delete process.env.BROKER_INDEX_KEY;
+      expect(decideAgainstEnvelope(env, { doorId: "front", code: CODE })).toEqual({ granted: false, reason: REASON.ERROR });
+      process.env.BROKER_INDEX_KEY = Buffer.alloc(8).toString("base64"); // wrong length
+      expect(decideAgainstEnvelope(env, { doorId: "front", code: CODE })).toEqual({ granted: false, reason: REASON.ERROR });
+    } finally {
+      process.env.BROKER_INDEX_KEY = saved;
+    }
+  });
+
+  test("a non-parseable expiresAt is treated as EXPIRED (NaN <= now guard)", () => {
+    const env = cloudEnvelope({ expiresAt: "not-a-date" });
+    expect(decideAgainstEnvelope(env, { doorId: "front", code: CODE })).toEqual({ granted: false, reason: REASON.EXPIRED });
+  });
+});
