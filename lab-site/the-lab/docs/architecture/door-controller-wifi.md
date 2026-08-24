@@ -15,6 +15,12 @@ related:
 > **Status: PROPOSED (design-first).** No firmware/infra written yet. Records the design + threat
 > model for review, per CLAUDE §3 / master §3 (a change adding a trust boundary is threat-modeled
 > before code). Approve/adjust before implementation.
+>
+> **SEC review: converged (3 rounds → APPROVE, build-ready as a design).** Round-1/2 findings F1–F6 and
+> their round-2 refinements (R1–R5) are folded in below; six Low implementation-time items from round-3
+> are folded into §2/§3/§5/§6 and the §12 DoD. Remaining before build: the human's go + the §11 open
+> questions (HA mode, TTLs, Proxmox scope, provisioning, buffer sizing, edge hardware); promote to
+> `status: current` on approval.
 
 ## 1. Context & confirmed decisions
 
@@ -94,9 +100,11 @@ offline tier actually matches a card and trusts a snapshot (round-1 F1–F3/F5 +
   and **never holds any edge's key**, so a broker compromise doesn't yield per-door edge keys. (Rejected
   alternative: the edge sends a locally-computed `credHash` to the broker — breaks the online-proxy path,
   which needs the raw `cred` at the cloud to authorize.) The cloud must **decrypt each `codeEnc` at build
-  time** to recompute the HMAC per recipient — a new exposure (raw codes in cloud memory) and an
-  O(doors × members × recipients) cost: state both, and **zeroize** decrypted codes after use
-  (`topic-resource-management`). Requires a **card-code entropy floor** — see the decision in §5/§11.
+  time** to recompute the HMAC per recipient — an O(doors × members × recipients) cost, and a transient
+  cloud-side plaintext exposure. Zeroization must be **real**: `cardCrypto.decryptCode` returns an
+  immutable JS **String** (unwipable) — the build path uses a mutable-**Buffer** variant
+  (`decryptToBuffer`), computes all recipient HMACs, then `buf.fill(0)`, and never materializes the code
+  as a String (`topic-resource-management`). Requires a **card-code entropy floor** — see the decision in §5/§11.
 - **A new nested canonicalizer, not the OTA one (F3).** The OTA verify (`otacrypto.canonical`) is
   **flat-only** (raises on arrays/nested). The allowlist is deeply nested → a **new** canonical-JSON
   serializer byte-matching the JS signer (`allowlistCrypto.canonical` = `JSON.stringify(sortKeys(v))`).
@@ -110,6 +118,9 @@ offline tier actually matches a card and trusts a snapshot (round-1 F1–F3/F5 +
   envelope**. **The builder must emit a strictly-monotonic `version`** (a persisted counter / `max(prev)+1`)
   — today it emits a constant `version: 1`, which makes anti-rollback a **no-op**, and `issuedAt` alone is
   unsafe (wall-clock, non-monotonic across a cloud restart). This is a must-fix in `buildSignedAllowlist`.
+  The high-water mark is kept **per-`doorId`** (the multi-door broker caches many doors — one global
+  counter would false-reject a legitimately-lower door or hide a rollback); a null high-water (first
+  envelope) accepts + persists; use a wide integer (no wraparound).
 - **The "newest seen" floor lives on the edge SD (F4/F5 caveat).** Both the anti-rollback high-water mark
   and the F4 monotonic time floor persist on attacker-writable storage → they defend **drift and logical/
   remote rollback, not a physical SD-tamper attacker**. That residual is accepted **only** because the edge
@@ -168,6 +179,7 @@ allowlist and handles online scans + audit over this uplink.
 |---|---|
 | Host compromise → all doors | CIS-hardened Proxmox host; dedicated/segmented **management network**; least-privilege; the broker container runs non-root, read-only rootfs, minimal caps (`@rules/std-cis.md`, `topic-container-k8s`). |
 | Supply chain | Broker image pinned by digest, **signed + SBOM'd**, deployed as code (`@rules/std-supplychain.md`); no secrets baked into the image. |
+| Broker key material | The broker holds a **`brokerIndexKey`** (a card-index key over its whole door set) + `DOOR_ALLOWLIST_VERIFY_KEY` + cloud creds → protect at rest (least-priv mount / injected secret, not image/config-in-VCS); its compromise is the site-wide-NFC accepted-risk (§5). |
 | HA integrity / split-brain | keepalived VIP, single active holder; edges reconnect to the VIP; **no two brokers grant the same door concurrently** (§6). |
 | Availability | ≥2 broker containers + Proxmox HA/live-migrate; **UPS + redundant switch** for the host and LAN; rung 3 covers the gap. Backup/restore the broker config + registry. |
 
@@ -180,7 +192,7 @@ buffer is a new boundary — without integrity it breaks non-repudiation (CLAUDE
 |---|---|---|
 | **R**epudiation / **T**ampering | A compromised edge edits or drops buffered unlock records to hide an entry. | Append-only, **sequence-numbered + hash-chained** buffer. **Honest bound:** a key-holding compromised edge can rewrite a *self-consistent* chain over records **not yet forwarded** — so the achievable guarantees are (a) **drop-detection** via seq gaps, and (b) **immutability of already-forwarded records** *iff* the **cloud anchors server-side** (persists each edge's last-seen `seq` + chain-tip and **enforces monotonic `seq` on ingest**). The cloud **alerts on a sequence gap** (tamper/loss signal, not silence). |
 | **D**enial / loss | Buffer overflow silently drops audit. | Bounded + **persistent across reboot**; on overflow **block-and-alert, never silent-drop**. |
-| Replay / dup / **re-provision** | Re-sent records double-count; a reflashed edge restarts `seq` at 0 → collides with old `(edgeId, seq)` keys (dropped as dups) or trips a false gap. | Cloud **dedups + orders by `(edgeId, bootEpoch, seq)`** — a **boot-epoch / chain-genesis nonce** in the dedup key + chain baseline distinguishes a legit re-provision from a replay; document the re-provision reset handshake. (A long *offline* backlog is contiguous → no gap, no noise.) |
+| Replay / dup / **re-provision** | Re-sent records double-count; a reflashed edge restarts `seq` at 0 → collides with old `(edgeId, seq)` keys (dropped as dups) or trips a false gap. | Cloud **dedups + orders by `(edgeId, bootEpoch, seq)`** — a **boot-epoch / chain-genesis nonce** in the dedup key + chain baseline distinguishes a legit re-provision from a replay. The epoch reset is a **cloud-authorized / admin-acknowledged handshake**, not a value the edge asserts unilaterally (else a compromised edge dodges dedup with a fresh epoch). (A long *offline* backlog is contiguous → no gap, no noise.) |
 | **I**nfo disclosure | Buffered `credHash + doorId + timestamps` = an access-pattern record. | Same at-rest scoping as the envelope (§3b); `credHash` is pseudonymous personal data. |
 
 **Fail-secure invariant (all tiers):** the strike (on the edge) is de-energized/locked at rest; it pulses
@@ -226,12 +238,15 @@ split-brain, or ambiguity → **locked**.
   and re-keys it **per recipient** — an **edge-keyed** copy (`edgeIndexKey`) for the edge and a
   **broker-keyed** copy (`brokerIndexKey = HKDF(…"|"+brokerId)`) for the broker's rung-2 match (§2), so no
   node holds another's index key. Admin UI lists doors + edge/broker + last status.
-- **Card-code entropy floor (F1/R3 decision).** The per-edge key only bounds a *leaked* key's damage if the
-  code space is large: set a floor — **QR/app credentials ≥128-bit random**, enforced by **rejecting
-  below-floor codes at `service.js` enroll**. **4-byte NFC-UIDs cannot meet it** → for NFC-UID creds a
-  leaked edge key allows cloning cards **for that one door**; this is an **accepted risk**, compensated by
-  secure-side mount + F7 revocation + short envelope TTL. (Prefer high-entropy QR/app creds where door
-  risk warrants.)
+- **Card-code entropy floor (F1/R3 decision).** A recipient index key only bounds a *leaked* key's damage
+  if the code space is large: floor = a **system-issued ≥128-bit CSPRNG token** for QR/app credentials
+  (not merely "long" — a 32-char `aaaa…` is low-entropy and rejected), enforced by **rejecting
+  below-floor / non-system-issued codes at `service.js` enroll**. **4-byte NFC-UIDs cannot meet it** — for
+  NFC-UID creds a leaked *edge* key clones cards **for that one door**, and a leaked *broker* key
+  (`brokerIndexKey`, and a broker serves the whole site — §9) allows NFC enumeration/cloning
+  **site-wide**. This is an **accepted risk**, bounded by: the hardened, non-root, read-only, signed
+  broker container (§3e) being far harder to exfiltrate than a pullable edge SD; secure-side edge mount;
+  F7 revocation; short TTL. Prefer high-entropy QR/app creds where door risk warrants.
 - **Config:** **edge (`pi-zero` image):** broker VIP host, edge cert+key, pinned CA root, per-edge secret,
   `DOOR_ALLOWLIST_VERIFY_KEY`, **`edgeIndexKey`**, `edge_allowlist_ttl`, **hardware RTC** (F4), NFC + relay
   pins. **broker container:** cloud uplink creds, CA-signed cert, CA root, `DOOR_ALLOWLIST_VERIFY_KEY`,
@@ -245,6 +260,10 @@ split-brain, or ambiguity → **locked**.
   possible (state is light + cloud-sourced) but not needed initially.
 - **State is easy to replicate:** the registry + signed allowlist come from the cloud and are
   read-mostly; a standby just needs the latest cloud-pushed snapshot. No door state to lose on failover.
+- **One logical broker identity across the HA set:** the ≥2 containers **share a single `brokerId` /
+  `brokerIndexKey`** (same trust tier) → the cloud emits **one** broker-keyed envelope copy per door, so
+  the envelope count stays `doors × members × 2` (edge + broker), not ×(container count). Don't mint
+  per-container broker keys.
 - **Failover:** VIP moves to the standby; Proxmox HA restarts/live-migrates a dead container. During the
   brief failover, **rung 3 (edge local decision) keeps doors working** — the outage is invisible at the door.
 - **Split-brain guard:** single VIP holder ⇒ one authority at a time; a partitioned ex-active loses the
@@ -363,16 +382,20 @@ tiers, §3f audit, the Proxmox host + HA).
    at the **broker** → rejected on `doorId` mismatch (not just signature).
 8. **Broker rung-2 key isolation (F1):** the broker matches only with its own `brokerIndexKey` and holds
    no edge index key — a scan for a door whose key it shouldn't hold can't be matched.
-9. **Monotonic-version enforcement (F5):** two consecutive builds carry strictly increasing `version`; an
-   envelope with an equal-or-lower `version` than persisted → rejected even if `issuedAt` is newer.
+9. **Monotonic-version enforcement (F5), per-door:** two consecutive builds carry strictly increasing
+   per-`doorId` `version`; an equal-or-lower `version` → rejected even if `issuedAt` is newer; at the
+   multi-door broker, a lower version on door A does **not** false-reject door B (per-door high-water).
 10. **Server-side audit anchor (F6):** after the cloud ingests `seq ≤ N` for an edge, a later chain that
     rewrites any record `≤ N` → detected/alerted (proves anchoring, not just self-consistent chaining).
 11. **Re-provision seq reset (F6):** a reflashed edge starting `seq` at 0 with a new `bootEpoch` is **not**
-    dedup-dropped and does **not** raise a false gap alert.
-12. **Entropy-floor enforcement (F1/R3):** enrolling a below-floor code is rejected at `service.js` enroll;
-    NFC-UID-class inputs are handled per the §5 accepted-risk decision.
-13. **Decrypted-code zeroization (F1):** the per-recipient build path clears decrypted `code` buffers after
-    the HMAC (no lingering plaintext PII).
+    dedup-dropped and does **not** raise a false gap — **and** the epoch reset is refused unless
+    cloud-authorized (an edge-asserted fresh epoch alone is rejected).
+12. **Entropy-floor enforcement (F1/R3):** enrolling a below-floor **or non-system-issued** code (incl. a
+    long-but-low-entropy `aaaa…`) is rejected at `service.js` enroll; NFC-UID inputs per the §5 accepted-risk.
+13. **Decrypted-code zeroization (F1):** the per-recipient build path decrypts to a **mutable Buffer**,
+    `fill(0)`s it after the HMACs, and never materializes the code as a String (assert the Buffer path).
+14. **HA envelope-copy count (F6/HA):** with N broker containers sharing one `brokerId`, the cloud emits
+    exactly **2** envelope copies per door (edge + broker), not N+1.
 
 ## Changelog
 | Date | Change | Author |
@@ -384,3 +407,4 @@ tiers, §3f audit, the Proxmox host + HA).
 | 2026-08-23 | **Retopology: three tiers — cloud / on-site HA broker CONTAINER (Proxmox) / edge nodes; strike moves to the edge; hybrid defense-in-depth 4-rung ladder; mTLS internal CA; broker HA; firmware = one edge role** | app dev |
 | 2026-08-23 | **Fold SEC-review F1–F6: per-door signed envelopes (F2), per-edge HKDF index keys (F1), new nested canonicalizer + golden vectors (F3), edge RTC + monotonic clock floor (F4), envelope anti-rollback (F5), hash-chained store-and-forward audit + §3f (F6). F7–F11 deferred to tracked issues.** | app dev |
 | 2026-08-23 | **Fold SEC re-review (round 2): broker-keyed rung-2 envelope (F1 broker gap), strictly-monotonic `version` (F5 no-op fix), `doorId`-binding (F2), cloud server-side audit anchor + boot-epoch (F6), canonicalizer byte-rules (F3), entropy-floor decision (§5), F7 revocation mechanism promoted; fixed the §7 "slice" contradiction; +7 tests.** | app dev |
+| 2026-08-23 | **Round-3 SEC re-review → APPROVE (converged). Fold 6 Low items: Buffer-not-String zeroization, broker-key site-wide blast-radius honesty + §3e protection, per-`doorId` anti-rollback high-water, CSPRNG-issued entropy floor, cloud-authorized bootEpoch reset, HA shares one `brokerId` (2 envelope copies). +tests 9/11/12/13 tightened, +test 14.** | app dev |
