@@ -23,8 +23,20 @@ LEAF_DAYS="${DOOR_LEAF_DAYS:-825}"  # leaves ~27mo (short-lived; re-issue on rot
 die() { echo "door-ca: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1"; }
 
+# --- input validation (allow-list; boundary defense — std-owasp-proactive #5) -------------------
+# These args flow into openssl -subj / the leaf ext-file / SAN. Unvalidated, a newline or crafted
+# value injects openssl CONF lines (duplicate-key-last-wins) → a leaf minted CA:TRUE, an EKU/role
+# override, or SAN impersonation; a "/" in an id injects extra DN RDNs. Reject anything off the
+# allow-list up front (fail-closed) so no such value ever reaches openssl.
+_reject_ctrl() { case "$1" in *[$'\n\r\t']*) return 1 ;; *) return 0 ;; esac; }
+# ids (CN / doorId / brokerId): the identity the registry + cert CN key on — strict charset, 1..64.
+_valid_id() { _reject_ctrl "$1" && [[ "$1" =~ ^[A-Za-z0-9._-]{1,64}$ ]]; }
+# SAN: only comma-separated DNS:<host> / IP:<addr> tokens; nothing that could add a CONF line.
+_valid_san() { _reject_ctrl "$1" && [[ "$1" =~ ^(DNS:[A-Za-z0-9*.-]+|IP:[0-9A-Fa-f:.]+)(,(DNS:[A-Za-z0-9*.-]+|IP:[0-9A-Fa-f:.]+))*$ ]]; }
+
 _gen_key() { # <path> — Ed25519 private key, 0600, never overwrite
   local path="$1"
+  [ -L "$path" ] && die "refusing to write through a symlink: $path" # don't follow a pre-planted link
   [ -e "$path" ] && die "refusing to overwrite existing key: $path"
   ( umask 077 && openssl genpkey -algorithm ed25519 -out "$path" )
   chmod 600 "$path"
@@ -61,6 +73,8 @@ _sign_leaf() { # <csr> <out-crt> <ca-dir> <ext-file>
 
 cmd_issue_broker() {
   local broker_id="${1:?}" san="${2:?}" ca_dir="${3:?}" out="${4:?usage: issue-broker <brokerId> <san> <ca-dir> <out-dir>}"
+  _valid_id "$broker_id" || die "invalid brokerId (allow-list: A-Za-z0-9._- , 1-64 chars)"
+  _valid_san "$san" || die "invalid SAN (comma-separated DNS:<host> / IP:<addr> tokens only)"
   [ -f "$ca_dir/ca.key" ] || die "no CA at $ca_dir (run init-ca first)"
   mkdir -p "$out"
   _gen_key "$out/broker.key"
@@ -79,6 +93,9 @@ cmd_issue_broker() {
 
 cmd_issue_edge() {
   local edge_id="${1:?}" door_id="${2:?}" broker_id="${3:?}" ca_dir="${4:?}" out="${5:?usage: issue-edge <edgeId> <doorId> <brokerId> <ca-dir> <out-dir>}"
+  _valid_id "$edge_id" || die "invalid edgeId (allow-list: A-Za-z0-9._- , 1-64 chars)"
+  _valid_id "$door_id" || die "invalid doorId (allow-list: A-Za-z0-9._- , 1-64 chars)"
+  _valid_id "$broker_id" || die "invalid brokerId (allow-list: A-Za-z0-9._- , 1-64 chars)"
   [ -f "$ca_dir/ca.key" ] || die "no CA at $ca_dir (run init-ca first)"
   mkdir -p "$out"
   _gen_key "$out/edge.key"
@@ -90,16 +107,13 @@ cmd_issue_edge() {
   rm -f "$ext" "$out/edge.csr"
   cp "$ca_dir/ca.crt" "$out/ca.crt"
   _derive_index_key "$edge_id" "$out/edge.index.key"   # edgeIndexKey (base64)
-  # Append to the fleet registry: doorId → {edgeDeviceId, brokerId}. jq if present, else a plain line.
+  # Append to the fleet registry: doorId → {edgeDeviceId, brokerId}. jq is REQUIRED (F3) so the
+  # mapping is always written — a silent skip would leave the edge unauthorized with no signal.
   local reg="$ca_dir/registry.json"
-  if command -v jq >/dev/null 2>&1; then
-    [ -f "$reg" ] || echo '{}' > "$reg"
-    local tmp; tmp="$(mktemp)"
-    jq --arg d "$door_id" --arg e "$edge_id" --arg b "$broker_id" \
-      '.[$d] = {edgeDeviceId:$e, brokerId:$b}' "$reg" > "$tmp" && mv "$tmp" "$reg"
-  else
-    echo "door-ca: jq not found — record manually in $reg: \"$door_id\": {edgeDeviceId:$edge_id, brokerId:$broker_id}" >&2
-  fi
+  [ -f "$reg" ] || echo '{}' > "$reg"
+  local tmp; tmp="$(mktemp)"
+  jq --arg d "$door_id" --arg e "$edge_id" --arg b "$broker_id" \
+    '.[$d] = {edgeDeviceId:$e, brokerId:$b}' "$reg" > "$tmp" && mv "$tmp" "$reg"
   echo "issued edge '$edge_id' for door '$door_id' (broker '$broker_id') → $out"
 }
 
@@ -109,7 +123,7 @@ main() {
   case "$cmd" in
     init-ca)      cmd_init_ca "$@" ;;
     issue-broker) need node; cmd_issue_broker "$@" ;;
-    issue-edge)   need node; cmd_issue_edge "$@" ;;
+    issue-edge)   need node; need jq; cmd_issue_edge "$@" ;;
     *) die "usage: door-ca.sh {init-ca|issue-broker|issue-edge} ..." ;;
   esac
 }

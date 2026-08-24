@@ -41,6 +41,9 @@ bash vps/pki/door-ca.sh issue-edge edge-1 front broker-1 ./ca ./out/edge-1
 - **Edge** (S4): `edge.crt`/`edge.key`/`ca.crt` + `edge.index.key` onto the device (secure-side mount).
 
 ## Security
+- **All ids/SAN are allow-list validated** before they touch openssl (`A-Za-z0-9._-` ids; `DNS:`/`IP:`-only
+  SAN; no control chars) — blocks openssl ext/DN injection (a crafted value can't mint a `CA:TRUE` leaf,
+  override the EKU, or forge a SAN). Fail-closed: an invalid arg aborts before any key/cert is written.
 - Ed25519 keys; CA root `pathlen:0`; leaves scoped by EKU (broker = `serverAuth`, edge = `clientAuth`).
 - Every private key is written `0600` under `umask 077`; the tool **never overwrites** an existing key.
 - The master `DOOR_CARD_INDEX_KEY` is read from the env only and never written to disk by this tool.
