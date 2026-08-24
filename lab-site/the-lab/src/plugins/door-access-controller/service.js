@@ -23,7 +23,8 @@ const badRequest = (msg) => {
 };
 // Card rows for the admin UI — never expose the ciphertext or the blind index.
 const publicCard = (c) => ({ userID: c.userID, credentialType: c.credentialType, status: c.status, createdAt: c.createdAt });
-const isSafeKey = (k) => typeof k === "string" && k.length > 0 && !k.startsWith("$") && !k.includes(".");
+const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]); // prototype-pollution class (CWE-1321)
+const isSafeKey = (k) => typeof k === "string" && k.length > 0 && !k.startsWith("$") && !k.includes(".") && !DANGEROUS_KEYS.has(k);
 
 /**
  * The on-site broker → owned-doors map, from BROKER_DOOR_MAP (JSON `{brokerId:[doorId,...]}`). This is

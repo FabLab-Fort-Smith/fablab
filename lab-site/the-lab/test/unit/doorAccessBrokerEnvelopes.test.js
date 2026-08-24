@@ -106,6 +106,14 @@ test("one broker's failure does not abort the others (per-broker fail-secure)", 
   expect(res).toMatchObject({ pushed: true, brokersPushed: 1 }); // broker-b still landed
 });
 
+test("a prototype-pollution broker key in BROKER_DOOR_MAP is dropped (L3, CWE-1321)", async () => {
+  process.env.BROKER_DOOR_MAP = JSON.stringify({ "__proto__": ["front"], "broker-a": ["front"] });
+  const res = await Service.refreshBrokerEnvelopes({});
+  expect(res).toMatchObject({ brokers: 1 }); // only broker-a, __proto__ filtered
+  expect(pushBrokerEnvelopes.mock.calls.map(([id]) => id)).toEqual(["broker-a"]);
+  expect(({}).polluted).toBeUndefined(); // no global prototype pollution
+});
+
 test("_repushBestEffort fans the change out to brokers too", async () => {
   const spy = jest.spyOn(Service, "refreshBrokerEnvelopes").mockResolvedValue({ pushed: false, reason: "no-brokers" });
   await Service._repushBestEffort();

@@ -89,10 +89,13 @@ export async function pushAllowlist(signed) {
 // Returns { connected, relayed, rejected }. Throws only on a real transport/4xx failure.
 export async function pushBrokerEnvelopes(brokerId, envelopes) {
     if (typeof brokerId !== 'string' || !brokerId) throw new Error('brokerId is required');
+    // Bound each push so a hung relay can't stall the admin/event path that awaits this across every
+    // broker (topic-reliability: timeout on every network call). 5s is generous for a small batch.
     const res = await fetch(`${controlApiUrl()}/api/v2/broker/${encodeURIComponent(brokerId)}/envelopes`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(Array.isArray(envelopes) ? envelopes : []),
+        signal: AbortSignal.timeout(5000),
     });
     if (res.status === 503) {
         const data = await res.json().catch(() => ({}));
