@@ -112,6 +112,11 @@ jobs:
         run: npm run lint
       - name: Test (coverage gate enforced in jest.config — master §4)
         run: npm run test:ci
+      - name: Door PKI script tests (shellcheck + openssl + node; no VPS)
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck vps/pki/*.sh
+          bash vps/pki/door-ca.test.sh
       - name: Build
         run: npm run build
       - name: SCA (dependency audit — block on high/critical)

@@ -467,9 +467,19 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      grant has no signature backstop, so a MITM on an unvalidated uplink could forge grants (the
      dominant rung-1 control, #151). Upgrading Link-B to full mTLS (reuse the broker's cert) is a
      stronger option, not a blocker.
-3. **S3 — Internal CA + provisioning.** Stand up the CA; the issuance helper (edge cert/secret/
-   `edgeIndexKey`; broker cert/`brokerIndexKey`); registry `doorId → { edgeDeviceId, brokerId }`; the
-   broker-side `edgeId` **deny-list** (F7) + master-rotation → fleet-re-key runbook.
+3. **S3 — Internal CA + provisioning.** Sub-sliced during build; tooling lives in `lab-site/the-lab/vps/pki/`.
+   - **S3a ✅** internal CA + issuance (`vps/pki/door-ca.sh` + `derive-index-key.mjs`): `init-ca`,
+     `issue-broker` (Ed25519 server cert + `brokerIndexKey` + uplink bearer), `issue-edge` (client cert +
+     `edgeIndexKey`, appends the `doorId → {edgeDeviceId, brokerId}` registry). Index keys are derived by
+     **reusing the cloud's `recipientIndexKey`** (byte-parity, no HKDF reimpl — golden-vector tested);
+     openssl mints X.509 only. All private keys `0600` under `umask 077`, never overwritten; the master
+     `DOOR_CARD_INDEX_KEY` is env-only. New CI step shellchecks `vps/pki/*.sh` + runs `door-ca.test.sh`
+     (real openssl+node). Outputs wire straight into the S2c-3 broker compose + the cloud
+     `BROKER_UPLINK_SECRETS`/`BROKER_DOOR_MAP` (see `vps/pki/README.md`).
+   - **S3b** (next): broker-side `edgeId` **deny-list** (F7) — the Link-A listener refuses a CA-signed edge
+     cert whose CN is deny-listed (revoke a compromised edge without re-issuing the CA).
+   - **S3c**: master-rotation → fleet-re-key **runbook** (rotate `DOOR_CARD_INDEX_KEY`, re-derive every
+     recipient key, re-provision) + short-lived-cert re-issue.
 4. **S4 — Edge firmware (`pi-zero` edge role).** NFC + strike relay GPIO + mTLS client + rung-3 cache
    (verify + `doorId` + TTL + anti-rollback + `edgeIndexKey` match) + **RTC + monotonic clock floor** +
    fail-secure supervisor + **hash-chained store-and-forward audit** (`bootEpoch`). Bench one edge.
