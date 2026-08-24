@@ -92,25 +92,29 @@ const Service = {
    * @param {{ userID:string, code:string, credentialType?:("nfc"|"qr") }} p
    * @returns {Promise<{userID:string, bi:string}>}  bi is a non-secret keyed hash
    */
-  async enrollCard({ userID, code, credentialType = "nfc", system = false }) {
-    if (!userID || !code) throw new Error("enrollCard requires userID and code");
-    // Entropy floor (door-controller-wifi.md §5, F1/R3, DoD #12): a qr/app credential MUST be
-    // server-issued (via issueCard) — an externally-supplied code can't be proven high-entropy, and
-    // "system-issued" is not inspectable from the value. Reject non-issued qr/app. NFC-UIDs cannot
-    // meet the floor and are an accepted risk (bounded per the design) — allowed but audited.
-    if (credentialType === "qr" || credentialType === "app") {
-      if (!system) throw badRequest(`a ${credentialType} credential must be server-issued — call issueCard(), external codes are not accepted`);
-      if (!meetsEntropyFloor(code)) throw badRequest(`issued ${credentialType} token failed the entropy floor`); // defensive
-    }
-    if (credentialType === "nfc") {
-      auditLog("door-access.enroll", { actor: { pluginId: PLUGIN_ID }, target: userID, outcome: "low-entropy-accepted", credentialType, reason: "nfc-uid-accepted-risk" });
-    }
+  /** Internal store of a validated card (no entropy gate — callers own that). Not a public API. */
+  async _storeCard({ userID, code, credentialType }) {
     const bi = blindIndex(code);
     const doc = newCardDoc({ userID, codeEnc: encryptCode(code), bi, credentialType });
     await Model.deleteCardsByUserID(userID); // replace, so a re-pair invalidates the old card
     await Model.upsertCard(doc);
     auditLog("door-access.enroll", { actor: { pluginId: PLUGIN_ID }, target: userID, outcome: "enrolled", credentialType });
     return { userID, bi };
+  },
+
+  /**
+   * Public enroll — for NFC-UID credentials only. qr/app must be **server-issued** via issueCard
+   * (door-controller-wifi.md §5, F1/R3, DoD #12): an externally-supplied qr/app code can't be proven
+   * high-entropy, so the public API refuses it outright — there is no caller-settable bypass. NFC-UIDs
+   * cannot meet the floor and are an accepted, audited risk (bounded per the design).
+   */
+  async enrollCard({ userID, code, credentialType = "nfc" }) {
+    if (!userID || !code) throw new Error("enrollCard requires userID and code");
+    if (credentialType === "qr" || credentialType === "app") {
+      throw badRequest(`a ${credentialType} credential must be server-issued — call issueCard(); external codes are not accepted`);
+    }
+    auditLog("door-access.enroll", { actor: { pluginId: PLUGIN_ID }, target: userID, outcome: "low-entropy-accepted", credentialType, reason: "nfc-uid-accepted-risk" });
+    return this._storeCard({ userID, code, credentialType });
   },
 
   /**
@@ -128,7 +132,8 @@ const Service = {
       throw badRequest("issueCard is for qr/app credentials (an NFC-UID comes from the physical card)");
     }
     const code = generateCardToken();
-    await this.enrollCard({ userID, code, credentialType, system: true });
+    if (!meetsEntropyFloor(code)) throw new Error("issued token failed the entropy floor"); // defensive; never happens
+    await this._storeCard({ userID, code, credentialType });
     return { userID, code, credentialType };
   },
 
@@ -207,6 +212,7 @@ const Service = {
     const recipientKey = recipientIndexKey(recipientId);
     const version = await Model.nextEnvelopeVersion(doorId); // monotonic per door (anti-rollback)
     const entries = [];
+    let skipped = 0;
     try {
       for (const card of cards) {
         // Per-card fail-open FOR THE BUILD (not for access): one corrupt/tampered codeEnc must not
@@ -225,11 +231,18 @@ const Service = {
             codeBuf.fill(0); // wipe plaintext PII immediately (§5)
           }
         } catch (e) {
+          skipped += 1;
           auditLog("door-access.allowlist", { actor: { pluginId: PLUGIN_ID }, target: doorId, outcome: "card-skipped", reason: String((e && e.message) || e) });
         }
       }
     } finally {
       recipientKey.fill(0);
+    }
+    // Build-level observability (S1 review follow-up): a mass-skip = likely data corruption, and would
+    // otherwise be a valid but near-empty envelope (offline deny-all) signalled only by scattered
+    // per-row logs. Emit one aggregate so it's a first-class, alertable signal.
+    if (skipped > 0) {
+      auditLog("door-access.allowlist", { actor: { pluginId: PLUGIN_ID }, target: doorId, outcome: "build-skips", skipped, of: cards.length });
     }
 
     const payload = {

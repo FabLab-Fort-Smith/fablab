@@ -24,7 +24,7 @@ export const OFFLINE_REASON = {
 // --- crypto (ported) --------------------------------------------------------------------
 function sortKeys(v) {
   if (Array.isArray(v)) return v.map(sortKeys);
-  if (v && typeof v === "object") return Object.keys(v).sort().reduce((a, k) => ((a[k] = sortKeys(v[k])), a), {});
+  if (v && typeof v === "object") return Object.keys(v).sort().reduce((a, k) => ((a[k] = sortKeys(v[k])), a), Object.create(null)); // null-proto: lockstep w/ the signer (a __proto__ key serializes, not dropped)
   return v;
 }
 function canonical(value) {
