@@ -6,10 +6,10 @@
 
 import Model from "./model";
 import { factsFromUser } from "./facts";
-import { blindIndex, encryptCode } from "./cardCrypto";
+import { blindIndex, encryptCode, decryptToBuffer, recipientIndexKey, credHashFor, meetsEntropyFloor } from "./cardCrypto";
 import { newCardDoc, newDoorDoc } from "./class";
 import { decide, allowedDoorsForFacts } from "./policy";
-import { signAllowlist, allowlistSigningReady } from "./allowlistCrypto";
+import { signAllowlist, signEnvelope, allowlistSigningReady } from "./allowlistCrypto";
 import { resolveConfig, PLUGIN_ID, PERM_ADMIN } from "./config";
 import { assertPermission } from "@/lib/plugins/permissions";
 import UsersService from "@/app/api/v1/users/service";
@@ -94,6 +94,15 @@ const Service = {
    */
   async enrollCard({ userID, code, credentialType = "nfc" }) {
     if (!userID || !code) throw new Error("enrollCard requires userID and code");
+    // Entropy floor (door-controller-wifi.md §5, F1/R3): high-assurance credential types must be
+    // system-issued ≥128-bit tokens so a leaked per-recipient index key can't be dictionaried.
+    // NFC-UIDs cannot meet it and are an accepted risk (bounded per the design) — allowed but audited.
+    if ((credentialType === "qr" || credentialType === "app") && !meetsEntropyFloor(code)) {
+      throw badRequest(`a ${credentialType} credential must be a system-issued ≥128-bit token (see generateCardToken)`);
+    }
+    if (credentialType === "nfc") {
+      auditLog("door-access.enroll", { actor: { pluginId: PLUGIN_ID }, target: userID, outcome: "low-entropy-accepted", credentialType, reason: "nfc-uid-accepted-risk" });
+    }
     const bi = blindIndex(code);
     const doc = newCardDoc({ userID, codeEnc: encryptCode(code), bi, credentialType });
     await Model.deleteCardsByUserID(userID); // replace, so a re-pair invalidates the old card
@@ -141,6 +150,70 @@ const Service = {
       entries,
     };
     return signAllowlist(payload);
+  },
+
+  /**
+   * Build a single door's SIGNED envelope, re-keyed for one recipient (door-controller-wifi.md §2).
+   * This is the S1 building block the broker/edge cache (the distribution — which recipients per door
+   * — is S2/S3). Fail-secure + PII-safe:
+   *   - per-door payload with a **strictly-monotonic `version`** (Model.nextEnvelopeVersion — F5);
+   *   - each `credHash` is `HMAC(recipientIndexKey(recipientId), code)` (F1) — a leaked recipient key
+   *     compromises only that recipient's scope;
+   *   - the plaintext code is decrypted to a **Buffer**, HMAC'd, then `fill(0)`'d — never a String (F1
+   *     zeroization); the recipient key is wiped after the pass;
+   *   - the envelope carries `doorId` so the verifier can bind it to the door it's deciding (F2);
+   *   - signed via `signEnvelope` (validates canonical-safety, F3).
+   * @param {{ doorId:string, recipientId:string, now?:Date, ttlMinutes?:number }} args
+   * @returns {Promise<{payload:object, sig:string, alg:string}>}
+   */
+  async buildDoorEnvelope({ doorId, recipientId, now = new Date(), ttlMinutes } = {}) {
+    if (typeof doorId !== "string" || !doorId) throw badRequest("doorId is required");
+    if (typeof recipientId !== "string" || !recipientId) throw badRequest("recipientId is required");
+
+    const cfg = await resolveConfig();
+    const ttl = ttlMinutes || cfg.offlineTtlMinutes || 30;
+    const policyDoc = await Model.getPolicyDoc();
+    const policy = {
+      rules: policyDoc.rules || [],
+      accountOverrides: policyDoc.accountOverrides || {},
+      requireGoodStanding: cfg.requireGoodStanding,
+      allowAdminBypass: cfg.allowAdminBypass,
+      defaultTimezone: cfg.defaultTimezone,
+    };
+    const doors = await Model.listDoors();
+    const cards = await Model.listCards({ status: "active" });
+
+    const recipientKey = recipientIndexKey(recipientId);
+    const version = await Model.nextEnvelopeVersion(doorId); // monotonic per door (anti-rollback)
+    const entries = [];
+    try {
+      for (const card of cards) {
+        const facts = factsFromUser(await UsersService.getUserByQuery({ userID: card.userID }));
+        if (!facts) continue;
+        const allowed = allowedDoorsForFacts(facts, doors, policy, card.credentialType || "nfc");
+        const forThisDoor = allowed.find((a) => a.doorId === doorId);
+        if (!forThisDoor) continue;
+        const codeBuf = decryptToBuffer(card.codeEnc);
+        try {
+          entries.push({ credHash: credHashFor(recipientKey, codeBuf), windows: forThisDoor.windows || [] });
+        } finally {
+          codeBuf.fill(0); // wipe plaintext PII immediately (§5)
+        }
+      }
+    } finally {
+      recipientKey.fill(0);
+    }
+
+    const payload = {
+      doorId,
+      version,
+      issuedAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + ttl * 60000).toISOString(),
+      tz: cfg.defaultTimezone,
+      entryCount: entries.length,
+      entries,
+    };
+    return signEnvelope(payload);
   },
 
   /** Build + push the signed allowlist to the socket-server. Skips (audited) if unsigned. */

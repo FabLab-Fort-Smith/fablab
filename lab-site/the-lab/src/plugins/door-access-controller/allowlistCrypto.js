@@ -59,6 +59,46 @@ export function signAllowlist(payload) {
 }
 
 /**
+ * Assert a value is safe for the canonical form to byte-match across languages (door-controller-wifi.md
+ * §2 F3): only plain objects / arrays / strings / integers / booleans / null. Rejects floats, NaN,
+ * Infinity, undefined, functions, and non-finite numbers — the classic cross-language canonicalization
+ * bypass/false-reject traps. Throws on the first offending value.
+ * @param {*} value
+ */
+export function assertCanonicalSafe(value, path = "$") {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return;
+  if (typeof value === "number") {
+    if (!Number.isInteger(value)) throw new Error(`non-integer number at ${path} (floats/NaN/Infinity are not canonical-safe)`);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((v, i) => {
+      if (v === undefined) throw new Error(`undefined array element at ${path}[${i}]`);
+      assertCanonicalSafe(v, `${path}[${i}]`);
+    });
+    return;
+  }
+  if (typeof value === "object") {
+    for (const k of Object.keys(value)) {
+      if (value[k] === undefined) throw new Error(`undefined value at ${path}.${k}`);
+      assertCanonicalSafe(value[k], `${path}.${k}`);
+    }
+    return;
+  }
+  throw new Error(`unsupported type ${typeof value} at ${path}`);
+}
+
+/**
+ * Sign a per-door envelope payload (door-controller-wifi.md §2). Same Ed25519 + canonical form as
+ * signAllowlist, but validates the payload is canonical-safe first (F3) so the on-device (Python)
+ * verifier can byte-match deterministically. @param {object} payload @returns {{payload,sig,alg}}
+ */
+export function signEnvelope(payload) {
+  assertCanonicalSafe(payload);
+  return signAllowlist(payload);
+}
+
+/**
  * Verify a signed envelope. Returns false on any problem (bad shape, wrong/absent key, bad
  * signature) — never throws.
  * @param {{payload:object, sig:string}} signed
