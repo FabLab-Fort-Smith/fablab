@@ -76,6 +76,12 @@ test("rejects a malformed envelope before any state change", async () => {
   expect(await s.putEnvelope({ payload: { doorId: "front", version: 1.5 }, sig: "x" }, OK)).toEqual({ stored: false, reason: "bad-envelope" });
 });
 
+test("a disk-write failure fails closed with io-error, not a throw (N-2)", async () => {
+  const s = makeBrokerStore({ dir });
+  await fs.writeFile(path.join(dir, "doors"), "x"); // occupy <dir>/doors as a FILE → mkdir/write fails
+  expect(await s.putEnvelope(env("front", 1), OK)).toEqual({ stored: false, reason: "io-error" });
+});
+
 test("path-safety: a traversal doorId is rejected", async () => {
   const s = makeBrokerStore({ dir });
   await expect(s.getEnvelope("../../etc/passwd")).rejects.toThrow(/invalid doorId/);

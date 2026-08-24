@@ -41,7 +41,11 @@ export function makeBrokerStore({ dir = process.env.BROKER_ENVELOPE_DIR } = {}) 
   function withDoorLock(doorId, fn) {
     const prev = chains.get(doorId) || Promise.resolve();
     const run = prev.then(fn, fn); // run once prev settles, regardless of its outcome
-    chains.set(doorId, run.then(() => {}, () => {}));
+    const tail = run.then(() => {}, () => {});
+    chains.set(doorId, tail);
+    // Prune the entry once idle (tail settled + still the head) so the Map can't grow unbounded
+    // (SEC review N-1). A queued follow-up leaves a newer tail as head → no delete.
+    tail.then(() => { if (chains.get(doorId) === tail) chains.delete(doorId); });
     return run;
   }
 
@@ -93,7 +97,11 @@ export function makeBrokerStore({ dir = process.env.BROKER_ENVELOPE_DIR } = {}) 
         const cur = await readJson(envPath(doorId));
         const prev = Number.isInteger(cur?.payload?.version) ? cur.payload.version : 0;
         if (version <= prev) return { stored: false, reason: "stale-version" }; // anti-rollback (F5), atomic
-        await writeJsonAtomic(envPath(doorId), signed);
+        try {
+          await writeJsonAtomic(envPath(doorId), signed);
+        } catch {
+          return { stored: false, reason: "io-error" }; // fail-closed on a disk-write failure (N-2)
+        }
         return { stored: true, version };
       });
     },
