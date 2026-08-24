@@ -1,12 +1,17 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import express from 'express';
 import { createServer } from 'http';
+import { pathToFileURL } from 'url';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import { verifyDeviceSecret, loadDeviceSecrets } from './lib/deviceAuth.js';
 import { requireApiSecret } from './lib/apiAuth.js';
 import offline from './lib/offlineAccess.js';
 import { makeAuthorizeScan } from './lib/scanAuthorize.js';
+import {
+    loadBrokerSecrets, loadBrokerDoorMap, makeBrokerAuth, makeRateLimiter, makeBrokerUplink,
+    makeUplinkConnection, relayEnvelopes,
+} from './lib/brokerUplink.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -36,9 +41,17 @@ if (configuredDeviceCount === 0) {
 const authorizeScan = makeAuthorizeScan({ offline });
 
 // --- WebSocket Server ---
-const wss = new WebSocketServer({ server });
+// Two endpoints on one HTTP server, path-routed at the upgrade (below): devices/Pico on the default
+// path (unchanged), the on-site broker's Link-B uplink on `/broker`. Kept separate so the two
+// principals (device secret vs broker bearer) never share a handler or authenticate cross-boundary.
+// maxPayload bounds pre-auth memory/CPU on these internet-facing sockets (CWE-400): control frames
+// are tiny and envelopes arrive over HTTP, not inbound WS, so 64 KiB is generous.
+const WS_MAX_PAYLOAD = 64 * 1024;
+const BROKER_AUTH_TIMEOUT_MS = 5000; // drop a broker socket that never authenticates (pre-auth DoS)
+const deviceWss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD });
+const brokerWss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD });
 
-wss.on('connection', (ws, req) => {
+deviceWss.on('connection', (ws, req) => {
     const ip = req.socket.remoteAddress;
     console.log(`[WS] New connection from ${ip}`);
     let authenticatedDeviceId = null;
@@ -109,6 +122,49 @@ wss.on('connection', (ws, req) => {
             devices.delete(authenticatedDeviceId);
         }
     });
+});
+
+// --- Broker uplink (Link-B, cloud side — S2c-2) ---
+// The on-site broker dials this endpoint (wss:// terminated at the edge proxy). It authenticates with
+// a bearer (constant-time), then proxies online scans (`authz`) and receives per-door envelope pushes.
+// Deny-by-default, authn-before-act, owned-door scope (BOLA), per-broker rate limit. The scan `code`
+// is Restricted/PII (§5) and is never logged. See vps/lib/brokerUplink.js.
+const brokerUplink = makeBrokerUplink({
+    authorizeScan,
+    authenticate: makeBrokerAuth(loadBrokerSecrets()),
+    doorMap: loadBrokerDoorMap(),
+    allow: makeRateLimiter({}),
+});
+const brokerConnCount = Object.keys(loadBrokerSecrets()).length;
+if (brokerConnCount === 0) {
+    console.warn('⚠️ No BROKER_UPLINK_SECRETS configured — broker uplink authentication will reject all brokers.');
+} else {
+    console.log(`Loaded uplink secrets for ${brokerConnCount} broker(s).`);
+}
+// Connected brokers: brokerId -> ws (one logical brokerId per HA broker set — design §9). A newer
+// connection for the same brokerId replaces the old (HA failover / reconnect).
+const brokers = new Map();
+// The security logic lives in the pure driver (vps/lib/brokerUplink.js); this is just socket glue.
+const brokerLog = (event, fields = {}) => console.log(`[Broker] ${event} ${JSON.stringify(fields)}`);
+const acceptBrokerConn = makeUplinkConnection({ uplink: brokerUplink, brokers, log: brokerLog });
+
+brokerWss.on('connection', (ws, req) => {
+    const ip = req.socket.remoteAddress;
+    const conn = acceptBrokerConn(ws, { ip });
+    // Fail-secure pre-auth timeout: a socket that never authenticates is closed (CWE-400 / M1).
+    const authTimer = setTimeout(() => { if (!conn.brokerId()) { try { ws.close(); } catch { /* gone */ } } }, BROKER_AUTH_TIMEOUT_MS);
+    authTimer.unref?.();
+    ws.on('message', (raw) => { conn.message(raw); });
+    ws.on('close', () => { clearTimeout(authTimer); conn.close(); });
+    ws.on('error', () => { /* transient; fail-secure — nothing is granted on a dead uplink */ });
+});
+
+// Route the WS upgrade by path: `/broker` → broker uplink, everything else → devices (unchanged).
+server.on('upgrade', (req, socket, head) => {
+    let pathname = '/';
+    try { pathname = new URL(req.url, 'http://localhost').pathname; } catch { /* default */ }
+    const wssFor = pathname === '/broker' ? brokerWss : deviceWss;
+    wssFor.handleUpgrade(req, socket, head, (ws) => wssFor.emit('connection', ws, req));
 });
 
 // --- HTTP API for Web App ---
@@ -296,6 +352,34 @@ app.post('/api/v2/authorize', requireApiSecret, async (req, res) => {
     return res.json(decision);
 });
 
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+// --- Broker envelope relay (S2c-2) ---
+// The app builds per-broker×door signed envelopes (re-keyed to each brokerIndexKey) and POSTs them
+// here; the cloud relays them down the matching broker's live uplink (mirrors the addon allowlist
+// push). Defense-in-depth: an envelope for a door the broker does not own is dropped, not relayed
+// (BOLA). apiAuth-guarded; the app is the only caller.
+app.post('/api/v2/broker/:brokerId/envelopes', requireApiSecret, (req, res) => {
+    const { brokerId } = req.params;
+    const body = req.body;
+    const envelopes = Array.isArray(body) ? body : (body && Array.isArray(body.envelopes) ? body.envelopes : null);
+    if (!envelopes) return res.status(400).json({ error: 'body must be an array of signed envelopes' });
+
+    const r = relayEnvelopes({ uplink: brokerUplink, brokers }, brokerId, envelopes);
+    if (r.rejected) console.warn(`[Broker] relay dropped ${r.rejected} envelope(s) for doors not owned by ${brokerId}`);
+    if (!r.connected) {
+        // The broker isn't connected right now; it re-syncs on reconnect (later slice). Report it so
+        // the caller can back off rather than retry forever.
+        return res.status(503).json({ error: 'broker not connected', brokerId, relayed: 0, rejected: r.rejected });
+    }
+    console.log(`[Broker] relayed ${r.relayed} envelope(s) to ${brokerId}`);
+    return res.json({ relayed: r.relayed, rejected: r.rejected });
 });
+
+// Listen only when run directly (Docker CMD `node socket-server.js`), not when imported by a test.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+    server.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
+}
+
+// Exported for integration tests (bind an ephemeral port there); production uses the guard above.
+export { app, server, brokers, brokerWss, deviceWss };
