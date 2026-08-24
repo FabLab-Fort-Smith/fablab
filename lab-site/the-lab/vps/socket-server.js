@@ -44,8 +44,12 @@ const authorizeScan = makeAuthorizeScan({ offline });
 // Two endpoints on one HTTP server, path-routed at the upgrade (below): devices/Pico on the default
 // path (unchanged), the on-site broker's Link-B uplink on `/broker`. Kept separate so the two
 // principals (device secret vs broker bearer) never share a handler or authenticate cross-boundary.
-const deviceWss = new WebSocketServer({ noServer: true });
-const brokerWss = new WebSocketServer({ noServer: true });
+// maxPayload bounds pre-auth memory/CPU on these internet-facing sockets (CWE-400): control frames
+// are tiny and envelopes arrive over HTTP, not inbound WS, so 64 KiB is generous.
+const WS_MAX_PAYLOAD = 64 * 1024;
+const BROKER_AUTH_TIMEOUT_MS = 5000; // drop a broker socket that never authenticates (pre-auth DoS)
+const deviceWss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD });
+const brokerWss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD });
 
 deviceWss.on('connection', (ws, req) => {
     const ip = req.socket.remoteAddress;
@@ -144,10 +148,14 @@ const brokers = new Map();
 const brokerLog = (event, fields = {}) => console.log(`[Broker] ${event} ${JSON.stringify(fields)}`);
 const acceptBrokerConn = makeUplinkConnection({ uplink: brokerUplink, brokers, log: brokerLog });
 
-brokerWss.on('connection', (ws) => {
-    const conn = acceptBrokerConn(ws);
+brokerWss.on('connection', (ws, req) => {
+    const ip = req.socket.remoteAddress;
+    const conn = acceptBrokerConn(ws, { ip });
+    // Fail-secure pre-auth timeout: a socket that never authenticates is closed (CWE-400 / M1).
+    const authTimer = setTimeout(() => { if (!conn.brokerId()) { try { ws.close(); } catch { /* gone */ } } }, BROKER_AUTH_TIMEOUT_MS);
+    authTimer.unref?.();
     ws.on('message', (raw) => { conn.message(raw); });
-    ws.on('close', () => { conn.close(); });
+    ws.on('close', () => { clearTimeout(authTimer); conn.close(); });
     ws.on('error', () => { /* transient; fail-secure — nothing is granted on a dead uplink */ });
 });
 

@@ -68,6 +68,15 @@ describe("makeUplinkConnection — per-connection state machine", () => {
     expect(ws.last()).toMatchObject({ id: 3, granted: true });
   });
 
+  test("per-connection log meta (ip) is merged into every driver log event (forensics)", async () => {
+    const events = [];
+    const log = (event, fields) => events.push({ event, fields });
+    const ws = fakeWs();
+    const conn = makeUplinkConnection({ uplink: mkUplink(), brokers: new Map(), log })(ws, { ip: "10.0.0.9" });
+    await conn.message(JSON.stringify({ t: "auth", secret: "nope" })); // auth-failed
+    expect(events.find((e) => e.event === "broker.auth-failed").fields).toMatchObject({ ip: "10.0.0.9" });
+  });
+
   test("ping → pong; malformed JSON ignored", async () => {
     const ws = fakeWs();
     const conn = makeUplinkConnection({ uplink: mkUplink(), brokers: new Map() })(ws);

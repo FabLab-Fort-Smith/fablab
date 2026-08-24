@@ -126,8 +126,10 @@ export function makeBrokerUplink({ authorizeScan, authenticate, doorMap, allow =
       if (!doorId || typeof code !== "string" || !code) {
         return { t: "authz_result", id, granted: false, reason: "MISSING_FIELDS" };
       }
-      if (!owns(brokerId, doorId)) return { t: "authz_result", id, granted: false, reason: "DOOR_NOT_OWNED" };
+      // Rate-limit BEFORE the ownership check so a misbehaving authed broker can't flood unlimited
+      // unowned-door probes (each still hits log + CPU otherwise) — bound ALL authz per broker (L2).
       if (!allow(brokerId)) return { t: "authz_result", id, granted: false, reason: "RATE_LIMITED" };
+      if (!owns(brokerId, doorId)) return { t: "authz_result", id, granted: false, reason: "DOOR_NOT_OWNED" };
       const decision = await authorizeScan({ cardId: code, doorId, tz });
       return { t: "authz_result", id, granted: Boolean(decision.granted), reason: decision.reason, mode: decision.mode };
     },
@@ -164,11 +166,12 @@ function safeSend(ws, obj) {
  * @param {ReturnType<typeof makeBrokerUplink>} deps.uplink
  * @param {Map<string,object>} deps.brokers - shared brokerId -> ws registry (mutated here).
  * @param {(event:string,fields?:object)=>void} [deps.log]
- * @returns {(ws:object)=>{message:(raw:any)=>Promise<void>, close:()=>void, brokerId:()=>string|null}}
+ * @returns {(ws:object, meta?:object)=>{message:(raw:any)=>Promise<void>, close:()=>void, brokerId:()=>string|null}}
  */
 export function makeUplinkConnection({ uplink, brokers, log = () => {} }) {
-  return function accept(ws) {
+  return function accept(ws, meta = {}) {
     let brokerId = null; // null until the bearer authenticates (authn-before-act)
+    const emit = (event, fields = {}) => log(event, { ...meta, ...fields }); // meta = e.g. { ip } for forensics
     return {
       brokerId: () => brokerId,
       async message(raw) {
@@ -177,18 +180,18 @@ export function makeUplinkConnection({ uplink, brokers, log = () => {} }) {
         if (m.t === "auth") {
           const id = uplink.authenticate(typeof m.secret === "string" ? m.secret : "");
           if (!id) { // never reveal which part failed
-            log("broker.auth-failed", {});
+            emit("broker.auth-failed", {});
             safeSend(ws, { t: "auth_result", ok: false });
             try { ws.close(); } catch { /* gone */ }
             return;
           }
           brokerId = id;
           brokers.set(brokerId, ws); // newer conn replaces old (HA failover / reconnect)
-          log("broker.authenticated", { brokerId });
+          emit("broker.authenticated", { brokerId });
           safeSend(ws, { t: "auth_result", ok: true });
         } else if (m.t === "authz") {
           const resp = await uplink.handleAuthz({ brokerId, id: m.id, doorId: m.doorId, code: m.code, tz: m.tz });
-          log("broker.authz", { brokerId: brokerId || "?", doorId: m.doorId, granted: resp.granted, reason: resp.reason });
+          emit("broker.authz", { brokerId: brokerId || "?", doorId: m.doorId, granted: resp.granted, reason: resp.reason });
           if (ws.readyState === WS_OPEN) safeSend(ws, resp);
         } else if (m.t === "ping") {
           safeSend(ws, { t: "pong" });
@@ -197,7 +200,7 @@ export function makeUplinkConnection({ uplink, brokers, log = () => {} }) {
       close() {
         if (brokerId && brokers.get(brokerId) === ws) {
           brokers.delete(brokerId);
-          log("broker.disconnected", { brokerId });
+          emit("broker.disconnected", { brokerId });
         }
       },
     };

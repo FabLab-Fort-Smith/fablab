@@ -97,6 +97,12 @@ describe("makeBrokerUplink.handleAuthz (fail-secure)", () => {
     expect(r).toMatchObject({ granted: false, reason: "RATE_LIMITED" });
     expect(calls).toHaveLength(0);
   });
+  test("rate limit precedes ownership (L2): an UNOWNED-door probe is rate-limited, not free", async () => {
+    // A misbehaving authed broker can't flood unlimited unowned-door probes to burn log/CPU.
+    const { u } = mk({ allow: () => false });
+    const r = await u.handleAuthz({ brokerId: "b1", id: 8, doorId: "not-mine", code: "x" });
+    expect(r.reason).toBe("RATE_LIMITED"); // checked before DOOR_NOT_OWNED
+  });
   test("owned + allowed → proxies to authorizeScan and returns its decision", async () => {
     const { u, calls } = mk();
     const r = await u.handleAuthz({ brokerId: "b1", id: 6, doorId: "door-b", code: "the-code", tz: "T" });
