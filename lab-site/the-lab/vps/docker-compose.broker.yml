@@ -1,5 +1,11 @@
 # On-site BROKER (Tier-1) — deploy on the Proxmox host (door-controller-wifi.md §13 S2c-3).
-# Single-instance unit; HA (a 2nd broker + keepalived VIP sharing one brokerId) is S5.
+# HA (S5): run this SAME compose on BOTH broker hosts with IDENTICAL broker credentials — one logical
+#   brokerId (§9): the same broker cert/key, BROKER_INDEX_KEY, and BROKER_UPLINK_SECRET on both. Each
+#   member dials the cloud uplink independently; the cloud tracks BOTH and pushes every envelope to both
+#   (S5-a), so the standby's rung-2 cache stays fresh. keepalived (host-level — see ../keepalived/)
+#   provides the active/standby VIP the edges dial; set BROKER_LAN_IP to the host's own LAN IP (on a
+#   dedicated single-LAN broker host you may instead publish 0.0.0.0 so the active receives VIP-destined
+#   traffic). Failover drill: docs/runbooks/door-broker-ha-failover.md.
 # Secrets/certs are provided at runtime via ./certs + an .env file — NEVER commit them.
 #   Required env (fail-closed here and in brokerConfig): CLOUD_UPLINK_URL (wss://), BROKER_UPLINK_SECRET,
 #   BROKER_INDEX_KEY (32B base64), DOOR_ALLOWLIST_VERIFY_KEY (ed25519 spki base64), BROKER_LAN_IP.

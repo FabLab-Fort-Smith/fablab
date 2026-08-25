@@ -159,16 +159,43 @@ function safeSend(ws, obj) {
 }
 
 /**
+ * Connected-broker registry keyed by brokerId → the SET of live member connections (S5 HA). An
+ * active/standby broker pair shares ONE logical brokerId (design §9), so BOTH members' uplinks must be
+ * tracked and fed envelopes — a single-slot map would starve the standby and let its rung-2 cache go
+ * stale (miss a revocation), breaking seamless failover. Members are bounded by the door-map config.
+ */
+export function makeBrokerRegistry() {
+  const m = new Map(); // brokerId -> Set<ws>
+  return {
+    add(brokerId, ws) {
+      let s = m.get(brokerId);
+      if (!s) { s = new Set(); m.set(brokerId, s); }
+      s.add(ws);
+    },
+    remove(brokerId, ws) {
+      const s = m.get(brokerId);
+      if (s) { s.delete(ws); if (!s.size) m.delete(brokerId); }
+    },
+    /** Live (OPEN) member connections for a brokerId. */
+    conns(brokerId) {
+      const s = m.get(brokerId);
+      return s ? [...s].filter((w) => w.readyState === WS_OPEN) : [];
+    },
+    count(brokerId) { return this.conns(brokerId).length; },
+  };
+}
+
+/**
  * Per-connection driver for a broker uplink socket (functional core; the socket-server shell just
  * feeds it raw messages + close). Holds this connection's authenticated brokerId. Deny-by-default:
  * a wrong bearer closes the socket; authz before auth is denied by handleAuthz.
  * @param {object} deps
  * @param {ReturnType<typeof makeBrokerUplink>} deps.uplink
- * @param {Map<string,object>} deps.brokers - shared brokerId -> ws registry (mutated here).
+ * @param {ReturnType<typeof makeBrokerRegistry>} deps.registry - shared multi-member registry (mutated here).
  * @param {(event:string,fields?:object)=>void} [deps.log]
  * @returns {(ws:object, meta?:object)=>{message:(raw:any)=>Promise<void>, close:()=>void, brokerId:()=>string|null}}
  */
-export function makeUplinkConnection({ uplink, brokers, log = () => {}, onConnect = () => {} }) {
+export function makeUplinkConnection({ uplink, registry, log = () => {}, onConnect = () => {} }) {
   return function accept(ws, meta = {}) {
     let brokerId = null; // null until the bearer authenticates (authn-before-act)
     const emit = (event, fields = {}) => log(event, { ...meta, ...fields }); // meta = e.g. { ip } for forensics
@@ -178,6 +205,7 @@ export function makeUplinkConnection({ uplink, brokers, log = () => {}, onConnec
         let m;
         try { m = JSON.parse(raw); } catch { return; }
         if (m.t === "auth") {
+          if (brokerId) { emit("broker.reauth-ignored", { brokerId }); return; } // one identity per conn (F5)
           const id = uplink.authenticate(typeof m.secret === "string" ? m.secret : "");
           if (!id) { // never reveal which part failed
             emit("broker.auth-failed", {});
@@ -186,7 +214,7 @@ export function makeUplinkConnection({ uplink, brokers, log = () => {}, onConnec
             return;
           }
           brokerId = id;
-          brokers.set(brokerId, ws); // newer conn replaces old (HA failover / reconnect)
+          registry.add(brokerId, ws); // track EVERY member (active + standby share one brokerId, S5)
           emit("broker.authenticated", { brokerId });
           safeSend(ws, { t: "auth_result", ok: true });
           try { onConnect(brokerId); } catch { /* best-effort resync trigger — never break the conn */ }
@@ -199,8 +227,8 @@ export function makeUplinkConnection({ uplink, brokers, log = () => {}, onConnec
         }
       },
       close() {
-        if (brokerId && brokers.get(brokerId) === ws) {
-          brokers.delete(brokerId);
+        if (brokerId) {
+          registry.remove(brokerId, ws); // remove only THIS member; the other stays registered
           emit("broker.disconnected", { brokerId });
         }
       },
@@ -209,23 +237,29 @@ export function makeUplinkConnection({ uplink, brokers, log = () => {}, onConnec
 }
 
 /**
- * Relay a batch of signed envelopes down a connected broker's uplink, scoped to owned doors (BOLA).
- * @param {{uplink:ReturnType<typeof makeBrokerUplink>, brokers:Map<string,object>}} ctx
+ * Relay a batch of signed envelopes down ALL live members of a broker (S5 HA), scoped to owned doors
+ * (BOLA). Each accepted envelope is pushed to every member connection so active + standby caches stay
+ * in lockstep (a revocation reaches both). `relayed` counts envelopes delivered to ≥1 member.
+ * @param {{uplink:ReturnType<typeof makeBrokerUplink>, registry:ReturnType<typeof makeBrokerRegistry>}} ctx
  * @param {string} brokerId
  * @param {Array} envelopes
- * @returns {{connected:boolean, relayed:number, rejected:number}}
+ * @returns {{connected:boolean, relayed:number, rejected:number, members:number}}
  */
-export function relayEnvelopes({ uplink, brokers }, brokerId, envelopes) {
+export function relayEnvelopes({ uplink, registry }, brokerId, envelopes) {
   const { accepted, rejected } = uplink.scopeEnvelopes(brokerId, envelopes);
-  const ws = brokers.get(brokerId);
-  if (!ws || ws.readyState !== WS_OPEN) return { connected: false, relayed: 0, rejected: rejected.length };
+  const conns = registry.conns(brokerId);
+  if (!conns.length) return { connected: false, relayed: 0, rejected: rejected.length, members: 0 };
   let relayed = 0;
-  for (const signed of accepted) if (safeSend(ws, { t: "envelope", signed })) relayed += 1;
-  return { connected: true, relayed, rejected: rejected.length };
+  for (const signed of accepted) {
+    let delivered = false;
+    for (const ws of conns) if (safeSend(ws, { t: "envelope", signed })) delivered = true;
+    if (delivered) relayed += 1;
+  }
+  return { connected: true, relayed, rejected: rejected.length, members: conns.length };
 }
 
 const BrokerUplink = {
   timingSafeEqualStr, loadBrokerSecrets, loadBrokerDoorMap, makeBrokerAuth, makeRateLimiter, makeBrokerUplink,
-  makeUplinkConnection, relayEnvelopes,
+  makeUplinkConnection, relayEnvelopes, makeBrokerRegistry,
 };
 export default BrokerUplink;

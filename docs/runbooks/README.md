@@ -51,6 +51,9 @@ step-by-step and executable by someone who didn't write it.
       whole door fleet: re-derive every broker/edge index key, switch the cloud to new-keyed envelopes,
       re-provision recipients; online stays up (offline fails secure) throughout. *(scaffold — drill on
       the bench fleet before a real rotation)*
+- [x] **door-broker-ha-failover.md** — verify the active/standby door-broker keepalived VIP fails over
+      cleanly: standby serves, doors keep working via the edge rung-3 during the blip, no split-brain
+      double-grant. *(scaffold — drill on the two-host bench before relying on failover)*
 - [ ] **incident-response.md** — triage/contain/recover (esp. compromised webhook or build).
 - [ ] **add-new-site.md** — add a `lab-site/<new-site>/` and wire it as a Coolify application.
 - [ ] **on-call.md** — alert response & escalation.

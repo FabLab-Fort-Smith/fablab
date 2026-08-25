@@ -10,7 +10,7 @@ import offline from './lib/offlineAccess.js';
 import { makeAuthorizeScan } from './lib/scanAuthorize.js';
 import {
     loadBrokerSecrets, loadBrokerDoorMap, makeBrokerAuth, makeRateLimiter, makeBrokerUplink,
-    makeUplinkConnection, relayEnvelopes,
+    makeUplinkConnection, relayEnvelopes, makeBrokerRegistry,
 } from './lib/brokerUplink.js';
 import { makeRequestBrokerResync, makeResyncTrigger } from './lib/brokerResync.js';
 
@@ -142,15 +142,16 @@ if (brokerConnCount === 0) {
 } else {
     console.log(`Loaded uplink secrets for ${brokerConnCount} broker(s).`);
 }
-// Connected brokers: brokerId -> ws (one logical brokerId per HA broker set — design §9). A newer
-// connection for the same brokerId replaces the old (HA failover / reconnect).
-const brokers = new Map();
+// Connected brokers: brokerId -> SET of member connections. An active/standby HA pair shares one
+// logical brokerId (design §9), so BOTH members are tracked and fed envelopes (S5) — the standby's
+// rung-2 cache stays fresh for a seamless failover.
+const registry = makeBrokerRegistry();
 // The security logic lives in the pure driver (vps/lib/brokerUplink.js); this is just socket glue.
 const brokerLog = (event, fields = {}) => console.log(`[Broker] ${event} ${JSON.stringify(fields)}`);
 // On a broker (re)connect, ask the app to rebuild+push that broker's envelopes (S2c-2c). Best-effort +
 // per-broker cooldown so a flapping broker can't storm the app; fire-and-forget (never blocks auth).
 const resyncTrigger = makeResyncTrigger({ resync: makeRequestBrokerResync({ log: brokerLog }), log: brokerLog });
-const acceptBrokerConn = makeUplinkConnection({ uplink: brokerUplink, brokers, log: brokerLog, onConnect: resyncTrigger });
+const acceptBrokerConn = makeUplinkConnection({ uplink: brokerUplink, registry, log: brokerLog, onConnect: resyncTrigger });
 
 brokerWss.on('connection', (ws, req) => {
     const ip = req.socket.remoteAddress;
@@ -367,7 +368,7 @@ app.post('/api/v2/broker/:brokerId/envelopes', requireApiSecret, (req, res) => {
     const envelopes = Array.isArray(body) ? body : (body && Array.isArray(body.envelopes) ? body.envelopes : null);
     if (!envelopes) return res.status(400).json({ error: 'body must be an array of signed envelopes' });
 
-    const r = relayEnvelopes({ uplink: brokerUplink, brokers }, brokerId, envelopes);
+    const r = relayEnvelopes({ uplink: brokerUplink, registry }, brokerId, envelopes);
     if (r.rejected) console.warn(`[Broker] relay dropped ${r.rejected} envelope(s) for doors not owned by ${brokerId}`);
     if (!r.connected) {
         // The broker isn't connected right now; it re-syncs on reconnect (later slice). Report it so
@@ -386,4 +387,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 }
 
 // Exported for integration tests (bind an ephemeral port there); production uses the guard above.
-export { app, server, brokers, brokerWss, deviceWss };
+export { app, server, registry, brokerWss, deviceWss };

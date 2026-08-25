@@ -115,7 +115,7 @@ jobs:
       - name: Door PKI script tests (shellcheck + openssl + node; no VPS)
         run: |
           sudo apt-get update && sudo apt-get install -y shellcheck
-          shellcheck vps/pki/*.sh
+          shellcheck vps/pki/*.sh vps/keepalived/*.sh
           bash vps/pki/door-ca.test.sh
       - name: Build
         run: npm run build
