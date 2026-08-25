@@ -11,6 +11,7 @@ const DOORS = "doorAccessDoors";
 const POLICY = "doorAccessPolicy";
 const COUNTERS = "doorAccessCounters"; // monotonic per-door envelope version (anti-rollback, F5)
 const ANCHORS = "doorAccessAuditAnchors"; // per-edge audit anchor {_id:edgeId, boots, currentBoot, version}
+const EDGE_KEYS = "doorAccessEdgeKeys"; // per-edge audit signing PUBLIC key {_id:edgeId, pubSpki, updatedAt}
 const POLICY_ID = "policy:door-access-controller"; // single well-known doc
 
 let indexesEnsured = false;
@@ -155,6 +156,30 @@ export async function casAuditAnchor(edgeId, expectedVersion, anchor) {
   }
 }
 
+/**
+ * The edge's REGISTERED audit-signing public key (SPKI DER, base64), or null if the edge was never
+ * provisioned. Registration is an out-of-band admin/genesis action — NOT trust-on-first-use — so the
+ * ingest path fails closed for an unknown edge (a relaying broker can't self-register a forged key).
+ * @param {string} edgeId @returns {Promise<string|null>}
+ */
+export async function getEdgeSigningKey(edgeId) {
+  await cards(); // ensure connection
+  const doc = await (await database()).collection(EDGE_KEYS).findOne({ _id: edgeId });
+  return doc && typeof doc.pubSpki === "string" ? doc.pubSpki : null;
+}
+
+/**
+ * Register (or rotate) an edge's audit-signing public key. Admin/provisioning only (the caller enforces
+ * authorization + genesis/reflash binding — #151). Storing a new key re-anchors trust for that edge.
+ * @param {string} edgeId @param {string} pubSpki SPKI DER, base64
+ */
+export async function registerEdgeSigningKey(edgeId, pubSpki) {
+  await cards();
+  await (await database())
+    .collection(EDGE_KEYS)
+    .updateOne({ _id: edgeId }, { $set: { pubSpki, updatedAt: new Date().toISOString() } }, { upsert: true });
+}
+
 const Model = {
   findCardByBlindIndex,
   upsertCard,
@@ -169,6 +194,8 @@ const Model = {
   savePolicyDoc,
   getAuditAnchor,
   casAuditAnchor,
+  getEdgeSigningKey,
+  registerEdgeSigningKey,
 };
 
 export default Model;

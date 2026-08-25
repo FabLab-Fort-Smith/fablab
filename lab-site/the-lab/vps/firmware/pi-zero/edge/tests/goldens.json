@@ -49,5 +49,15 @@
       "x": null
     }
   },
-  "probe_canonical": "{\"a\":{\"b\":[3,{\"c\":5,\"d\":4}],\"cafe_é\":2},\"mixed\":\"café ☕\",\"nested\":{\"x\":null,\"y\":true},\"z\":1}"
+  "probe_canonical": "{\"a\":{\"b\":[3,{\"c\":5,\"d\":4}],\"cafe_é\":2},\"mixed\":\"café ☕\",\"nested\":{\"x\":null,\"y\":true},\"z\":1}",
+  "auditSign": {
+    "priv_pkcs8_b64": "MC4CAQAwBQYDK2VwBCIEIALquWY/46emIDXcAicYHJaTlom9lvAzltTQhb00C+g0",
+    "pub_spki_b64": "MCowBQYDK2VwAyEA3xiHh6m1l34Uel0nPYxtRscqmJoWxEAMLna67JVfF+Q=",
+    "edgeId": "edge-1",
+    "records": [
+      { "prev": "", "bootEpoch": "b", "seq": 0, "ts": 1000, "event": { "doorId": "front", "granted": true, "reason": "granted", "mode": "offline" }, "hash": "H0" },
+      { "prev": "H0", "bootEpoch": "b", "seq": 1, "ts": 1001, "event": { "doorId": "front", "granted": false, "reason": "no-window", "mode": "offline" }, "hash": "H1" }
+    ],
+    "sig_b64": "a/HhnoAOMXx1DzXehOnYtHtYcfPFTzGMrNajJJjI8NBJ3wPq+GbPKSXZomovJHS0UOzSqG8S2SC3Ro8xu/BNBQ=="
+  }
 }

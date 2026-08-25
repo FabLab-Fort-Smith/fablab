@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from edge import (canonical_bytes, cred_hash, decide_offline, derive_index_key,
-                  in_window, verify_envelope)
+                  in_window, sign_audit_batch, verify_envelope)
 from edge.decide import REASON
 
 G = json.load(open(os.path.join(os.path.dirname(__file__), "goldens.json"), encoding="utf-8"))
@@ -50,6 +50,36 @@ def test_cred_hash_matches_js():
 
 def test_derive_index_key_matches_js_golden():
     assert base64.b64encode(derive_index_key("test-index-master-key", "edge-1")).decode() == G["edgeIndexKey_b64"]
+
+
+# ---- audit-batch signing (S6-b edge auth): byte-parity with the cloud verify (edgeAuditSig.js) --------
+def test_sign_audit_batch_matches_js_golden():
+    """Deterministic Ed25519 over identical canonical bytes → the exact signature the cloud test verifies."""
+    a = G["auditSign"]
+    assert sign_audit_batch(a["priv_pkcs8_b64"], a["edgeId"], a["records"]) == a["sig_b64"]
+
+
+def test_sign_audit_batch_binds_edgeid_and_records():
+    a = G["auditSign"]
+    base = sign_audit_batch(a["priv_pkcs8_b64"], a["edgeId"], a["records"])
+    # a different edgeId or any record change yields a different signature (anti-replay / anti-tamper)
+    assert sign_audit_batch(a["priv_pkcs8_b64"], "other", a["records"]) != base
+    mutated = json.loads(json.dumps(a["records"]))
+    mutated[0]["event"]["granted"] = False
+    assert sign_audit_batch(a["priv_pkcs8_b64"], a["edgeId"], mutated) != base
+
+
+def test_sign_audit_batch_refuses_non_ed25519_key():
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.hazmat.primitives.serialization import (Encoding, NoEncryption,
+                                                              PrivateFormat)
+    rsa_der = rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(
+        Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
+    try:
+        sign_audit_batch(base64.b64encode(rsa_der).decode(), "e", G["auditSign"]["records"])
+        assert False, "expected TypeError"
+    except TypeError:
+        pass
 
 
 # ---- decide_offline behavioral matrix (locally-signed envelopes) ------------------------------

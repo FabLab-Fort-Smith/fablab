@@ -11,6 +11,7 @@ import { newCardDoc, newDoorDoc } from "./class";
 import { decide, allowedDoorsForFacts } from "./policy";
 import { signAllowlist, signEnvelope, allowlistSigningReady } from "./allowlistCrypto";
 import { ALERT, ingestAuditBatch } from "./auditAnchor";
+import { verifyEdgeBatchSig } from "./edgeAuditSig";
 import { resolveConfig, PLUGIN_ID, PERM_ADMIN } from "./config";
 import { assertPermission } from "@/lib/plugins/permissions";
 import UsersService from "@/app/api/v1/users/service";
@@ -381,13 +382,27 @@ const Service = {
    * ingests), and ROUTES every anomaly to the audit log at its severity. Returns {accepted,duplicates,alerts}.
    * @param {{edgeId:string, records:Array}} args
    */
-  async ingestEdgeAudit({ edgeId, records } = {}) {
+  async ingestEdgeAudit({ edgeId, records, signature } = {}) {
     if (typeof edgeId !== "string" || !isSafeKey(edgeId) || edgeId.length > 128) {
       return { accepted: 0, duplicates: 0, alerts: [], rejected: "bad-edgeId" };
     }
     if (!Array.isArray(records) || records.length === 0) return { accepted: 0, duplicates: 0, alerts: [] };
     if (records.length > MAX_AUDIT_BATCH) return { accepted: 0, duplicates: 0, alerts: [], rejected: "batch-too-large" };
     if (!records.every(validAuditRecord)) return { accepted: 0, duplicates: 0, alerts: [], rejected: "malformed-record" };
+
+    // EDGE AUTH (#151): the batch must be signed by the edge's REGISTERED audit key, verified BEFORE the
+    // anchor check — so a relaying broker (or the internal bearer alone) cannot forge or suppress an
+    // edge's audit. Fail closed: an unregistered edge or a bad signature is rejected + alerted, nothing
+    // is read or persisted. `event`/records are still never logged (PII), only the outcome.
+    const pubSpki = await Model.getEdgeSigningKey(edgeId);
+    if (!pubSpki) {
+      auditLog("door-access.audit", { actor: { pluginId: PLUGIN_ID }, target: edgeId, outcome: "alert", severity: "high", alert: "unregistered-edge" });
+      return { accepted: 0, duplicates: 0, alerts: [], rejected: "unregistered-edge" };
+    }
+    if (typeof signature !== "string" || !verifyEdgeBatchSig(pubSpki, edgeId, records, signature)) {
+      auditLog("door-access.audit", { actor: { pluginId: PLUGIN_ID }, target: edgeId, outcome: "alert", severity: "high", alert: "bad-signature" });
+      return { accepted: 0, duplicates: 0, alerts: [], rejected: "bad-signature" };
+    }
 
     // CAS retry loop: read anchor + version, run the pure check, persist only if the version is unchanged.
     let result = null;
