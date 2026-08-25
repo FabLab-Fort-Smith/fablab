@@ -531,6 +531,24 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      split-brain double-grant, `nopreempt` rejoin-as-standby). Bench-drill on two hosts before relying on it.
 6. **S6 — Cloud audit anchor + admin UI.** Server-side seq/chain-tip **anchor** + dedup/gap-alert; the
    door-access admin UI shows tier + last status + the `edgeDeviceId`/`brokerId` bindings.
+   - **S6-a ✅** the audit-anchor core (`src/plugins/door-access-controller/auditAnchor.js`,
+     jest-testable): `ingestAuditBatch` recomputes each record's hash with the SAME canonical+SHA-256
+     contract as the edge (`audit.py`, cross-language byte-parity — golden-locked), verifies internal
+     linkage, then checks continuity vs a per-edge **anchor** `{bootEpoch,lastSeq,chainTip}` the cloud
+     controls (an edge can't rewrite it): dedup `(edgeId,bootEpoch,seq)`, and **alert** on GAP, chain-
+     FORK/bad-hash/broken-link/mixed-boot (TAMPER), TAIL_TRUNCATION (edge tip regressed below the anchor),
+     or BOOT_TRANSITION (reflash). **Fail-closed anchor discipline** (SEC review): the anchor advances
+     ONLY to a hash+link-verified, strictly-forward tip that links to the cloud's `chainTip` — any
+     tamper/fork/gap/tail-truncation alerts, accepts nothing, and leaves the trusted anchor untouched
+     (never rewound, never advanced across a gap). **Per-boot retention** keeps `(edgeId,bootEpoch)`
+     anchors so a reflash doesn't wipe a prior boot's final anchor and an old-boot replay is checked
+     against its retained anchor. Closes the S4b-a **F6** + S5 tail-truncation deferrals. 13 tests incl.
+     JS↔Py golden parity + the fail-closed matrix. (Distinguishing a genuine reflash from a spoofed new
+     boot, and authenticating the anchor genesis, need **S6-b** edge auth — BOOT_TRANSITION is a
+     security alert to correlate with an authorized reflash.)
+   - **S6-b** (next): wire it — the broker relays the edge store-and-forward audit up Link-B; a cloud
+     route ingests via `ingestAuditBatch` with a Mongo-backed anchor store + alerting; the door-access
+     **admin UI** (tier + last status + `edgeDeviceId`/`brokerId` bindings; WCAG a11y).
 7. **S7 — Parallel-run + cut-over (§10).** Run the full 4-rung ladder + HA drill on one door, then roll
    out door-by-door; retire the Pico units (reversible).
 
