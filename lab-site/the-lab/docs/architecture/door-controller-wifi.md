@@ -563,6 +563,14 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      signature → rejected + alerted, nothing read or persisted (registration is out-of-band admin/genesis,
      **not** TOFU). JS↔Py signature byte-parity via a golden vector (Py signs → JS verifies the exact
      bytes). +9 tests. (Genesis/reflash key provisioning + the admin register path = S6-b-a2.)
+   - **S6-b-a2 ✅** key **provisioning + registration** (genesis/reflash binding): edge
+     `crypto.generate_audit_keypair` + the `edge.provision_audit_key` CLI generate the device keypair
+     (private key written 0600, only the **public** key printed; refuses silent overwrite — a reflash is
+     deliberate); the admin registers it via the gated `edgeKey.register` action
+     (`Service.adminRegisterEdgeKey`, admin-only, validates a real Ed25519 SPKI, audits genesis vs.
+     **rotation** by key **fingerprint** — never the raw key), with `edgeKey.list` /
+     `Service.adminListEdgeKeys` surfacing registered edges (id + fingerprint + updatedAt only). +11
+     tests. **An edge can now be registered** so the transport slice below has a live, authenticated path.
    - **S6-b** (next): finish wiring the transport — the edge flushes signed pending audit up Link-A, the
      broker relays it up Link-B (with a cloud-down up-queue) and the socket-server calls the route; then
      the door-access **admin UI** (S6-b2: tier + last status + `edgeDeviceId`/`brokerId` bindings; a11y).
@@ -582,5 +590,6 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
 | 2026-08-23 | **Round-3 SEC re-review → APPROVE (converged). Fold 6 Low items: Buffer-not-String zeroization, broker-key site-wide blast-radius honesty + §3e protection, per-`doorId` anti-rollback high-water, CSPRNG-issued entropy floor, cloud-authorized bootEpoch reset, HA shares one `brokerId` (2 envelope copies). +tests 9/11/12/13 tightened, +test 14.** | app dev |
 | 2026-08-23 | **Owner-accepted: promote `status: current`; §11 open questions → binding decisions (active/standby HA, 24h/72h TTLs, dedicated Proxmox host, scripted CA provisioning + master-rotation re-key, ≥7-day audit buffer, Pi Zero W + RTC HAT, ≥128-bit CSPRNG floor + NFC accepted-risk, F7 ships in first rollout); add §13 implementation slice plan (S1–S7).** | app dev |
 | 2026-08-24 | **Build progress + S2 sub-slicing: S1/S2a/S2b-1 landed; add the `brokerConfig` fail-closed loader (S2b prep). Lock S2 transport decisions — cert material by file path, app-builds→cloud-relays envelopes, `wss://` mutually-authed Link-B — and fold the S2b-2 transport (mTLS Link-A listener + Link-B uplink + cloud sender) into S2c so it's built + integration-tested with the container.** | app dev |
+| 2026-08-25 | **S6-b-a2 ✅ key provisioning + registration (genesis/reflash binding): edge `generate_audit_keypair` + `edge.provision_audit_key` CLI (priv 0600, prints only pub, refuses silent overwrite); gated admin `edgeKey.register` (`Service.adminRegisterEdgeKey`, admin-only, validates Ed25519 SPKI, audits genesis vs rotation by fingerprint — never the raw key) + `edgeKey.list`/`adminListEdgeKeys` (id+fingerprint+updatedAt only). An edge can now be registered → transport slice has a live authenticated path. +11 tests.** | app dev |
 | 2026-08-25 | **S6-b-a ✅ edge-auth gate (#151): dedicated per-edge Ed25519 audit-signing key — edge signs `canonical({edgeId,records})` (`crypto.sign_audit_batch`), cloud verifies (`edgeAuditSig.verifyEdgeBatchSig`) against a REGISTERED pubkey (`Model.getEdgeSigningKey`/`registerEdgeSigningKey`, coll `doorAccessEdgeKeys`) BEFORE the anchor check → a relaying broker can't forge/suppress audit; non-repudiation. Fail-closed on unregistered-edge/bad-signature (no TOFU). JS↔Py golden signature parity. +9 tests. Genesis provisioning + admin register = S6-b-a2.** | app dev |
 | 2026-08-25 | **S6-b1 ✅ cloud audit ingest: `Service.ingestEdgeAudit` runs the fail-closed anchor check against a Mongo per-edge anchor (`getAuditAnchor`/`casAuditAnchor` optimistic-concurrency CAS + retry), boundary-validates the batch (safe `edgeId`, 1000-record cap, per-record type check), routes alerts to `auditLog` at severity (no scan code), reached via internal `POST /api/internal/broker-audit` (bearer; 400/409/200). +16 tests. S6-b remainder = transport wiring + S6-b2 admin UI.** | app dev |

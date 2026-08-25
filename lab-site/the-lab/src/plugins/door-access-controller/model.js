@@ -199,6 +199,12 @@ export async function registerEdgeSigningKey(edgeId, pubSpki) {
     .updateOne({ _id: edgeId }, { $set: { pubSpki, updatedAt: new Date().toISOString() } }, { upsert: true });
 }
 
+/** List all registered edge signing keys (raw docs — the service sanitizes to a fingerprint for the UI). */
+export async function listEdgeKeys() {
+  await cards();
+  return (await database()).collection(EDGE_KEYS).find({}).sort({ _id: 1 }).toArray();
+}
+
 const Model = {
   findCardByBlindIndex,
   upsertCard,
@@ -215,6 +221,7 @@ const Model = {
   casAuditAnchor,
   getEdgeSigningKey,
   registerEdgeSigningKey,
+  listEdgeKeys,
 };
 
 export default Model;

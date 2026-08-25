@@ -11,6 +11,8 @@ jest.mock("@/plugins/door-access-controller/service", () => ({
     adminSavePolicy: jest.fn(async () => ({ ok: true })),
     adminRevokeCard: jest.fn(async () => ({ ok: true })),
     refreshAllowlist: jest.fn(async () => ({ pushed: true })),
+    adminRegisterEdgeKey: jest.fn(async () => ({ ok: true, edgeId: "front-01", fingerprint: "abc123", rotated: false })),
+    adminListEdgeKeys: jest.fn(async () => [{ edgeId: "front-01", fingerprint: "abc123", updatedAt: "2026-08-25" }]),
   },
 }));
 
@@ -50,6 +52,19 @@ test("POST door.upsert → delegates, 200", async () => {
   const res = await post({ action: "door.upsert", doorId: "front", deviceId: "d1" });
   expect(res.status).toBe(200);
   expect(Service.adminUpsertDoor).toHaveBeenCalledWith({ userID: "admin-1", role: "admin" }, expect.objectContaining({ doorId: "front" }));
+});
+
+test("POST edgeKey.register → delegates, 200", async () => {
+  const res = await post({ action: "edgeKey.register", edgeId: "front-01", pubSpki: "MCowB..." });
+  expect(res.status).toBe(200);
+  expect(Service.adminRegisterEdgeKey).toHaveBeenCalledWith({ userID: "admin-1", role: "admin" }, expect.objectContaining({ edgeId: "front-01", pubSpki: "MCowB..." }));
+});
+
+test("POST edgeKey.list → delegates, 200 { edges }", async () => {
+  const res = await post({ action: "edgeKey.list" });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ edges: [{ edgeId: "front-01", fingerprint: "abc123", updatedAt: "2026-08-25" }] });
+  expect(Service.adminListEdgeKeys).toHaveBeenCalledWith({ userID: "admin-1", role: "admin" });
 });
 
 test("POST unknown action → 400", async () => {

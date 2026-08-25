@@ -25,7 +25,9 @@ import hmac
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives.serialization import load_der_private_key, load_der_public_key
+from cryptography.hazmat.primitives.serialization import (Encoding, NoEncryption, PrivateFormat,
+                                                          PublicFormat, load_der_private_key,
+                                                          load_der_public_key)
 
 from .canonical import canonical_bytes
 
@@ -44,6 +46,27 @@ def verify_envelope(signed: dict, verify_key_spki_b64: str) -> bool:
         return True
     except Exception:  # noqa: BLE001 — any failure (bad sig/key/shape) must deny, never raise
         return False
+
+
+def generate_audit_keypair() -> tuple:
+    """Generate a fresh per-edge Ed25519 audit keypair at provisioning (genesis / reflash — #151).
+
+    The PRIVATE key stays on the device (like `edgeIndexKey`); the PUBLIC key is handed to an admin to
+    REGISTER on the cloud (`Service.adminRegisterEdgeKey`) so the cloud can verify this edge's audit. A
+    reflash generates a NEW keypair whose public key must be re-registered (an audited key rotation) —
+    that re-registration is the genesis/reflash trust binding.
+
+    @returns (private_pkcs8_der_b64, public_spki_der_b64) — the same encodings `sign_audit_batch` /
+        `edgeAuditSig.verifyEdgeBatchSig` consume.
+    """
+    priv = Ed25519PrivateKey.generate()
+    priv_b64 = base64.b64encode(
+        priv.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
+    ).decode("ascii")
+    pub_b64 = base64.b64encode(
+        priv.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+    ).decode("ascii")
+    return priv_b64, pub_b64
 
 
 def sign_audit_batch(private_key_pkcs8_der_b64: str, edge_id: str, records: list) -> str:

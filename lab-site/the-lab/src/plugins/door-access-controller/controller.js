@@ -88,7 +88,8 @@ export default class DoorAccessController {
     }
   };
 
-  /** POST { action, ...payload } — door.upsert | policy.save | card.revoke | allowlist.refresh. */
+  /** POST { action, ...payload } — door.upsert | policy.save | card.revoke | allowlist.refresh |
+   *  edgeKey.register | edgeKey.list. */
   static adminAction = async (req) => {
     try {
       const session = await auth();
@@ -102,6 +103,10 @@ export default class DoorAccessController {
           return json(await Service.adminSavePolicy(actor, body), 200);
         case "card.revoke":
           return json(await Service.adminRevokeCard(actor, body), 200);
+        case "edgeKey.register":
+          return json(await Service.adminRegisterEdgeKey(actor, body), 200);
+        case "edgeKey.list":
+          return json({ edges: await Service.adminListEdgeKeys(actor) }, 200);
         case "allowlist.refresh": {
           // reuse the same permission gate as the other admin actions
           await Service.adminOverview(actor); // asserts admin (throws 403 otherwise)
