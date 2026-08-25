@@ -21,6 +21,8 @@ paths = [
   '''docs/game/.*''',
   # --- Confirmed false positives (triaged in The-Lab, Refs #111) ---
   '''test/.*''',                 # fixtures use deliberately fake keys (e.g. AUTH_SECRET="a")
+  '''vps/firmware/.*/tests/.*''', # edge-core golden vectors: a PUBLIC verify key + a signature + a
+                                  # test-master-derived HMAC index key — no real secret (S4a)
   '''src/lib/constants\.js''',   # public Discord channel/role snowflake IDs (client-visible)
   '''\.gitleaks\.toml''',        # the config files carry example secret patterns
 ]
