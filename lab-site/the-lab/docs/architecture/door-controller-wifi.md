@@ -504,10 +504,19 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      tamper-evidence, `pending`/`ack` cursor, no PII — F6), `clock.py` `TimeSource` (persisted monotonic
      floor — F4; backwards/unset/non-finite clock → not synced/deny, floor never lowered). 16 pytest
      (37 total in the edge suite). Closes the S4a #151 carry-forwards (atomic hwm, finite/trusted clock).
-   - **S4b-2** (next): the **hardware/transport runtime** wiring these cores — NFC read + strike-relay
-     GPIO + mTLS client to the broker VIP + fail-secure supervisor (reconnect/backoff, heartbeat,
-     `WatchdogSec`, OTA poll/commit) + systemd unit. Pin `cryptography` exact+hash on device; never log
-     the code. Bench one edge.
+   - **S4b-2 ✅** the runtime **composition** (`runtime.py` `EdgeRuntime.handle_scan` + `protocol.py`):
+     scan → decide → actuate → audit over injected collaborators. Edge ladder = ask the broker over the
+     mTLS uplink first, honor its **answer incl. DENY** (authoritative, no offline second-chance), fall to
+     rung-3 `decide_offline` **only when the broker is unreachable**; never fail open (no grant ⇒ no
+     pulse); code never logged/audited. `new_boot_epoch()` = CSPRNG per-boot UUID (obligation). Client
+     Link-A framing (`build_scan_msg` requestId+nonce; `parse_result` deny-by-default). 12 tests
+     (53 edge-suite): online-grant/deny-authoritative, offline-on-unreachable/exception, no-envelope,
+     wrong-code, unsynced-clock, relay-failure-logged, no-PII.
+   - **S4b-3** (next): the concrete **hardware/transport adapters + entry point** — NFC reader, strike-relay
+     GPIO, the mTLS socket `uplink` (using `protocol.py`), fail-secure supervisor (reconnect/backoff,
+     heartbeat, `WatchdogSec`, OTA poll/commit), `run_edge.py` main, audit compaction/rotation +
+     append-failure policy, systemd unit. Pin `cryptography` exact+hash on device; never log the code.
+     Bench one edge.
 5. **S5 — HA.** Second broker container + keepalived **VIP**, shared `brokerId`; failover drill (kill
    active → doors keep working via rung 3, VIP moves, no split-brain double-grant).
 6. **S6 — Cloud audit anchor + admin UI.** Server-side seq/chain-tip **anchor** + dedup/gap-alert; the

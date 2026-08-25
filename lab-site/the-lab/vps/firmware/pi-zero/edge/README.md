@@ -37,9 +37,22 @@ The security-relevant, filesystem-backed pieces the S4b-2 runtime wires (still h
   `(now_ms, time_synced)` for `decide_offline`; a backwards/unset/non-finite clock is **not synced**
   (deny) and never lowers the floor.
 
-**S4b-2 (next):** the hardware/transport runtime — NFC read, strike-relay GPIO, mTLS client to the broker
-VIP, the supervisor loop (reconnect/backoff, heartbeat, `WatchdogSec`, OTA poll), and systemd wiring —
-composing these cores. Bench-tested on a real Pi.
+## Composition (S4b-2)
+- `runtime.py` `EdgeRuntime.handle_scan(code)` — the scan → decide → actuate → audit flow (functional
+  shell over injected `uplink`/`relay`/`store`/`audit`/`clock`). The edge ladder: ask the broker over the
+  mTLS uplink first and honor its **answer, including a DENY** (authoritative — no offline second-chance);
+  fall to the local rung-3 `decide_offline` **only when the broker is unreachable** (uplink None/raises).
+  Never fail open (no grant ⇒ no pulse); the scanned `code` is never logged/audited/returned. Decides
+  against the STORED envelope with `hwm_version=-1` (anti-rollback is enforced at PUT, S4b-a).
+  `new_boot_epoch()` = a CSPRNG per-boot UUID for the audit chain.
+- `protocol.py` — client Link-A framing (`build_scan_msg` with `requestId`+`nonce` for the broker replay
+  guard; `parse_result` deny-by-default).
+
+**S4b-3 (next):** the concrete hardware/transport adapters + entry point — NFC reader, strike-relay GPIO,
+the mTLS socket `uplink` (using `protocol.py` framing) + supervisor loop (reconnect/backoff, heartbeat,
+`WatchdogSec`, OTA poll), `run_edge.py` main (wires real adapters + cores, generates the `bootEpoch`,
+pins `cryptography` exact+hash), audit compaction/rotation + append-failure policy, and the systemd unit.
+Bench-tested on a real Pi.
 
 ## Tests
 `edge/tests/test_edge_core.py` (pytest): cross-language parity against **JS golden vectors**
