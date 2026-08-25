@@ -36,7 +36,9 @@ export function makeRequestBrokerAudit({ env = process.env, fetchImpl, timeoutMs
         signal: controller.signal,
       });
       if (!r) return "deferred";
-      if (r.ok) { log("audit.ingested", { edgeId }); return "accepted"; }
+      // ONLY an explicit 200 advances the edge's ack cursor (SEC #174 F1) — not any 2xx. A future 202/204
+      // from the route must NOT be read as "safe to drop the batch"; fail-secure to deferred instead.
+      if (r.status === 200) { log("audit.ingested", { edgeId }); return "accepted"; }
       if (r.status === 400) { log("audit.rejected", { edgeId, status: 400 }); return "rejected"; } // won't retry-fix
       log("audit.deferred", { edgeId, status: r.status }); // 409 conflict / 5xx → retry later
       return "deferred";

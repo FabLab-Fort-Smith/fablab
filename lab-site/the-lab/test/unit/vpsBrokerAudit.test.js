@@ -28,6 +28,13 @@ test("HTTP → verdict mapping: 200→accepted, 400→rejected, 409/5xx→deferr
   expect(await at(503)).toBe("deferred");
 });
 
+test("only an EXPLICIT 200 accepts — other 2xx (201/202/204) → deferred (SEC #174 F1)", async () => {
+  const at = (status) => makeRequestBrokerAudit({ env: ENV, fetchImpl: async () => res(status) })(BATCH);
+  expect(await at(201)).toBe("deferred");
+  expect(await at(202)).toBe("deferred");
+  expect(await at(204)).toBe("deferred");
+});
+
 test("network error / timeout / null response → deferred (never throws, edge keeps the batch)", async () => {
   expect(await makeRequestBrokerAudit({ env: ENV, fetchImpl: async () => { throw new Error("ECONNREFUSED"); } })(BATCH)).toBe("deferred");
   expect(await makeRequestBrokerAudit({ env: ENV, fetchImpl: async () => null })(BATCH)).toBe("deferred");
