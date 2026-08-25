@@ -98,6 +98,20 @@ def test_provision_cli_refuses_to_overwrite_without_force(tmp_path):
     assert out.read_text() != first  # a new key
 
 
+def test_provision_cli_refuses_to_follow_a_symlink(tmp_path):
+    """O_NOFOLLOW: a pre-planted symlink at --out must not redirect the private-key write (SEC #171 Low-3)."""
+    from edge.provision_audit_key import main
+    target = tmp_path / "attacker_target"
+    link = tmp_path / "audit_key.b64"
+    os.symlink(target, link)  # dangling symlink → os.path.exists is False, so the overwrite guard passes
+    try:
+        main(["--out", str(link), "--edge-id", "e"])
+        assert False, "expected the symlinked write to be refused"
+    except OSError:
+        pass
+    assert not target.exists()  # the key was NOT written through the link
+
+
 def test_generate_audit_keypair_roundtrips_and_is_fresh():
     """A provisioned keypair signs a batch its own public key verifies; each call is distinct."""
     from cryptography.hazmat.primitives.serialization import load_der_public_key

@@ -91,7 +91,7 @@ test("adminRegisterEdgeKey validates edgeId + a real Ed25519 pubSpki (400, no wr
 });
 
 test("adminRegisterEdgeKey genesis: registers + audits edge-key-register, never logs the raw key", async () => {
-  Model.getEdgeSigningKey.mockResolvedValue(null); // first time
+  Model.registerEdgeSigningKey.mockResolvedValue(null); // atomic upsert reports no prior key
   const pub = edPub();
   const res = await Service.adminRegisterEdgeKey(ADMIN, { edgeId: "front-01", pubSpki: pub });
   expect(res).toMatchObject({ ok: true, edgeId: "front-01", rotated: false });
@@ -101,15 +101,23 @@ test("adminRegisterEdgeKey genesis: registers + audits edge-key-register, never 
   expect(JSON.stringify(auditLog.mock.calls)).not.toContain(pub); // fingerprint only, never the raw key
 });
 
-test("adminRegisterEdgeKey rotation: a different key audits edge-key-rotate with a prior fingerprint", async () => {
+test("adminRegisterEdgeKey rotation: a different prior key audits edge-key-rotate with a prior fingerprint", async () => {
   const oldPub = edPub(); const newPub = edPub();
-  Model.getEdgeSigningKey.mockResolvedValue(oldPub);
+  Model.registerEdgeSigningKey.mockResolvedValue(oldPub); // prior differs → rotation
   const res = await Service.adminRegisterEdgeKey(ADMIN, { edgeId: "front-01", pubSpki: newPub });
   expect(res.rotated).toBe(true);
   const call = auditLog.mock.calls.find((c) => c[1].outcome === "edge-key-rotate");
   expect(call).toBeTruthy();
   expect(call[1].priorFingerprint).toMatch(/^[0-9a-f]{16}$/);
   expect(call[1].fingerprint).not.toBe(call[1].priorFingerprint);
+});
+
+test("adminRegisterEdgeKey re-register (same key) is a no-op outcome, not a false genesis (SEC #171 Low-2)", async () => {
+  const pub = edPub();
+  Model.registerEdgeSigningKey.mockResolvedValue(pub); // prior === submitted key
+  const res = await Service.adminRegisterEdgeKey(ADMIN, { edgeId: "front-01", pubSpki: pub });
+  expect(res.rotated).toBe(false);
+  expect(auditLog).toHaveBeenCalledWith("door-access.admin", expect.objectContaining({ outcome: "edge-key-reregister" }));
 });
 
 test("adminListEdgeKeys is admin-only and returns id+fingerprint+updatedAt only (no raw key)", async () => {

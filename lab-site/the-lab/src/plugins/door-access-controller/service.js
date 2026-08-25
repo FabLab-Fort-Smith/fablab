@@ -527,12 +527,14 @@ const Service = {
     } catch {
       throw badRequest("pubSpki must be a base64 Ed25519 SPKI public key");
     }
-    const prior = await Model.getEdgeSigningKey(edgeId); // genesis vs. rotation (audited either way)
+    // Atomic upsert returns the PRIOR key (no read-then-write TOCTOU — SEC #171 Low-1); the model
+    // re-validates inputs (defense in depth). Classify: genesis (new edge), no-op re-register (same
+    // key), or rotation (different key — a trust re-anchor).
+    const prior = await Model.registerEdgeSigningKey(edgeId, pubSpki);
     const rotated = prior !== null && prior !== pubSpki;
-    await Model.registerEdgeSigningKey(edgeId, pubSpki); // model re-validates (defense in depth)
+    const outcome = prior === null ? "edge-key-register" : rotated ? "edge-key-rotate" : "edge-key-reregister";
     auditLog("door-access.admin", {
-      actor: { userID: actor.userID }, target: edgeId,
-      outcome: rotated ? "edge-key-rotate" : "edge-key-register",
+      actor: { userID: actor.userID }, target: edgeId, outcome,
       fingerprint: edgeKeyFingerprint(pubSpki),
       priorFingerprint: prior ? edgeKeyFingerprint(prior) : null,
     });

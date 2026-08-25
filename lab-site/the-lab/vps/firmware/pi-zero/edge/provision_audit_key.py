@@ -36,8 +36,9 @@ def main(argv=None) -> int:
 
     priv_b64, pub_b64 = generate_audit_keypair()
 
-    # Write the private key with least privilege: create 0600, never world/group readable.
-    fd = os.open(args.out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    # Write the private key with least privilege: create 0600, never world/group readable, and refuse to
+    # follow a symlink at the target (O_NOFOLLOW) so a pre-planted link can't redirect the key write.
+    fd = os.open(args.out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
     try:
         os.write(fd, (priv_b64 + "\n").encode("ascii"))
     finally:

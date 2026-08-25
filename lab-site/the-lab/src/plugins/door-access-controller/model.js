@@ -177,7 +177,10 @@ export async function getEdgeSigningKey(edgeId) {
  * depth (never trust a future caller to be safe — SEC #170 F2). `edgeId` must be a safe Mongo `_id`
  * (no `$`/`.`/reserved key → operator injection / poisoned id) and `pubSpki` must be a real Ed25519 SPKI
  * (a malformed stored key would silently turn every future batch from that edge into a bad-signature).
+ * Returns the PRIOR public key (or null on genesis) from a single atomic upsert, so the caller can
+ * classify genesis vs. rotation truthfully with no read-then-write TOCTOU (SEC #171 Low-1).
  * @param {string} edgeId @param {string} pubSpki SPKI DER, base64
+ * @returns {Promise<string|null>} the previously-registered pubSpki, or null if this is the first
  * @throws {Error} on an unsafe edgeId or a non-Ed25519 / malformed public key
  */
 export async function registerEdgeSigningKey(edgeId, pubSpki) {
@@ -194,9 +197,15 @@ export async function registerEdgeSigningKey(edgeId, pubSpki) {
     throw new Error("registerEdgeSigningKey: pubSpki is not a valid Ed25519 SPKI key");
   }
   await cards();
-  await (await database())
+  const prior = await (await database())
     .collection(EDGE_KEYS)
-    .updateOne({ _id: edgeId }, { $set: { pubSpki, updatedAt: new Date().toISOString() } }, { upsert: true });
+    .findOneAndUpdate(
+      { _id: edgeId },
+      { $set: { pubSpki, updatedAt: new Date().toISOString() } },
+      { upsert: true, returnDocument: "before" } // atomically read the old value + write the new
+    );
+  // mongodb driver v6 returns the pre-image document directly (null on insert).
+  return prior && typeof prior.pubSpki === "string" ? prior.pubSpki : null;
 }
 
 /** List all registered edge signing keys (raw docs — the service sanitizes to a fingerprint for the UI). */
