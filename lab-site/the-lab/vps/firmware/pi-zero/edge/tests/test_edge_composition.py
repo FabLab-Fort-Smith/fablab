@@ -20,11 +20,20 @@ def test_build_scan_msg_shape():
 
 
 def test_parse_result_ok_and_denied_and_garbage():
-    assert parse_result('{"t":"result","granted":true,"reason":"granted"}') == {"granted": True, "reason": "granted"}
-    assert parse_result('{"t":"result","granted":false,"reason":"revoked"}') == {"granted": False, "reason": "revoked"}
+    ok = parse_result('{"t":"result","granted":true,"reason":"granted","requestId":"r1","nonce":"n1"}')
+    assert ok == {"granted": True, "reason": "granted", "requestId": "r1", "nonce": "n1"}
+    assert parse_result('{"t":"result","granted":false,"reason":"revoked"}')["granted"] is False
     assert parse_result('{"t":"pong"}') is None          # not a result
     assert parse_result("not json") is None
     assert parse_result('{"t":"result"}')["granted"] is False  # missing granted → deny-by-default
+
+
+def test_parse_result_strict_boolean_grant(tmp_path=None):
+    # F1: a truthy-but-non-boolean granted must NOT be a grant.
+    for bad in ('{"t":"result","granted":"yes"}', '{"t":"result","granted":1}', '{"t":"result","granted":[1]}'):
+        assert parse_result(bad)["granted"] is False
+    # a non-string reason is dropped to None (not echoed)
+    assert parse_result('{"t":"result","granted":true,"reason":42}')["reason"] is None
 
 
 def test_boot_epoch_unique():
@@ -143,6 +152,25 @@ def test_relay_failure_on_grant_is_logged_not_crashing(tmp_path):
     d = rt.handle_scan("CODEONE")            # authz granted, actuation failed
     assert d["granted"] is True             # authz result stands
     assert any(e == "relay.error" for e, _ in logs)
+
+
+def test_online_malformed_truthy_grant_denies(tmp_path):
+    # F1: the runtime online branch must not grant on a truthy-non-boolean broker reply.
+    for i, bad in enumerate(({"granted": "yes", "reason": "x"}, {"granted": 1, "reason": "x"}, {"granted": [1]})):
+        relay = FakeRelay()
+        rt, _, _ = _runtime(tmp_path / f"c{i}", FakeUplink(bad), relay)  # own dir per case
+        d = rt.handle_scan("CODEONE")
+        assert d["granted"] is False and d["mode"] == "online" and relay.pulses == 0
+
+
+def test_nonfinite_audit_clock_does_not_drop_record(tmp_path):
+    # F2: an inf clock must not raise (int(inf)) and drop the audit record.
+    rt, audit, logs = _runtime(tmp_path, FakeUplink({"granted": True, "reason": "granted"}),
+                               system_ms=float("inf"))
+    d = rt.handle_scan("CODEONE")
+    assert d["granted"] is True
+    assert audit.pending()[-1]["ts"] == 0                 # recorded with a safe fallback ts
+    assert not any(e == "audit.error" for e, _ in logs)   # not dropped
 
 
 def test_code_never_audited_or_logged(tmp_path):

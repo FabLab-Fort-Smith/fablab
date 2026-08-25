@@ -27,4 +27,12 @@ def parse_result(line):
         return None
     if not isinstance(m, dict) or m.get("t") != "result":
         return None
-    return {"granted": bool(m.get("granted")), "reason": m.get("reason")}
+    # STRICT boolean: a truthy-but-non-boolean granted (e.g. "yes"/1/[1]) must NOT become a grant —
+    # deny-by-default on a malformed shape (mirrors the broker's typeof-boolean check). Also surface
+    # requestId/nonce so the S4b-3 uplink adapter can correlate the reply to the scan it sent.
+    return {
+        "granted": m.get("granted") is True,
+        "reason": m.get("reason") if isinstance(m.get("reason"), str) else None,
+        "requestId": m.get("requestId"),
+        "nonce": m.get("nonce"),
+    }

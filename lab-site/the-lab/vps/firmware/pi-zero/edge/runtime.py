@@ -10,6 +10,7 @@ ONLY when the broker is UNREACHABLE (uplink returns None / raises). NEVER fail o
 The scanned `code` is Restricted/PII — it is never logged, audited, or returned.
 """
 
+import math
 import uuid
 
 from .decide import decide_offline
@@ -62,7 +63,8 @@ class EdgeRuntime:
             res = None
 
         if res is not None:
-            decision = {"granted": bool(res.get("granted")), "reason": res.get("reason"), "mode": "online"}
+            # STRICT boolean (F1): a truthy-non-bool granted must not be laundered into a grant.
+            decision = {"granted": res.get("granted") is True, "reason": res.get("reason"), "mode": "online"}
         else:
             decision = self._decide_offline(code)  # rung-3, only when the broker is unreachable
 
@@ -74,9 +76,12 @@ class EdgeRuntime:
         # Audit the authorization outcome (no PII). AuditLog projects to {doorId,granted,reason,mode}.
         try:
             system_ms, _ = self.now_provider()
+            # F2: guard a non-finite clock (int(inf) raises) so the audit record isn't dropped; the
+            # timestamp is informational (not a security decision), so 0 on a pathological clock is fine.
+            ts = int(system_ms) if isinstance(system_ms, (int, float)) and not isinstance(system_ms, bool) and math.isfinite(system_ms) else 0
             self.audit.append(
                 {"doorId": self.door_id, "granted": decision["granted"], "reason": decision["reason"], "mode": decision["mode"]},
-                ts_ms=int(system_ms) if isinstance(system_ms, (int, float)) and system_ms == system_ms else 0,
+                ts_ms=ts,
             )
         except Exception as e:  # noqa: BLE001 — never let an audit-write failure block the decision return
             self.log("audit.error", {"doorId": self.door_id, "reason": str(e)})
