@@ -7,7 +7,7 @@ The runtime (NFC/GPIO/mTLS client/supervisor/RTC/store-and-forward audit) is S4b
 from .audit import AuditLog
 from .canonical import canonical_bytes
 from .clock import TimeSource
-from .crypto import cred_hash, derive_index_key, verify_envelope
+from .crypto import cred_hash, derive_index_key, sign_audit_batch, verify_envelope
 from .decide import REASON, decide_offline
 from .protocol import build_scan_msg, parse_result
 from .runtime import EdgeRuntime, new_boot_epoch
@@ -19,6 +19,7 @@ __all__ = [
     "verify_envelope",
     "cred_hash",
     "derive_index_key",
+    "sign_audit_batch",
     "in_window",
     "decide_offline",
     "REASON",

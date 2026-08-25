@@ -22,12 +22,16 @@ export async function POST(req) {
         const body = await req.json().catch(() => null);
         const edgeId = body && typeof body.edgeId === 'string' ? body.edgeId : null;
         const records = body && Array.isArray(body.records) ? body.records : null;
+        const signature = body && typeof body.signature === 'string' ? body.signature : null;
         if (!edgeId || !records) {
             return NextResponse.json({ error: 'edgeId and records[] are required' }, { status: 400 });
         }
-        const result = await Service.ingestEdgeAudit({ edgeId, records });
-        // A boundary rejection (bad-edgeId / batch-too-large / malformed-record) is a 400; an accepted
-        // batch (even one carrying tamper ALERTS — those are surfaced, not an HTTP error) is 200.
+        // The edge-batch signature is verified inside the service against the edge's registered key
+        // (fail-closed: a missing/bad signature → rejected, not an ingest). We pass it through as-is.
+        const result = await Service.ingestEdgeAudit({ edgeId, records, signature });
+        // A boundary/auth rejection (bad-edgeId / batch-too-large / malformed-record / unregistered-edge /
+        // bad-signature) is a 400; an accepted batch (even one carrying tamper ALERTS — those are
+        // surfaced, not an HTTP error) is 200.
         if (result.rejected && result.rejected !== 'conflict') {
             return NextResponse.json(result, { status: 400 });
         }

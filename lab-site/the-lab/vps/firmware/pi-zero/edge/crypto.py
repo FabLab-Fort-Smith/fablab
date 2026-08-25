@@ -7,8 +7,15 @@ Byte-parity with the cloud/broker (door-controller-wifi.md §2):
     — matches `recipientIndexKey`. The edge normally holds its edgeIndexKey PROVISIONED (never the
     master); derive is here only for provisioning tools / parity tests.
 
-The edge holds only its own `edgeIndexKey` + the PUBLIC verify key — never the master, never a private
-signing key (F1). Uses `cryptography` (pyca); HMAC/SHA via stdlib.
+The edge holds its own `edgeIndexKey` + the PUBLIC allowlist verify key — never the allowlist master
+or its private signing key (F1; the cloud signs allowlist envelopes, the edge only verifies them).
+
+It ALSO holds one dedicated per-edge Ed25519 AUDIT-signing private key (S6-b edge auth): the edge signs
+its own store-and-forward audit batches with it so the cloud can verify authorship + integrity BEFORE
+ingest — closing broker-compromise (a relaying broker cannot forge or suppress an edge's audit) and
+giving non-repudiation. This key signs ONLY the edge's own audit; it grants no access authority.
+
+Uses `cryptography` (pyca); HMAC/SHA via stdlib.
 """
 
 import base64
@@ -16,9 +23,9 @@ import hashlib
 import hmac
 
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives.serialization import load_der_public_key
+from cryptography.hazmat.primitives.serialization import load_der_private_key, load_der_public_key
 
 from .canonical import canonical_bytes
 
@@ -37,6 +44,24 @@ def verify_envelope(signed: dict, verify_key_spki_b64: str) -> bool:
         return True
     except Exception:  # noqa: BLE001 — any failure (bad sig/key/shape) must deny, never raise
         return False
+
+
+def sign_audit_batch(private_key_pkcs8_der_b64: str, edge_id: str, records: list) -> str:
+    """Sign a store-and-forward audit batch with the edge's dedicated Ed25519 audit key.
+
+    Signs `canonical_bytes({"edgeId": edge_id, "records": records})` — byte-parity with the cloud verify
+    (`edgeAuditSig.verifyEdgeBatchSig`), which recomputes the SAME canonical bytes and checks this
+    signature against the edge's REGISTERED public key before running the anchor check. Binding `edgeId`
+    into the signed bytes stops a captured batch being replayed under another edge's id.
+
+    @param private_key_pkcs8_der_b64  the edge's audit signing key (PKCS#8 DER, base64) — provisioned on
+        the device like `edgeIndexKey`, never leaves it.
+    @returns the detached signature, base64.
+    """
+    pk = load_der_private_key(base64.b64decode(private_key_pkcs8_der_b64), password=None)
+    if not isinstance(pk, Ed25519PrivateKey):  # refuse to sign with a non-Ed25519 key
+        raise TypeError("audit signing key must be Ed25519")
+    return base64.b64encode(pk.sign(canonical_bytes({"edgeId": edge_id, "records": records}))).decode("ascii")
 
 
 def cred_hash(edge_index_key: bytes, code: str) -> str:

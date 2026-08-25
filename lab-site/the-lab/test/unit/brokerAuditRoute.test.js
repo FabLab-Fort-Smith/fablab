@@ -15,6 +15,7 @@ const post = (headers, body) => POST(new Request("http://lab.test/api/internal/b
   body: body === undefined ? undefined : JSON.stringify(body),
 }));
 const REC = [{ prev: "", bootEpoch: "b", seq: 0, ts: 1, event: {}, hash: "h" }];
+const SIG = "edge-batch-signature-b64";
 
 beforeAll(() => { process.env.INTERNAL_API_SECRET = SECRET; });
 beforeEach(() => jest.clearAllMocks());
@@ -31,11 +32,16 @@ test("authed but missing edgeId or records → 400", async () => {
   expect(Service.ingestEdgeAudit).not.toHaveBeenCalled();
 });
 
-test("valid call → 200, delegates to the service", async () => {
-  const res = await post({ authorization: `Bearer ${SECRET}` }, { edgeId: "edge-1", records: REC });
+test("valid call → 200, delegates to the service (edgeId, records, signature passed through)", async () => {
+  const res = await post({ authorization: `Bearer ${SECRET}` }, { edgeId: "edge-1", records: REC, signature: SIG });
   expect(res.status).toBe(200);
   expect(await res.json()).toMatchObject({ accepted: 1 });
-  expect(Service.ingestEdgeAudit).toHaveBeenCalledWith({ edgeId: "edge-1", records: REC });
+  expect(Service.ingestEdgeAudit).toHaveBeenCalledWith({ edgeId: "edge-1", records: REC, signature: SIG });
+});
+
+test("a non-string signature is passed as null (service enforces the auth, fail-closed)", async () => {
+  await post({ authorization: `Bearer ${SECRET}` }, { edgeId: "edge-1", records: REC, signature: 123 });
+  expect(Service.ingestEdgeAudit).toHaveBeenCalledWith({ edgeId: "edge-1", records: REC, signature: null });
 });
 
 test("an accepted batch carrying tamper alerts is still 200 (alerts surfaced, not an HTTP error)", async () => {
