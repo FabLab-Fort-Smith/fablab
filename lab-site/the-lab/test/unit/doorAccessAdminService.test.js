@@ -26,6 +26,7 @@ beforeEach(() => {
   Model.listDoors.mockResolvedValue([{ doorId: "front", deviceId: "d1", enabled: true }]);
   Model.getPolicyDoc.mockResolvedValue({ rules: [], accountOverrides: {} });
   Model.listCards.mockResolvedValue([{ userID: "u1", codeEnc: "IV:TAG:CT", bi: "beef", credentialType: "nfc", status: "active", createdAt: "2026-01-01" }]);
+  Model.listEdgeKeys.mockResolvedValue([]);
 });
 
 test("adminOverview requires admin", async () => {
@@ -37,6 +38,14 @@ test("adminOverview sanitizes cards (no codeEnc / bi leak)", async () => {
   expect(out.doors).toHaveLength(1);
   expect(out.cards[0]).toEqual({ userID: "u1", credentialType: "nfc", status: "active", createdAt: "2026-01-01" });
   expect(JSON.stringify(out.cards)).not.toMatch(/codeEnc|beef|IV:TAG:CT/);
+});
+
+test("adminOverview includes registered edges as {edgeId,fingerprint,updatedAt} only (no raw key)", async () => {
+  const pub = edPub();
+  Model.listEdgeKeys.mockResolvedValue([{ _id: "front-01", pubSpki: pub, updatedAt: "2026-08-25" }]);
+  const out = await Service.adminOverview(ADMIN);
+  expect(out.edges).toEqual([{ edgeId: "front-01", fingerprint: expect.stringMatching(/^[0-9a-f]{16}$/), updatedAt: "2026-08-25" }]);
+  expect(JSON.stringify(out.edges)).not.toContain(pub); // never the raw public key
 });
 
 test("adminUpsertDoor validates + upserts", async () => {

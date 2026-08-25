@@ -458,11 +458,19 @@ const Service = {
   /** Everything the admin page needs. Cards are sanitized (no ciphertext / blind index). */
   async adminOverview(actor) {
     assertPermission(actor, PERM_ADMIN);
-    const [doors, policy, cards] = await Promise.all([Model.listDoors(), Model.getPolicyDoc(), Model.listCards({})]);
+    const [doors, policy, cards, edgeKeys] = await Promise.all([
+      Model.listDoors(), Model.getPolicyDoc(), Model.listCards({}), Model.listEdgeKeys(),
+    ]);
     return {
       doors,
       policy,
       cards: cards.map(publicCard),
+      // Registered edge audit-signing keys — id + FINGERPRINT + updatedAt only (never the raw key).
+      edges: edgeKeys.map((d) => ({
+        edgeId: d._id,
+        fingerprint: typeof d.pubSpki === "string" ? edgeKeyFingerprint(d.pubSpki) : null,
+        updatedAt: d.updatedAt || null,
+      })),
       allowlist: { signingReady: allowlistSigningReady() },
     };
   },
