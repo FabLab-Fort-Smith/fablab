@@ -546,9 +546,17 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      JS↔Py golden parity + the fail-closed matrix. (Distinguishing a genuine reflash from a spoofed new
      boot, and authenticating the anchor genesis, need **S6-b** edge auth — BOOT_TRANSITION is a
      security alert to correlate with an authorized reflash.)
-   - **S6-b** (next): wire it — the broker relays the edge store-and-forward audit up Link-B; a cloud
-     route ingests via `ingestAuditBatch` with a Mongo-backed anchor store + alerting; the door-access
-     **admin UI** (tier + last status + `edgeDeviceId`/`brokerId` bindings; WCAG a11y).
+   - **S6-b1 ✅** the cloud ingest side — `Service.ingestEdgeAudit` runs the fail-closed
+     `ingestAuditBatch` check against a Mongo per-edge anchor (`Model.getAuditAnchor`/`casAuditAnchor`,
+     optimistic-concurrency CAS + retry, no lost update), boundary-validates the batch (safe `edgeId`,
+     `MAX_AUDIT_BATCH=1000` cap, per-record type check), and routes every tamper/gap/fork/truncation
+     alert to `auditLog` at its severity (alerts carry seq/reason only, never a scan code). Reached
+     via the internal `POST /api/internal/broker-audit` route (same `INTERNAL_API_SECRET` bearer as
+     `broker-resync`; 400/409/200). 16 tests (ingest boundary + CAS-retry + alert-routing matrix;
+     route auth/400/409/200/500-no-leak).
+   - **S6-b** (next): finish wiring the transport — the broker relays the edge store-and-forward audit
+     up Link-B and the socket-server calls the route; then the door-access **admin UI** (S6-b2: tier +
+     last status + `edgeDeviceId`/`brokerId` bindings; WCAG a11y).
 7. **S7 — Parallel-run + cut-over (§10).** Run the full 4-rung ladder + HA drill on one door, then roll
    out door-by-door; retire the Pico units (reversible).
 
@@ -565,3 +573,4 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
 | 2026-08-23 | **Round-3 SEC re-review → APPROVE (converged). Fold 6 Low items: Buffer-not-String zeroization, broker-key site-wide blast-radius honesty + §3e protection, per-`doorId` anti-rollback high-water, CSPRNG-issued entropy floor, cloud-authorized bootEpoch reset, HA shares one `brokerId` (2 envelope copies). +tests 9/11/12/13 tightened, +test 14.** | app dev |
 | 2026-08-23 | **Owner-accepted: promote `status: current`; §11 open questions → binding decisions (active/standby HA, 24h/72h TTLs, dedicated Proxmox host, scripted CA provisioning + master-rotation re-key, ≥7-day audit buffer, Pi Zero W + RTC HAT, ≥128-bit CSPRNG floor + NFC accepted-risk, F7 ships in first rollout); add §13 implementation slice plan (S1–S7).** | app dev |
 | 2026-08-24 | **Build progress + S2 sub-slicing: S1/S2a/S2b-1 landed; add the `brokerConfig` fail-closed loader (S2b prep). Lock S2 transport decisions — cert material by file path, app-builds→cloud-relays envelopes, `wss://` mutually-authed Link-B — and fold the S2b-2 transport (mTLS Link-A listener + Link-B uplink + cloud sender) into S2c so it's built + integration-tested with the container.** | app dev |
+| 2026-08-25 | **S6-b1 ✅ cloud audit ingest: `Service.ingestEdgeAudit` runs the fail-closed anchor check against a Mongo per-edge anchor (`getAuditAnchor`/`casAuditAnchor` optimistic-concurrency CAS + retry), boundary-validates the batch (safe `edgeId`, 1000-record cap, per-record type check), routes alerts to `auditLog` at severity (no scan code), reached via internal `POST /api/internal/broker-audit` (bearer; 400/409/200). +16 tests. S6-b remainder = transport wiring + S6-b2 admin UI.** | app dev |

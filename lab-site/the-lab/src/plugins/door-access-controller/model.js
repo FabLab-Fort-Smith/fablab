@@ -10,6 +10,7 @@ const CARDS = "doorAccessCards";
 const DOORS = "doorAccessDoors";
 const POLICY = "doorAccessPolicy";
 const COUNTERS = "doorAccessCounters"; // monotonic per-door envelope version (anti-rollback, F5)
+const ANCHORS = "doorAccessAuditAnchors"; // per-edge audit anchor {_id:edgeId, boots, currentBoot, version}
 const POLICY_ID = "policy:door-access-controller"; // single well-known doc
 
 let indexesEnsured = false;
@@ -118,6 +119,42 @@ export async function nextEnvelopeVersion(doorId) {
   return doc.version;
 }
 
+/**
+ * Load an edge's audit anchor + its optimistic-concurrency version. Missing → an empty anchor at
+ * version 0 (so the first CAS upserts). Returns { anchor:{boots,currentBoot}, version }.
+ */
+export async function getAuditAnchor(edgeId) {
+  await cards(); // ensure connection
+  const doc = await (await database()).collection(ANCHORS).findOne({ _id: edgeId });
+  if (!doc) return { anchor: { boots: {}, currentBoot: null }, version: 0 };
+  return { anchor: { boots: doc.boots || {}, currentBoot: doc.currentBoot ?? null }, version: doc.version || 0 };
+}
+
+/**
+ * Compare-and-set the edge's anchor: write only if the stored version still equals `expectedVersion`
+ * (no lost update from a concurrent ingest — S6-a review). Returns true on success, false on a version
+ * conflict (caller reloads + retries). Never advances on a stale read.
+ */
+export async function casAuditAnchor(edgeId, expectedVersion, anchor) {
+  await cards();
+  const col = (await database()).collection(ANCHORS);
+  try {
+    if (expectedVersion === 0) {
+      // first write for this edge — insert (unique _id makes a concurrent double-insert fail → false)
+      await col.insertOne({ _id: edgeId, boots: anchor.boots, currentBoot: anchor.currentBoot, version: 1 });
+      return true;
+    }
+    const r = await col.updateOne(
+      { _id: edgeId, version: expectedVersion }, // CAS guard
+      { $set: { boots: anchor.boots, currentBoot: anchor.currentBoot }, $inc: { version: 1 } }
+    );
+    return r.modifiedCount === 1;
+  } catch (e) {
+    if (e && e.code === 11000) return false; // duplicate key on a concurrent first insert → conflict
+    throw e;
+  }
+}
+
 const Model = {
   findCardByBlindIndex,
   upsertCard,
@@ -130,6 +167,8 @@ const Model = {
   listDoors,
   getPolicyDoc,
   savePolicyDoc,
+  getAuditAnchor,
+  casAuditAnchor,
 };
 
 export default Model;

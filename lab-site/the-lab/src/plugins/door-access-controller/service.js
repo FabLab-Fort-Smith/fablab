@@ -10,6 +10,7 @@ import { blindIndex, encryptCode, decryptToBuffer, recipientIndexKey, credHashFo
 import { newCardDoc, newDoorDoc } from "./class";
 import { decide, allowedDoorsForFacts } from "./policy";
 import { signAllowlist, signEnvelope, allowlistSigningReady } from "./allowlistCrypto";
+import { ALERT, ingestAuditBatch } from "./auditAnchor";
 import { resolveConfig, PLUGIN_ID, PERM_ADMIN } from "./config";
 import { assertPermission } from "@/lib/plugins/permissions";
 import UsersService from "@/app/api/v1/users/service";
@@ -69,6 +70,30 @@ async function resolveUserID(credentialType, credentialValue) {
   if (credentialType === "app") return credentialValue || null;
   const card = await Model.findCardByBlindIndex(blindIndex(credentialValue));
   return card && card.status !== "revoked" ? card.userID : null;
+}
+
+// Edge audit ingest bounds + validation (S6-b1). The S6-a core is robust to garbage, but we validate
+// types at the trust boundary and CAP the batch (OWASP API4 — the ingest route is attacker-reachable
+// via the broker). Alert severity drives where an anomaly is routed.
+const MAX_AUDIT_BATCH = 1000;
+const ALERT_SEVERITY = {
+  [ALERT.TAIL_TRUNCATION]: "high",
+  tamper: "high", // ALERT.TAMPER
+  [ALERT.GAP]: "medium",
+  [ALERT.BOOT_TRANSITION]: "notice",
+};
+const _int = (v) => typeof v === "number" && Number.isInteger(v) && !Number.isNaN(v);
+/** True iff a record is well-typed at the boundary (deep content is verified by the anchor). */
+function validAuditRecord(r) {
+  return r && typeof r === "object"
+    && _int(r.seq) && r.seq >= 0
+    && _int(r.ts)
+    // bootEpoch is used as an object key AND a Mongo field name — reject reserved/operator keys at the
+    // boundary (a `__proto__`/`$`/`.` value would otherwise read an inherited member → unhandled 500,
+    // or land as a Mongo field). SEC #169 LOW.
+    && isSafeKey(r.bootEpoch) && r.bootEpoch.length <= 128
+    && typeof r.prev === "string" && typeof r.hash === "string"
+    && r.event && typeof r.event === "object" && !Array.isArray(r.event);
 }
 
 const Service = {
@@ -347,6 +372,47 @@ const Service = {
     } catch (e) {
       auditLog("door-access.allowlist", { actor: { pluginId: PLUGIN_ID }, outcome: "error", reason: String((e && e.message) || e) });
     }
+  },
+
+  /**
+   * Ingest a store-and-forward audit batch from an edge (relayed by its broker). Validates the batch at
+   * the trust boundary (types + size cap), runs the fail-closed anchor check (auditAnchor.ingestAuditBatch)
+   * against the Mongo per-edge anchor under an optimistic-concurrency CAS (no lost update from concurrent
+   * ingests), and ROUTES every anomaly to the audit log at its severity. Returns {accepted,duplicates,alerts}.
+   * @param {{edgeId:string, records:Array}} args
+   */
+  async ingestEdgeAudit({ edgeId, records } = {}) {
+    if (typeof edgeId !== "string" || !isSafeKey(edgeId) || edgeId.length > 128) {
+      return { accepted: 0, duplicates: 0, alerts: [], rejected: "bad-edgeId" };
+    }
+    if (!Array.isArray(records) || records.length === 0) return { accepted: 0, duplicates: 0, alerts: [] };
+    if (records.length > MAX_AUDIT_BATCH) return { accepted: 0, duplicates: 0, alerts: [], rejected: "batch-too-large" };
+    if (!records.every(validAuditRecord)) return { accepted: 0, duplicates: 0, alerts: [], rejected: "malformed-record" };
+
+    // CAS retry loop: read anchor + version, run the pure check, persist only if the version is unchanged.
+    let result = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const { anchor, version } = await Model.getAuditAnchor(edgeId);
+      let mutated = null;
+      const store = { get: () => anchor, set: (_id, rec) => { mutated = rec; } };
+      const res = ingestAuditBatch(store, { edgeId, records });
+      if (!mutated) { result = res; break; } // nothing to persist (dup / tamper / gap / truncation held)
+      if (await Model.casAuditAnchor(edgeId, version, mutated)) { result = res; break; } // persisted
+      // else a concurrent ingest advanced the anchor → reload + retry
+    }
+    if (!result) {
+      auditLog("door-access.audit", { actor: { pluginId: PLUGIN_ID }, target: edgeId, outcome: "cas-conflict" });
+      return { accepted: 0, duplicates: 0, alerts: [], rejected: "conflict" };
+    }
+    // Route anomalies to a monitored channel (master §9). Alerts carry no PII (type/seq/reason only).
+    for (const a of result.alerts) {
+      auditLog("door-access.audit", {
+        actor: { pluginId: PLUGIN_ID }, target: edgeId, outcome: "alert",
+        severity: ALERT_SEVERITY[a.type] || (a.reason === "chain-fork" ? "high" : "medium"),
+        alert: a.type, reason: a.reason, seq: a.seq,
+      });
+    }
+    return result;
   },
 
   // --- admin surface (all admin-only via assertPermission; deny-by-default) --------------
