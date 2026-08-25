@@ -482,8 +482,13 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      audit, socket dropped before any door processing) even though its cert chains to the CA. Revocation
      takes effect on the edge's next connection — no CA re-issue, no broker restart. JSON-array or
      newline CN file; mounted at `/certs/edge-denylist.json` in the broker compose.
-   - **S3c**: master-rotation → fleet-re-key **runbook** (rotate `DOOR_CARD_INDEX_KEY`, re-derive every
-     recipient key, re-provision) + short-lived-cert re-issue.
+   - **S3c ✅** master-rotation → fleet-re-key **runbook** (`docs/runbooks/door-fleet-rekey.md`): rotate
+     `DOOR_CARD_INDEX_KEY`, re-derive every broker/edge index key (`derive-index-key.mjs`), switch the
+     cloud to new-keyed envelopes, re-provision recipients — **online-covered** (offline fails secure
+     during the gap; a single-master/no-key-version design has an inherent offline window, so rotate with
+     the uplink healthy). Documents the urgent-compromise variant, verification, fail-secure rollback, and
+     the future zero-gap enhancement (key-version tag + old/new overlap). Cert rotation stays separate
+     (S3a `door-ca.sh` + S3b deny-list).
 4. **S4 — Edge firmware (`pi-zero` edge role).** NFC + strike relay GPIO + mTLS client + rung-3 cache
    (verify + `doorId` + TTL + anti-rollback + `edgeIndexKey` match) + **RTC + monotonic clock floor** +
    fail-secure supervisor + **hash-chained store-and-forward audit** (`bootEpoch`). Bench one edge.
