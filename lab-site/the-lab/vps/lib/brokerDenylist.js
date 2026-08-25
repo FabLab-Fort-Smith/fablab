@@ -59,6 +59,9 @@ export function makeEdgeDenylist({ path, log = () => {}, mtimeMs, readText } = {
     } catch (e) {
       // exists but broken: keep last-good (or empty on first-ever) + alert — never lock out the site.
       if (!loadedOnce) { denied = new Set(); loadedOnce = true; }
+      // Advance lastMtime so a PERSISTENTLY-corrupt file is re-read once per mtime change, not on every
+      // connection (S3b review F1, CWE-400). An operator fixing the file bumps mtime → we re-read.
+      lastMtime = m;
       log("denylist.load-error", { reason: (e && e.message) || String(e), keeping: denied.size });
     }
   }

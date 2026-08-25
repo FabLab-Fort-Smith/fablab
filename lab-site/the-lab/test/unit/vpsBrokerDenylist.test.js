@@ -71,6 +71,27 @@ test("malformed AFTER a good load → keeps last-good (still revoked, still logs
   expect(logs.some((l) => l.e === "denylist.load-error")).toBe(true);
 });
 
+test("persistently-corrupt file is re-read once per mtime, not per call (F1)", () => {
+  const ff = fakeFile('["edge-bad"]');
+  const dl = makeEdgeDenylist({ path: "/dl", mtimeMs: ff.mtimeMs, readText: ff.readText });
+  expect(dl.isDenied("edge-bad")).toBe(true);
+  ff.f.text = "[ corrupt"; ff.f.mtime = 2;   // corrupt + one mtime bump
+  dl.isDenied("x");                            // re-reads once (mtime changed) → parse error, keep-good
+  const reads = ff.f.reads;
+  dl.isDenied("x"); dl.isDenied("x");          // same (corrupt) mtime → must NOT re-read every call
+  expect(ff.f.reads).toBe(reads);
+  expect(dl.isDenied("edge-bad")).toBe(true);  // still revoked (last-good retained)
+});
+
+test("exact-match contract: case/whitespace mismatch does NOT match; non-string cn is safe", () => {
+  const { mtimeMs, readText } = fakeFile('["edge-bad"]');
+  const dl = makeEdgeDenylist({ path: "/dl", mtimeMs, readText });
+  expect(dl.isDenied("edge-bad")).toBe(true);
+  expect(dl.isDenied("EDGE-BAD")).toBe(false);   // case-sensitive
+  expect(dl.isDenied(" edge-bad ")).toBe(false); // no fuzzy trim on the query side
+  expect(dl.isDenied(["edge-bad"])).toBe(false); // array-valued CN (duplicate-CN cert) → not matched
+});
+
 test("file goes missing after a good load → keeps last-good", () => {
   const ff = fakeFile('["edge-bad"]');
   const dl = makeEdgeDenylist({ path: "/dl", mtimeMs: ff.mtimeMs, readText: ff.readText });
