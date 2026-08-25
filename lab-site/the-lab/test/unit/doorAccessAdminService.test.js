@@ -3,15 +3,19 @@
 
 jest.mock("@/plugins/door-access-controller/model", () => ({
   __esModule: true,
-  default: { listDoors: jest.fn(), getPolicyDoc: jest.fn(), listCards: jest.fn(), upsertDoor: jest.fn(), savePolicyDoc: jest.fn(), revokeCardsByUserID: jest.fn() },
+  default: { listDoors: jest.fn(), getPolicyDoc: jest.fn(), listCards: jest.fn(), upsertDoor: jest.fn(), savePolicyDoc: jest.fn(), revokeCardsByUserID: jest.fn(), getEdgeSigningKey: jest.fn(), registerEdgeSigningKey: jest.fn(), listEdgeKeys: jest.fn() },
 }));
 jest.mock("@/plugins/door-access-controller/config", () => ({ __esModule: true, PLUGIN_ID: "door-access-controller", PERM_ADMIN: "door-access-controller:admin", resolveConfig: jest.fn(async () => ({})) }));
 jest.mock("@/lib/access-control", () => ({ __esModule: true, pushAllowlist: jest.fn() }));
 jest.mock("@/lib/audit", () => ({ __esModule: true, auditLog: jest.fn() }));
 
+import crypto from "crypto";
+
 import Service from "@/plugins/door-access-controller/service";
 import Model from "@/plugins/door-access-controller/model";
 import { auditLog } from "@/lib/audit";
+
+const edPub = () => crypto.generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "der" }).toString("base64");
 
 const ADMIN = { userID: "admin-1", role: "admin" };
 const USER = { userID: "u2", role: "member" };
@@ -68,4 +72,59 @@ test("non-admin is rejected by every admin mutation", async () => {
   await expect(Service.adminRevokeCard(USER, { userID: "u1" })).rejects.toMatchObject({ status: 403 });
   expect(Model.upsertDoor).not.toHaveBeenCalled();
   expect(Model.savePolicyDoc).not.toHaveBeenCalled();
+});
+
+// --- edge audit-key registration (S6-b-a2): genesis/reflash trust binding, admin-gated ---
+
+test("adminRegisterEdgeKey requires admin", async () => {
+  await expect(Service.adminRegisterEdgeKey(USER, { edgeId: "e1", pubSpki: edPub() })).rejects.toMatchObject({ status: 403 });
+  expect(Model.registerEdgeSigningKey).not.toHaveBeenCalled();
+});
+
+test("adminRegisterEdgeKey validates edgeId + a real Ed25519 pubSpki (400, no write)", async () => {
+  await expect(Service.adminRegisterEdgeKey(ADMIN, { edgeId: "a.b", pubSpki: edPub() })).rejects.toMatchObject({ status: 400 });
+  await expect(Service.adminRegisterEdgeKey(ADMIN, { edgeId: "e1" })).rejects.toMatchObject({ status: 400 }); // no pubSpki
+  const rsa = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 }).publicKey.export({ type: "spki", format: "der" }).toString("base64");
+  await expect(Service.adminRegisterEdgeKey(ADMIN, { edgeId: "e1", pubSpki: rsa })).rejects.toMatchObject({ status: 400 });
+  await expect(Service.adminRegisterEdgeKey(ADMIN, { edgeId: "e1", pubSpki: "not-a-key" })).rejects.toMatchObject({ status: 400 });
+  expect(Model.registerEdgeSigningKey).not.toHaveBeenCalled();
+});
+
+test("adminRegisterEdgeKey genesis: registers + audits edge-key-register, never logs the raw key", async () => {
+  Model.registerEdgeSigningKey.mockResolvedValue(null); // atomic upsert reports no prior key
+  const pub = edPub();
+  const res = await Service.adminRegisterEdgeKey(ADMIN, { edgeId: "front-01", pubSpki: pub });
+  expect(res).toMatchObject({ ok: true, edgeId: "front-01", rotated: false });
+  expect(res.fingerprint).toMatch(/^[0-9a-f]{16}$/);
+  expect(Model.registerEdgeSigningKey).toHaveBeenCalledWith("front-01", pub);
+  expect(auditLog).toHaveBeenCalledWith("door-access.admin", expect.objectContaining({ outcome: "edge-key-register", target: "front-01" }));
+  expect(JSON.stringify(auditLog.mock.calls)).not.toContain(pub); // fingerprint only, never the raw key
+});
+
+test("adminRegisterEdgeKey rotation: a different prior key audits edge-key-rotate with a prior fingerprint", async () => {
+  const oldPub = edPub(); const newPub = edPub();
+  Model.registerEdgeSigningKey.mockResolvedValue(oldPub); // prior differs → rotation
+  const res = await Service.adminRegisterEdgeKey(ADMIN, { edgeId: "front-01", pubSpki: newPub });
+  expect(res.rotated).toBe(true);
+  const call = auditLog.mock.calls.find((c) => c[1].outcome === "edge-key-rotate");
+  expect(call).toBeTruthy();
+  expect(call[1].priorFingerprint).toMatch(/^[0-9a-f]{16}$/);
+  expect(call[1].fingerprint).not.toBe(call[1].priorFingerprint);
+});
+
+test("adminRegisterEdgeKey re-register (same key) is a no-op outcome, not a false genesis (SEC #171 Low-2)", async () => {
+  const pub = edPub();
+  Model.registerEdgeSigningKey.mockResolvedValue(pub); // prior === submitted key
+  const res = await Service.adminRegisterEdgeKey(ADMIN, { edgeId: "front-01", pubSpki: pub });
+  expect(res.rotated).toBe(false);
+  expect(auditLog).toHaveBeenCalledWith("door-access.admin", expect.objectContaining({ outcome: "edge-key-reregister" }));
+});
+
+test("adminListEdgeKeys is admin-only and returns id+fingerprint+updatedAt only (no raw key)", async () => {
+  await expect(Service.adminListEdgeKeys(USER)).rejects.toMatchObject({ status: 403 });
+  const pub = edPub();
+  Model.listEdgeKeys.mockResolvedValue([{ _id: "front-01", pubSpki: pub, updatedAt: "2026-08-25" }]);
+  const out = await Service.adminListEdgeKeys(ADMIN);
+  expect(out).toEqual([{ edgeId: "front-01", fingerprint: expect.stringMatching(/^[0-9a-f]{16}$/), updatedAt: "2026-08-25" }]);
+  expect(JSON.stringify(out)).not.toContain(pub);
 });

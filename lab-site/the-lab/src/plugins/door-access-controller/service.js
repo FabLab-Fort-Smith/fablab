@@ -4,6 +4,8 @@
 // isolated in model.js; identity/membership is read via the users SERVICE, never its
 // model (the-lab/CLAUDE.md §4).
 
+import crypto from "crypto";
+
 import Model from "./model";
 import { factsFromUser } from "./facts";
 import { blindIndex, encryptCode, decryptToBuffer, recipientIndexKey, credHashFor, meetsEntropyFloor, generateCardToken } from "./cardCrypto";
@@ -83,6 +85,8 @@ const ALERT_SEVERITY = {
   [ALERT.GAP]: "medium",
   [ALERT.BOOT_TRANSITION]: "notice",
 };
+/** A short, log-safe id for an edge signing key (sha256 of the SPKI, first 16 hex) — never the raw key. */
+const edgeKeyFingerprint = (pubSpki) => crypto.createHash("sha256").update(String(pubSpki)).digest("hex").slice(0, 16);
 const _int = (v) => typeof v === "number" && Number.isInteger(v) && !Number.isNaN(v);
 const _INT_LIKE_KEY = /^-?\d+$/;
 /**
@@ -502,6 +506,50 @@ const Service = {
     auditLog("door-access.admin", { actor: { userID: actor.userID }, outcome: "card-revoke", target: userID });
     await this._repushBestEffort();
     return { ok: true };
+  },
+
+  /**
+   * Register (or rotate) an edge's audit-signing PUBLIC key — the genesis/reflash trust binding (#151,
+   * S6-b-a2). Admin-only. The admin runs `edge/provision_audit_key.py` on the device and pastes the
+   * printed `pubSpki` here; from then on the cloud accepts that edge's audit only when signed by the
+   * matching private key. This RE-ANCHORS trust for the edge, so it is fully audited: genesis vs.
+   * rotation, with the key FINGERPRINT (sha256), never letting a raw key or any PII into the log.
+   * @param {object} actor @param {{edgeId:string, pubSpki:string}} args
+   */
+  async adminRegisterEdgeKey(actor, { edgeId, pubSpki } = {}) {
+    assertPermission(actor, PERM_ADMIN);
+    if (typeof edgeId !== "string" || !isSafeKey(edgeId) || edgeId.length > 128) throw badRequest("valid edgeId is required");
+    if (typeof pubSpki !== "string" || !pubSpki.trim()) throw badRequest("pubSpki is required");
+    // Validate it's a real Ed25519 SPKI up front → a clean 400, not a 500 from the model guard.
+    try {
+      const key = crypto.createPublicKey({ key: Buffer.from(pubSpki, "base64"), format: "der", type: "spki" });
+      if (key.asymmetricKeyType !== "ed25519") throw new Error("not-ed25519");
+    } catch {
+      throw badRequest("pubSpki must be a base64 Ed25519 SPKI public key");
+    }
+    // Atomic upsert returns the PRIOR key (no read-then-write TOCTOU — SEC #171 Low-1); the model
+    // re-validates inputs (defense in depth). Classify: genesis (new edge), no-op re-register (same
+    // key), or rotation (different key — a trust re-anchor).
+    const prior = await Model.registerEdgeSigningKey(edgeId, pubSpki);
+    const rotated = prior !== null && prior !== pubSpki;
+    const outcome = prior === null ? "edge-key-register" : rotated ? "edge-key-rotate" : "edge-key-reregister";
+    auditLog("door-access.admin", {
+      actor: { userID: actor.userID }, target: edgeId, outcome,
+      fingerprint: edgeKeyFingerprint(pubSpki),
+      priorFingerprint: prior ? edgeKeyFingerprint(prior) : null,
+    });
+    return { ok: true, edgeId, fingerprint: edgeKeyFingerprint(pubSpki), rotated };
+  },
+
+  /** List registered edges for the admin UI — id + key FINGERPRINT + updatedAt only (never the raw key). */
+  async adminListEdgeKeys(actor) {
+    assertPermission(actor, PERM_ADMIN);
+    const docs = await Model.listEdgeKeys();
+    return docs.map((d) => ({
+      edgeId: d._id,
+      fingerprint: typeof d.pubSpki === "string" ? edgeKeyFingerprint(d.pubSpki) : null,
+      updatedAt: d.updatedAt || null,
+    }));
   },
 
   /** A member was suspended → soft-revoke their cards + re-push the offline allowlist. */

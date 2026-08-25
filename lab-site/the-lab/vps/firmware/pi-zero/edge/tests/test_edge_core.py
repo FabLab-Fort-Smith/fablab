@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from edge import (canonical_bytes, cred_hash, decide_offline, derive_index_key,
-                  in_window, sign_audit_batch, verify_envelope)
+                  generate_audit_keypair, in_window, sign_audit_batch, verify_envelope)
 from edge.decide import REASON
 
 G = json.load(open(os.path.join(os.path.dirname(__file__), "goldens.json"), encoding="utf-8"))
@@ -67,6 +67,62 @@ def test_sign_audit_batch_binds_edgeid_and_records():
     mutated = json.loads(json.dumps(a["records"]))
     mutated[0]["event"]["granted"] = False
     assert sign_audit_batch(a["priv_pkcs8_b64"], a["edgeId"], mutated) != base
+
+
+def test_provision_cli_writes_0600_private_and_prints_public(tmp_path, capsys):
+    from edge.provision_audit_key import main
+    out = tmp_path / "audit_key.b64"
+    assert main(["--out", str(out), "--edge-id", "front-01"]) == 0
+    assert (out.stat().st_mode & 0o777) == 0o600  # least-privilege private key file
+    printed = capsys.readouterr().out
+    assert "edgeId=front-01" in printed
+    pub_b64 = [l.split("=", 1)[1] for l in printed.splitlines() if l.startswith("pubSpki=")][0]
+    # the written private key pairs with the printed public key (a batch it signs verifies)
+    from cryptography.hazmat.primitives.serialization import load_der_public_key
+    priv_b64 = out.read_text().strip()
+    sig = sign_audit_batch(priv_b64, "front-01", G["auditSign"]["records"])
+    load_der_public_key(base64.b64decode(pub_b64)).verify(
+        base64.b64decode(sig), canonical_bytes({"edgeId": "front-01", "records": G["auditSign"]["records"]}))
+    # the private key is NEVER printed
+    assert priv_b64 not in printed
+
+
+def test_provision_cli_refuses_to_overwrite_without_force(tmp_path):
+    from edge.provision_audit_key import main
+    out = tmp_path / "audit_key.b64"
+    assert main(["--out", str(out), "--edge-id", "e"]) == 0
+    first = out.read_text()
+    assert main(["--out", str(out), "--edge-id", "e"]) == 2  # refuses silent re-key
+    assert out.read_text() == first  # untouched
+    assert main(["--out", str(out), "--edge-id", "e", "--force"]) == 0  # deliberate reflash allowed
+    assert out.read_text() != first  # a new key
+
+
+def test_provision_cli_refuses_to_follow_a_symlink(tmp_path):
+    """O_NOFOLLOW: a pre-planted symlink at --out must not redirect the private-key write (SEC #171 Low-3)."""
+    from edge.provision_audit_key import main
+    target = tmp_path / "attacker_target"
+    link = tmp_path / "audit_key.b64"
+    os.symlink(target, link)  # dangling symlink → os.path.exists is False, so the overwrite guard passes
+    try:
+        main(["--out", str(link), "--edge-id", "e"])
+        assert False, "expected the symlinked write to be refused"
+    except OSError:
+        pass
+    assert not target.exists()  # the key was NOT written through the link
+
+
+def test_generate_audit_keypair_roundtrips_and_is_fresh():
+    """A provisioned keypair signs a batch its own public key verifies; each call is distinct."""
+    from cryptography.hazmat.primitives.serialization import load_der_public_key
+    priv_b64, pub_b64 = generate_audit_keypair()
+    recs = G["auditSign"]["records"]
+    sig = sign_audit_batch(priv_b64, "front-01", recs)
+    # the paired public key verifies the signature over the same canonical bytes
+    pub = load_der_public_key(base64.b64decode(pub_b64))
+    pub.verify(base64.b64decode(sig), canonical_bytes({"edgeId": "front-01", "records": recs}))  # no raise == ok
+    # freshness: two provisions differ (CSPRNG keygen)
+    assert generate_audit_keypair()[0] != generate_audit_keypair()[0]
 
 
 def test_sign_audit_batch_refuses_non_ed25519_key():
