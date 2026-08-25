@@ -155,3 +155,31 @@ def test_deny_clock_unsynced():
 def test_deny_on_garbage_never_raises():
     assert decide_offline(None, code="x", door_id="front", now_ms=NOW,
                           verify_key_b64=VK_B64, edge_index_key=EDGE_KEY)["granted"] is False
+
+
+def test_deny_nonfinite_or_nonnumeric_clock_never_grants():
+    # Finding-A: a non-finite/typeless now_ms must NOT skip expiry on a 24/7 (no-window) entry.
+    p = _payload(entries=[{"credHash": cred_hash(EDGE_KEY, "CODEONE"), "windows": []}],
+                 expiresAt="2000-01-01T00:00:00.000Z")  # long expired
+    for bad in (float("nan"), float("inf"), float("-inf"), None, "0", True):
+        r = _decide(_sign(p), now_ms=bad)
+        assert r["granted"] is False and r["reason"] == REASON.CLOCK_UNSYNCED
+
+
+def _ms(iso):
+    from datetime import datetime, timezone
+    return int(datetime.fromisoformat(iso).replace(tzinfo=timezone.utc).timestamp() * 1000)
+
+
+def test_overnight_window_wrap():
+    # 22:00→06:00 window (end<=start = overnight wrap). Far-future expiry so only the window gates.
+    p = _payload(expiresAt="2027-01-01T00:00:00.000Z",
+                 entries=[{"credHash": cred_hash(EDGE_KEY, "CODEONE"),
+                           "windows": [{"start": "22:00", "end": "06:00", "days": [1, 2, 3, 4, 5]}]}])
+    s = _sign(p)
+    # Mon 23:00 CDT = 2026-08-25T04:00Z → in (day in days, minutes >= 22:00)
+    assert _decide(s, now_ms=_ms("2026-08-25T04:00:00"))["granted"] is True
+    # Tue 02:00 CDT = 2026-08-25T07:00Z → in (prev day Mon in days, minutes < 06:00)
+    assert _decide(s, now_ms=_ms("2026-08-25T07:00:00"))["granted"] is True
+    # Sun 12:00 CDT = 2026-08-23T17:00Z → out (day 0 not in days, prev Sat not in days)
+    assert _decide(s, now_ms=_ms("2026-08-23T17:00:00"))["reason"] == REASON.NO_WINDOW

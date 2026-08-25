@@ -11,6 +11,8 @@ rung-3-specific controls from the design:
     not re-enable an expired/revoked window).
 """
 
+import math
+
 from .crypto import cred_hash, verify_envelope
 from .windows import _parse_iso_ms, in_window
 
@@ -47,6 +49,11 @@ def decide_offline(signed, *, code, door_id, now_ms, verify_key_b64, edge_index_
     try:
         if not time_synced:
             return _deny(REASON.CLOCK_UNSYNCED)  # F4: never decide on an untrusted clock
+        # A non-finite / non-numeric now_ms (NaN/±inf/None/str) makes `now_ms >= exp` False and would
+        # SKIP the expiry check → an expired no-window envelope would grant (fail-open, CWE-754). Reject
+        # here so the core stays fail-secure regardless of how S4b computed the clock.
+        if isinstance(now_ms, bool) or not isinstance(now_ms, (int, float)) or not math.isfinite(now_ms):
+            return _deny(REASON.CLOCK_UNSYNCED)
         if not verify_envelope(signed, verify_key_b64):
             return _deny(REASON.BAD_SIGNATURE)
         p = signed.get("payload") or {}
