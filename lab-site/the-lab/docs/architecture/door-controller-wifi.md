@@ -519,6 +519,16 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      Bench one edge.
 5. **S5 — HA.** Second broker container + keepalived **VIP**, shared `brokerId`; failover drill (kill
    active → doors keep working via rung 3, VIP moves, no split-brain double-grant).
+   - **S5-a ✅** cloud multi-member registry (`brokerUplink.makeBrokerRegistry` — brokerId → SET of member
+     connections): the cloud tracks BOTH the active + standby uplinks (they share one brokerId, §9) and
+     `relayEnvelopes` pushes every envelope to **all** live members, so the standby's rung-2 cache never
+     goes stale (a revocation reaches both). Close removes only the dropped member. 12 tests
+     (712 unit-suite): both-members-tracked, relay-to-all, closed-member-skipped, one-close-leaves-other.
+   - **S5-b ✅** infra + drill: `vps/keepalived/keepalived.conf.example` (active/standby VRRP VIP,
+     `nopreempt`) + `check-broker.sh` (track_script → FAULT releases the VIP when the local broker's
+     loopback health fails) + `docker-compose.broker.yml` HA deploy notes (same creds on both hosts) +
+     `docs/runbooks/door-broker-ha-failover.md` (drill: standby serves, edge rung-3 covers the blip, no
+     split-brain double-grant, `nopreempt` rejoin-as-standby). Bench-drill on two hosts before relying on it.
 6. **S6 — Cloud audit anchor + admin UI.** Server-side seq/chain-tip **anchor** + dedup/gap-alert; the
    door-access admin UI shows tier + last status + the `edgeDeviceId`/`brokerId` bindings.
 7. **S7 — Parallel-run + cut-over (§10).** Run the full 4-rung ladder + HA drill on one door, then roll
