@@ -537,8 +537,15 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      linkage, then checks continuity vs a per-edge **anchor** `{bootEpoch,lastSeq,chainTip}` the cloud
      controls (an edge can't rewrite it): dedup `(edgeId,bootEpoch,seq)`, and **alert** on GAP, chain-
      FORK/bad-hash/broken-link/mixed-boot (TAMPER), TAIL_TRUNCATION (edge tip regressed below the anchor),
-     or BOOT_TRANSITION (reflash, seq reset). Closes the S4b-a **F6** + S5 tail-truncation deferrals.
-     12 tests incl. JS↔Py golden parity + the full alert matrix.
+     or BOOT_TRANSITION (reflash). **Fail-closed anchor discipline** (SEC review): the anchor advances
+     ONLY to a hash+link-verified, strictly-forward tip that links to the cloud's `chainTip` — any
+     tamper/fork/gap/tail-truncation alerts, accepts nothing, and leaves the trusted anchor untouched
+     (never rewound, never advanced across a gap). **Per-boot retention** keeps `(edgeId,bootEpoch)`
+     anchors so a reflash doesn't wipe a prior boot's final anchor and an old-boot replay is checked
+     against its retained anchor. Closes the S4b-a **F6** + S5 tail-truncation deferrals. 13 tests incl.
+     JS↔Py golden parity + the fail-closed matrix. (Distinguishing a genuine reflash from a spoofed new
+     boot, and authenticating the anchor genesis, need **S6-b** edge auth — BOOT_TRANSITION is a
+     security alert to correlate with an authorized reflash.)
    - **S6-b** (next): wire it — the broker relays the edge store-and-forward audit up Link-B; a cloud
      route ingests via `ingestAuditBatch` with a Mongo-backed anchor store + alerting; the door-access
      **admin UI** (tier + last status + `edgeDeviceId`/`brokerId` bindings; WCAG a11y).

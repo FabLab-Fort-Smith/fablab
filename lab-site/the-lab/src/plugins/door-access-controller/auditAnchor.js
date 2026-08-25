@@ -31,7 +31,19 @@ export function recordHash(r) {
 
 /**
  * Ingest one store-and-forward batch for an edge (all records share one bootEpoch, seq-ascending).
- * @param {{get:Function,set:Function}} anchorStore  per-edge anchor persistence
+ *
+ * FAIL-CLOSED anchor discipline (S6-a review F1/F2/F6): the cloud advances the anchor ONLY to a tip that
+ * (a) passed hash+link integrity, (b) is strictly forward of the anchored tip, AND (c) links to the
+ * cloud-held `chainTip`. Any tamper, chain-fork, gap, or tail-truncation → alert, accept NOTHING, and
+ * leave the trusted anchor UNCHANGED (never rewound, never advanced across the unverifiable).
+ *
+ * Per-boot retention (F4): anchors are kept per `(edgeId, bootEpoch)` so a legit reflash (new boot) does
+ * not wipe a prior boot's final anchor, and a re-presented OLD boot is checked against ITS retained
+ * anchor (closing the old-boot rollback). Distinguishing a genuine reflash from a spoofed new boot still
+ * needs S6-b edge authentication (bootEpoch is edge-chosen) — BOOT_TRANSITION is a security-relevant
+ * alert to correlate with an authorized reflash, not a benign event.
+ *
+ * @param {{get:Function,set:Function}} anchorStore  get(edgeId)->{boots:{[bootEpoch]:{lastSeq,chainTip}},currentBoot}|null ; set(edgeId, rec)
  * @param {{edgeId:string, records:Array}} batch
  * @returns {{accepted:number, duplicates:number, alerts:Array<{type:string}>}}
  */
@@ -60,38 +72,50 @@ export function ingestAuditBatch(anchorStore, { edgeId, records } = {}) {
   }
   const first = records[0];
   const last = records[records.length - 1];
-  const anchor = anchorStore.get(edgeId); // {bootEpoch,lastSeq,chainTip} | null
+  const rec = anchorStore.get(edgeId) || { boots: {}, currentBoot: null };
+  if (!rec.boots) rec.boots = {};
+  const anchor = rec.boots[boot] || null; // {lastSeq, chainTip} for THIS boot | null
 
-  let toApply = records;
-  let duplicates = 0;
+  const advance = () => {
+    rec.boots[boot] = { lastSeq: last.seq, chainTip: last.hash };
+    rec.currentBoot = boot;
+    anchorStore.set(edgeId, rec);
+  };
 
-  if (anchor && anchor.bootEpoch === boot) {
-    if (last.seq < anchor.lastSeq) {
-      // the edge's reported tip is BELOW what the cloud anchored for this boot → tail-truncation/rollback
+  if (anchor) {
+    if (last.seq < anchor.lastSeq) { // reported tip below the anchored tip → rollback/tail-truncation
       alerts.push({ type: ALERT.TAIL_TRUNCATION, anchored: anchor.lastSeq, reported: last.seq });
       return { accepted: 0, duplicates: records.length, alerts };
     }
-    if (last.seq === anchor.lastSeq) {
-      return { accepted: 0, duplicates: records.length, alerts }; // a re-send of the current tip
+    if (last.seq === anchor.lastSeq) { // same tip seq — genuine re-send only if the hash matches (F6)
+      if (last.hash !== anchor.chainTip) alerts.push({ type: ALERT.TAMPER, reason: "chain-fork", seq: last.seq });
+      return { accepted: 0, duplicates: records.length, alerts };
     }
-    toApply = records.filter((r) => r.seq > anchor.lastSeq);
-    duplicates = records.length - toApply.length;
+    const toApply = records.filter((r) => r.seq > anchor.lastSeq);
+    const duplicates = records.length - toApply.length;
     const firstNew = toApply[0];
-    if (firstNew.seq !== anchor.lastSeq + 1) {
+    if (firstNew.seq !== anchor.lastSeq + 1) { // gap → HOLD: never advance across the unverifiable (F2)
       alerts.push({ type: ALERT.GAP, from: anchor.lastSeq, to: firstNew.seq });
-    } else if (firstNew.prev !== anchor.chainTip) {
-      // continues at the right seq but doesn't link to OUR anchored tip → the edge forked/rewrote history
-      alerts.push({ type: ALERT.TAMPER, reason: "chain-fork", seq: firstNew.seq });
+      return { accepted: 0, duplicates, alerts };
     }
-  } else if (anchor && anchor.bootEpoch !== boot) {
-    alerts.push({ type: ALERT.BOOT_TRANSITION, from: anchor.bootEpoch, to: boot });
-    if (first.seq !== 0) alerts.push({ type: ALERT.GAP, from: -1, to: first.seq });
-  } else if (first.seq !== 0) {
-    alerts.push({ type: ALERT.GAP, from: -1, to: first.seq }); // first-ever batch should start at seq 0
+    if (firstNew.prev !== anchor.chainTip) { // contiguous but doesn't link to OUR tip → fork/rewrite (F1)
+      alerts.push({ type: ALERT.TAMPER, reason: "chain-fork", seq: firstNew.seq });
+      return { accepted: 0, duplicates, alerts };
+    }
+    advance();
+    return { accepted: toApply.length, duplicates, alerts };
   }
 
-  anchorStore.set(edgeId, { bootEpoch: boot, lastSeq: last.seq, chainTip: last.hash });
-  return { accepted: toApply.length, duplicates, alerts };
+  // A bootEpoch not yet seen for this edge = a (claimed) reflash. Retain prior boots' anchors.
+  if (rec.currentBoot && rec.currentBoot !== boot) {
+    alerts.push({ type: ALERT.BOOT_TRANSITION, from: rec.currentBoot, to: boot });
+  }
+  if (first.seq !== 0 || first.prev !== "") { // a fresh boot MUST start at the genesis (seq 0, prev "")
+    alerts.push({ type: first.seq !== 0 ? ALERT.GAP : ALERT.TAMPER, from: -1, to: first.seq, reason: "bad-genesis" });
+    return { accepted: 0, duplicates: 0, alerts };
+  }
+  advance();
+  return { accepted: records.length, duplicates: 0, alerts };
 }
 
 const AuditAnchor = { ALERT, recordHash, ingestAuditBatch };
