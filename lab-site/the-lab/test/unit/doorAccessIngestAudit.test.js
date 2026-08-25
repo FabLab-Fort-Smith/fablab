@@ -60,6 +60,15 @@ test("boundary validation runs BEFORE any DB access", async () => {
   expect(Model.getEdgeSigningKey).not.toHaveBeenCalled(); // boundary rejects before the auth check too
 });
 
+test("an integer-like key in event is rejected (JS↔Py canonical parity, SEC #170 F1)", async () => {
+  // JS orders integer-like keys numerically, Python sorts as strings → the edge's valid signature would
+  // fail cloud verify (fail-closed) + fire a false alert. Reject it explicitly at the boundary instead.
+  const r = rec("", "b", 0, 1, { doorId: "front", meta: { "10": "a", "2": "b" } });
+  const res = await Service.ingestEdgeAudit({ edgeId: "e", records: [r], signature: sign("e", [r]) });
+  expect(res.rejected).toBe("malformed-record");
+  expect(Model.getAuditAnchor).not.toHaveBeenCalled();
+});
+
 test("a reserved-key bootEpoch is rejected at the boundary (SEC #169)", async () => {
   for (const boot of ["__proto__", "constructor", "prototype", "$where", "a.b", ""]) {
     const r = rec("", "b", 0, 1); r.bootEpoch = boot;

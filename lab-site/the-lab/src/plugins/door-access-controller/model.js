@@ -3,6 +3,8 @@
 // a single access-policy document. Card codes are stored only as GCM ciphertext + a
 // unique blind index (cardCrypto.js); this file never sees a plaintext code.
 
+import crypto from "crypto";
+
 import { db } from "@/lib/database";
 import { EMPTY_POLICY } from "./class";
 
@@ -169,11 +171,28 @@ export async function getEdgeSigningKey(edgeId) {
 }
 
 /**
- * Register (or rotate) an edge's audit-signing public key. Admin/provisioning only (the caller enforces
- * authorization + genesis/reflash binding — #151). Storing a new key re-anchors trust for that edge.
+ * Register (or rotate) an edge's audit-signing public key. Admin/provisioning only — the caller still
+ * enforces AUTHORIZATION + genesis/reflash binding (#151, S6-b-a2). Storing a new key re-anchors trust
+ * for that edge, so this is a security-critical mutation: it self-validates its inputs as defense in
+ * depth (never trust a future caller to be safe — SEC #170 F2). `edgeId` must be a safe Mongo `_id`
+ * (no `$`/`.`/reserved key → operator injection / poisoned id) and `pubSpki` must be a real Ed25519 SPKI
+ * (a malformed stored key would silently turn every future batch from that edge into a bad-signature).
  * @param {string} edgeId @param {string} pubSpki SPKI DER, base64
+ * @throws {Error} on an unsafe edgeId or a non-Ed25519 / malformed public key
  */
 export async function registerEdgeSigningKey(edgeId, pubSpki) {
+  if (typeof edgeId !== "string" || edgeId.length === 0 || edgeId.length > 128
+    || edgeId.startsWith("$") || edgeId.includes(".") || edgeId === "__proto__"
+    || edgeId === "constructor" || edgeId === "prototype") {
+    throw new Error("registerEdgeSigningKey: unsafe edgeId");
+  }
+  if (typeof pubSpki !== "string" || pubSpki.length === 0) throw new Error("registerEdgeSigningKey: missing pubSpki");
+  try {
+    const key = crypto.createPublicKey({ key: Buffer.from(pubSpki, "base64"), format: "der", type: "spki" });
+    if (key.asymmetricKeyType !== "ed25519") throw new Error("not Ed25519");
+  } catch {
+    throw new Error("registerEdgeSigningKey: pubSpki is not a valid Ed25519 SPKI key");
+  }
   await cards();
   await (await database())
     .collection(EDGE_KEYS)

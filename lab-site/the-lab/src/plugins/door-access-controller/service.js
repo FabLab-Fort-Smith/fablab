@@ -84,6 +84,24 @@ const ALERT_SEVERITY = {
   [ALERT.BOOT_TRANSITION]: "notice",
 };
 const _int = (v) => typeof v === "number" && Number.isInteger(v) && !Number.isNaN(v);
+const _INT_LIKE_KEY = /^-?\d+$/;
+/**
+ * True iff no object anywhere in `v` has an integer-like key. JS `JSON.stringify` orders integer-like
+ * keys numerically while Python's `canonical_bytes` sorts keys as strings, so such a key would make the
+ * two sides canonicalize DIFFERENTLY — the edge's valid signature would then fail cloud verification
+ * (fail-closed, never a forge) and drop that edge's audit + fire a false high-severity alert. We reject
+ * it at the boundary as an explicit `malformed-record` instead. `event` is the only free-form object in
+ * a record, but we scan defensively. (SEC #170 F1; JS↔Py byte-parity, door-controller-wifi.md §2 F3.)
+ */
+function noIntegerLikeKeys(v) {
+  if (Array.isArray(v)) return v.every(noIntegerLikeKeys);
+  if (v && typeof v === "object") {
+    for (const k of Object.keys(v)) {
+      if (_INT_LIKE_KEY.test(k) || !noIntegerLikeKeys(v[k])) return false;
+    }
+  }
+  return true;
+}
 /** True iff a record is well-typed at the boundary (deep content is verified by the anchor). */
 function validAuditRecord(r) {
   return r && typeof r === "object"
@@ -94,7 +112,8 @@ function validAuditRecord(r) {
     // or land as a Mongo field). SEC #169 LOW.
     && isSafeKey(r.bootEpoch) && r.bootEpoch.length <= 128
     && typeof r.prev === "string" && typeof r.hash === "string"
-    && r.event && typeof r.event === "object" && !Array.isArray(r.event);
+    && r.event && typeof r.event === "object" && !Array.isArray(r.event)
+    && noIntegerLikeKeys(r.event); // JS↔Py canonical parity — SEC #170 F1
 }
 
 const Service = {
