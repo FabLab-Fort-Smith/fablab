@@ -13,6 +13,7 @@ import {
     makeUplinkConnection, relayEnvelopes, makeBrokerRegistry,
 } from './lib/brokerUplink.js';
 import { makeRequestBrokerResync, makeResyncTrigger } from './lib/brokerResync.js';
+import { makeRequestBrokerAudit } from './lib/brokerAudit.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -151,7 +152,8 @@ const brokerLog = (event, fields = {}) => console.log(`[Broker] ${event} ${JSON.
 // On a broker (re)connect, ask the app to rebuild+push that broker's envelopes (S2c-2c). Best-effort +
 // per-broker cooldown so a flapping broker can't storm the app; fire-and-forget (never blocks auth).
 const resyncTrigger = makeResyncTrigger({ resync: makeRequestBrokerResync({ log: brokerLog }), log: brokerLog });
-const acceptBrokerConn = makeUplinkConnection({ uplink: brokerUplink, registry, log: brokerLog, onConnect: resyncTrigger });
+const ingestAudit = makeRequestBrokerAudit({ log: brokerLog }); // relay an edge audit batch to the app (S6-b-c1)
+const acceptBrokerConn = makeUplinkConnection({ uplink: brokerUplink, registry, log: brokerLog, onConnect: resyncTrigger, ingestAudit });
 
 brokerWss.on('connection', (ws, req) => {
     const ip = req.socket.remoteAddress;

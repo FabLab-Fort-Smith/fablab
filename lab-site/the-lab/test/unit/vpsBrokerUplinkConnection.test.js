@@ -183,3 +183,54 @@ describe("relayEnvelopes (HA — all members)", () => {
     expect(dead.sent.length).toBe(0);
   });
 });
+
+describe("makeUplinkConnection — audit relay (S6-b-c1)", () => {
+  const auth = (conn) => conn.message(JSON.stringify({ t: "auth", secret: "sek-one" }));
+  const REC = [{ prev: "", bootEpoch: "b", seq: 0, ts: 1, event: {}, hash: "h" }];
+
+  test("an authed broker's audit is forwarded to the app; the verdict is relayed back with the id", async () => {
+    const seen = [];
+    const logs = [];
+    const ingestAudit = async (a) => { seen.push(a); return "accepted"; };
+    const ws = fakeWs();
+    const conn = makeUplinkConnection({ uplink: mkUplink(), registry: makeBrokerRegistry(), ingestAudit, log: (e, f) => logs.push({ e, f }) })(ws);
+    await auth(conn);
+    await conn.message(JSON.stringify({ t: "audit", id: "r7", edgeId: "front-01", records: REC, signature: "sig" }));
+    expect(seen).toEqual([{ edgeId: "front-01", records: REC, signature: "sig" }]); // records/signature relayed opaquely
+    expect(ws.last()).toEqual({ t: "audit_result", id: "r7", status: "accepted" });
+    // the relay log line carries edgeId+status only — never records/signature (SEC #174 F3)
+    const dump = JSON.stringify(logs);
+    expect(dump).not.toContain("sig");
+    expect(dump).not.toContain("hash");
+    expect(logs.some((l) => l.e === "broker.audit-relayed" && l.f.edgeId === "front-01" && l.f.status === "accepted")).toBe(true);
+  });
+
+  test("rejected / deferred verdicts pass straight through", async () => {
+    for (const v of ["rejected", "deferred"]) {
+      const ws = fakeWs();
+      const conn = makeUplinkConnection({ uplink: mkUplink(), registry: makeBrokerRegistry(), ingestAudit: async () => v })(ws);
+      await auth(conn);
+      await conn.message(JSON.stringify({ t: "audit", id: "x", edgeId: "e", records: REC, signature: "s" }));
+      expect(ws.last()).toEqual({ t: "audit_result", id: "x", status: v });
+    }
+  });
+
+  test("audit BEFORE auth is not forwarded → deferred (deny-by-default)", async () => {
+    const ingestAudit = jest.fn(async () => "accepted");
+    const ws = fakeWs();
+    const conn = makeUplinkConnection({ uplink: mkUplink(), registry: makeBrokerRegistry(), ingestAudit })(ws);
+    await conn.message(JSON.stringify({ t: "audit", id: "x", edgeId: "e", records: REC, signature: "s" }));
+    expect(ingestAudit).not.toHaveBeenCalled();
+    expect(ws.last()).toEqual({ t: "audit_result", id: "x", status: "deferred" });
+  });
+
+  test("a throwing or bogus ingest verdict is coerced to deferred (fail-secure, never a false accept)", async () => {
+    for (const impl of [async () => { throw new Error("app down"); }, async () => "granted"]) {
+      const ws = fakeWs();
+      const conn = makeUplinkConnection({ uplink: mkUplink(), registry: makeBrokerRegistry(), ingestAudit: impl })(ws);
+      await auth(conn);
+      await conn.message(JSON.stringify({ t: "audit", id: "x", edgeId: "e", records: REC, signature: "s" }));
+      expect(ws.last().status).toBe("deferred");
+    }
+  });
+});
