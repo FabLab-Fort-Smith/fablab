@@ -195,7 +195,7 @@ export function makeBrokerRegistry() {
  * @param {(event:string,fields?:object)=>void} [deps.log]
  * @returns {(ws:object, meta?:object)=>{message:(raw:any)=>Promise<void>, close:()=>void, brokerId:()=>string|null}}
  */
-export function makeUplinkConnection({ uplink, registry, log = () => {}, onConnect = () => {} }) {
+export function makeUplinkConnection({ uplink, registry, log = () => {}, onConnect = () => {}, ingestAudit = null }) {
   return function accept(ws, meta = {}) {
     let brokerId = null; // null until the bearer authenticates (authn-before-act)
     const emit = (event, fields = {}) => log(event, { ...meta, ...fields }); // meta = e.g. { ip } for forensics
@@ -222,6 +222,24 @@ export function makeUplinkConnection({ uplink, registry, log = () => {}, onConne
           const resp = await uplink.handleAuthz({ brokerId, id: m.id, doorId: m.doorId, code: m.code, tz: m.tz });
           emit("broker.authz", { brokerId: brokerId || "?", doorId: m.doorId, granted: resp.granted, reason: resp.reason });
           if (ws.readyState === WS_OPEN) safeSend(ws, resp);
+        } else if (m.t === "audit") {
+          // Edge audit relayed up by an AUTHENTICATED broker (deny-by-default: pre-auth → deferred, the
+          // broker falls back and the edge keeps the batch). Forward to the app (verifies the edge
+          // signature + runs the fail-closed anchor); relay ONLY the verdict back — never `records`
+          // (Restricted) or the signature. `edgeId` is the edge's SIGNED identity; the app rejects a
+          // forged one on signature-verify, so the relay stays a blind pass-through.
+          let status = "deferred";
+          if (brokerId && typeof ingestAudit === "function") {
+            const edgeId = typeof m.edgeId === "string" ? m.edgeId : null;
+            const records = Array.isArray(m.records) ? m.records : null;
+            const signature = typeof m.signature === "string" ? m.signature : null;
+            try {
+              const r = await ingestAudit({ edgeId, records, signature });
+              if (r === "accepted" || r === "rejected" || r === "deferred") status = r;
+            } catch { status = "deferred"; } // fail-secure — never a false accept
+            emit("broker.audit-relayed", { brokerId, edgeId, status });
+          }
+          if (ws.readyState === WS_OPEN) safeSend(ws, { t: "audit_result", id: m.id ?? null, status });
         } else if (m.t === "ping") {
           safeSend(ws, { t: "pong" });
         }

@@ -28,6 +28,7 @@ import { makeEdgeDenylist } from "./lib/brokerDenylist.js";
 
 const EDGE_IDLE_MS = 60000;         // drop an idle/held edge connection (fail-secure)
 const UPLINK_MAX_PAYLOAD = 512 * 1024; // an envelope push is small; cap it (CWE-400)
+const MAX_INFLIGHT_AUDIT = 64;      // bound concurrent audit relays (SEC #172 L2, CWE-400)
 
 const log = (event, fields = {}) => console.log(JSON.stringify({ ts: new Date().toISOString(), event, ...fields }));
 
@@ -112,6 +113,10 @@ function startUplink(cfg, store) {
   function relayAudit({ edgeId, records, signature }) {
     return new Promise((resolve) => {
       if (!ws || ws.readyState !== WebSocket.OPEN) return resolve("deferred");
+      // Soft cap on concurrent in-flight relays (SEC #172 L2, CWE-400): now that audit is non-blocking
+      // (L1) it no longer self-serializes, so bound the outstanding set + retained records. Over cap →
+      // "deferred" at once (the edge keeps + retries), never an unbounded queue.
+      if (auditPending.size >= MAX_INFLIGHT_AUDIT) { log("audit.overflow", { edgeId }); return resolve("deferred"); }
       const id = crypto.randomUUID();
       const timer = setTimeout(() => { auditPending.delete(id); resolve("deferred"); }, 5000);
       timer.unref?.();
@@ -156,13 +161,24 @@ function startEdgeListener(cfg, store, registry, cloudAuthorize, denylist = { is
           log("scan.replay-dropped", { doorId }); // F2: log, never silently swallow
           continue;
         }
-        const resp = await handleEdgeMessage(msg, { store, cloudAuthorize, doorId, edgeId, relayAudit });
+        const ctx = { store, cloudAuthorize, doorId, edgeId, relayAudit };
+        if (msg.t === "audit") {
+          // Non-blocking (SEC #172 L1): the audit relay can wait on the cloud (up to the relay timeout),
+          // so it must NOT head-of-line-block a following latency-sensitive `scan` (door unlock) in the
+          // same chunk. Fire it off; the `audit_ack` is written when the relay resolves. The edge matches
+          // the ack by its own batchId, so out-of-order-vs-scan replies are fine.
+          handleEdgeMessage(msg, ctx).then((resp) => {
+            if (!resp) return;
+            log("audit.relayed", { edgeId, status: resp.status }); // edgeId+status only (never records)
+            try { socket.write(JSON.stringify(resp) + "\n"); } catch { /* client gone */ }
+          }).catch(() => { /* handler is fail-secure; nothing to send */ });
+          continue;
+        }
+        const resp = await handleEdgeMessage(msg, ctx);
         if (resp) {
           // F4: audit the security-relevant event — an OFFLINE GRANT (decided locally, not centrally
           // audited until reconnect, #151) — rather than every offline result incl. denies.
           if (resp.t === "result" && resp.mode === "offline" && resp.granted) log("scan.offline-grant", { doorId });
-          // Observe an audit relay's outcome (edgeId only; records/signature are never logged).
-          if (resp.t === "audit_ack") log("audit.relayed", { edgeId, status: resp.status });
           try { socket.write(JSON.stringify(resp) + "\n"); } catch { /* client gone */ }
         }
       }
