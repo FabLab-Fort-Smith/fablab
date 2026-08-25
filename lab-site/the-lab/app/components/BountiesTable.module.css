@@ -1,0 +1,91 @@
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.table th,
+.table td {
+  padding: var(--space-sm) var(--space-md);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.table th {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.table tbody tr:hover {
+  background: var(--color-surface-hover);
+}
+
+.titleCell {
+  max-width: 300px;
+}
+
+.titleLink {
+  color: var(--color-primary);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.titleLink:hover {
+  text-decoration: underline;
+}
+
+.rewardCell {
+  font-weight: 600;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px var(--space-xs);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.badge.open {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.badge.closed {
+  background: var(--color-muted-bg);
+  color: var(--color-text-muted);
+}
+
+.badge.pending {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.dateCell {
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.loading,
+.error,
+.empty {
+  padding: var(--space-xl);
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.error {
+  color: var(--color-error);
+}
