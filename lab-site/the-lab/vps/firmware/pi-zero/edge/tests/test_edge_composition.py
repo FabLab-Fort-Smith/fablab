@@ -307,3 +307,28 @@ def test_flush_never_leaks_the_scanned_code(tmp_path):
     rt, _, logs = _flush_runtime(tmp_path, up)
     rt.flush_audit()
     assert "SECRET" not in (json.dumps(up.sent) + json.dumps(logs))  # records carry no code anyway
+
+
+def test_audit_ack_compare_and_set_is_a_noop_on_a_stale_base(tmp_path):
+    # SEC #175 F1: ack(count, base) advances ONLY if the cursor still equals base — so a second
+    # concurrent flush (stale base) can't ack records it didn't send.
+    audit = AuditLog(str(tmp_path / "a.jsonl"), boot_epoch="b")
+    for i in range(3):
+        audit.append({"doorId": "front", "granted": True, "reason": "granted", "mode": "offline"}, ts_ms=i)
+    base, recs = audit.snapshot_pending()
+    assert base == 0 and len(recs) == 3
+    assert audit.ack(2, base=0) == 2                 # first flush advances 0→2
+    assert audit.ack(2, base=0) == 2                 # second flush, STALE base 0 → no-op (cursor stays 2)
+    assert len(audit.pending()) == 1                 # the 3rd record is still pending, not dropped
+
+
+def test_flush_accepted_survives_a_cursor_persist_failure(tmp_path):
+    # SEC #175 F2: an ack() persist error must not crash the flush — the cloud already has the records.
+    up = FakeAuditUplink("accepted")
+    rt, audit, logs = _flush_runtime(tmp_path, up)
+
+    def boom(*a, **k):
+        raise OSError("disk full")
+    audit.ack = boom
+    assert rt.flush_audit() == {"flushed": 2, "status": "accepted"}   # reported accepted, did not raise
+    assert any(e == "audit.ack-persist-error" for e, _ in logs)

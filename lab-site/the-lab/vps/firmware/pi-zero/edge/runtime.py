@@ -55,7 +55,8 @@ class EdgeRuntime:
         carry no PII (event = {doorId,granted,reason,mode}); the scanned code is never in them.
         @returns {"flushed": int, "status": "empty"|"accepted"|"deferred"|"rejected"}
         """
-        records = self.audit.pending()
+        # Atomic snapshot (base cursor + records) so a concurrent flush can't race the cursor (SEC #175 F1).
+        base, records = self.audit.snapshot_pending()
         if not records:
             return {"flushed": 0, "status": "empty"}
         if not self.edge_id or not self.audit_signing_key:
@@ -70,7 +71,13 @@ class EdgeRuntime:
         ack = parse_audit_ack(raw) if raw is not None else None
         if ack and ack["status"] == "accepted" and ack["batchId"] == batch_id:
             n = len(records)
-            self.audit.ack(n)  # advance the cursor — these are durably recorded at the cloud anchor
+            # Compare-and-set the cursor against the snapshot base (F1). A persist failure here is NOT an
+            # integrity problem — the cloud already has these records and re-sends dedup at the anchor —
+            # so log + still report accepted rather than crashing the caller (SEC #175 F2).
+            try:
+                self.audit.ack(n, base=base)  # advance only if the cursor is unmoved since the snapshot
+            except Exception as e:  # noqa: BLE001 — cursor-persist failure; cloud has them, re-send dedups
+                self.log("audit.ack-persist-error", {"reason": str(e)})
             return {"flushed": n, "status": "accepted"}
         if ack and ack["status"] == "rejected":
             # bad-signature / unregistered-edge — retrying the identical batch won't help. KEEP the records
