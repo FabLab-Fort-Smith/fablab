@@ -476,8 +476,12 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      `DOOR_CARD_INDEX_KEY` is env-only. New CI step shellchecks `vps/pki/*.sh` + runs `door-ca.test.sh`
      (real openssl+node). Outputs wire straight into the S2c-3 broker compose + the cloud
      `BROKER_UPLINK_SECRETS`/`BROKER_DOOR_MAP` (see `vps/pki/README.md`).
-   - **S3b** (next): broker-side `edgeId` **deny-list** (F7) — the Link-A listener refuses a CA-signed edge
-     cert whose CN is deny-listed (revoke a compromised edge without re-issuing the CA).
+   - **S3b ✅** broker-side `edgeId` **deny-list** (F7): `vps/lib/brokerDenylist.js` (mtime-gated reload,
+     fail-safe — missing=no revocations, malformed=keep-last-good+alert) + `brokerConfig.edgeDenylistPath`
+     (`BROKER_EDGE_DENYLIST`, optional) + the Link-A listener refuses a deny-listed CN (`edge.denied`
+     audit, socket dropped before any door processing) even though its cert chains to the CA. Revocation
+     takes effect on the edge's next connection — no CA re-issue, no broker restart. JSON-array or
+     newline CN file; mounted at `/certs/edge-denylist.json` in the broker compose.
    - **S3c**: master-rotation → fleet-re-key **runbook** (rotate `DOOR_CARD_INDEX_KEY`, re-derive every
      recipient key, re-provision) + short-lived-cert re-issue.
 4. **S4 — Edge firmware (`pi-zero` edge role).** NFC + strike relay GPIO + mTLS client + rung-3 cache
