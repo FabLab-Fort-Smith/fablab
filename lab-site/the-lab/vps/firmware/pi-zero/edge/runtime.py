@@ -14,6 +14,7 @@ import math
 import uuid
 
 from .decide import decide_offline
+from .protocol import build_audit_msg, parse_audit_ack
 
 
 def new_boot_epoch():
@@ -24,10 +25,15 @@ def new_boot_epoch():
 
 class EdgeRuntime:
     def __init__(self, *, door_id, verify_key_b64, edge_index_key, store, audit, clock, uplink, relay,
-                 now_provider, log=lambda *a, **k: None):
+                 now_provider, edge_id=None, audit_signing_key=None, log=lambda *a, **k: None):
         """`uplink.authorize(door_id, code) -> {"granted","reason"} | None` (None = broker unreachable).
         `relay.pulse()` energizes the strike. `now_provider() -> (system_ms, rtc_ok)`. `clock` is a
-        TimeSource; `store`/`audit` are the S4b-a cores."""
+        TimeSource; `store`/`audit` are the S4b-a cores.
+
+        `edge_id` (this edge's id = its mTLS cert CN) + `audit_signing_key` (its provisioned Ed25519
+        audit private key, PKCS#8 DER b64) enable `flush_audit`; `uplink.send_audit(line) -> ack_line|None`
+        pushes a signed batch to the broker. All three are optional so a decision-only runtime still
+        builds; `flush_audit` is a safe no-op (deferred) if the audit key isn't provisioned."""
         self.door_id = door_id
         self.verify_key_b64 = verify_key_b64
         self.edge_index_key = edge_index_key
@@ -37,7 +43,42 @@ class EdgeRuntime:
         self.uplink = uplink
         self.relay = relay
         self.now_provider = now_provider
+        self.edge_id = edge_id
+        self.audit_signing_key = audit_signing_key
         self.log = log
+
+    def flush_audit(self):
+        """Push pending store-and-forward audit up to the broker (→ cloud), advancing the ack cursor ONLY
+        on an explicit cloud `accepted` whose batchId matches what we sent. Idempotent (the cloud dedups
+        by (edgeId,bootEpoch,seq)) and safe to call on a timer. Fail-secure — unreachable / deferred /
+        rejected / mismatch / unprovisioned → keep the records (NEVER drop unuploaded audit). Records
+        carry no PII (event = {doorId,granted,reason,mode}); the scanned code is never in them.
+        @returns {"flushed": int, "status": "empty"|"accepted"|"deferred"|"rejected"}
+        """
+        records = self.audit.pending()
+        if not records:
+            return {"flushed": 0, "status": "empty"}
+        if not self.edge_id or not self.audit_signing_key:
+            self.log("audit.flush-unprovisioned", {})
+            return {"flushed": 0, "status": "deferred"}  # keep until an audit key is provisioned
+        try:
+            batch_id, line = build_audit_msg(edge_id=self.edge_id, signing_key_b64=self.audit_signing_key, records=records)
+            raw = self.uplink.send_audit(line)  # broker's audit_ack line, or None if unreachable
+        except Exception as e:  # noqa: BLE001 — any sign/transport error = keep + retry (never a false ack)
+            self.log("audit.flush-error", {"reason": str(e)})
+            return {"flushed": 0, "status": "deferred"}
+        ack = parse_audit_ack(raw) if raw is not None else None
+        if ack and ack["status"] == "accepted" and ack["batchId"] == batch_id:
+            n = len(records)
+            self.audit.ack(n)  # advance the cursor — these are durably recorded at the cloud anchor
+            return {"flushed": n, "status": "accepted"}
+        if ack and ack["status"] == "rejected":
+            # bad-signature / unregistered-edge — retrying the identical batch won't help. KEEP the records
+            # (forensics) but don't hot-loop; the supervisor paces retries and an operator must re-check
+            # the edge's registration. Alert via the log (edgeId only, no PII).
+            self.log("audit.flush-rejected", {"edgeId": self.edge_id})
+            return {"flushed": 0, "status": "rejected"}
+        return {"flushed": 0, "status": "deferred"}  # keep + retry (unreachable / deferred / stale ack)
 
     def _decide_offline(self, code):
         system_ms, rtc_ok = self.now_provider()
