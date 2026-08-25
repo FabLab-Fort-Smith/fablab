@@ -6,10 +6,11 @@ import base64
 import json
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from cryptography.hazmat.primitives.serialization import (Encoding, NoEncryption, PrivateFormat,
+                                                          PublicFormat, load_der_public_key)
 
-from edge import (AuditLog, EdgeRuntime, EnvelopeStore, TimeSource, build_scan_msg,
-                  canonical_bytes, cred_hash, new_boot_epoch, parse_result)
+from edge import (AuditLog, EdgeRuntime, EnvelopeStore, TimeSource, build_audit_msg, build_scan_msg,
+                  canonical_bytes, cred_hash, new_boot_epoch, parse_audit_ack, parse_result)
 
 # ---- protocol --------------------------------------------------------------------------------
 def test_build_scan_msg_shape():
@@ -178,3 +179,156 @@ def test_code_never_audited_or_logged(tmp_path):
     rt.handle_scan("SUPER-SECRET-CODE")
     blob = json.dumps(audit.pending()) + json.dumps(logs)
     assert "SUPER-SECRET-CODE" not in blob
+
+
+# ---- audit flush protocol (S6-b-c2): build_audit_msg + parse_audit_ack ------------------------
+_AUDIT_SK = Ed25519PrivateKey.generate()
+AUDIT_PRIV_B64 = base64.b64encode(_AUDIT_SK.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())).decode()
+AUDIT_PUB_B64 = base64.b64encode(_AUDIT_SK.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)).decode()
+_EV = {"doorId": "front", "granted": True, "reason": "granted", "mode": "offline"}
+RECS = [{"prev": "", "bootEpoch": "b", "seq": 0, "ts": 1000, "event": _EV, "hash": "H0"},
+        {"prev": "H0", "bootEpoch": "b", "seq": 1, "ts": 1001, "event": _EV, "hash": "H1"}]
+
+
+def test_build_audit_msg_shape_signature_and_no_edgeid():
+    batch_id, line = build_audit_msg(edge_id="front-01", signing_key_b64=AUDIT_PRIV_B64, records=RECS)
+    assert line.endswith("\n")
+    m = json.loads(line)
+    assert m["t"] == "audit" and "edgeId" not in m       # the broker attaches the cert-attested edgeId
+    assert m["batchId"] == batch_id == "b:0-1"            # deterministic per (bootEpoch, seq-range)
+    assert m["records"] == RECS
+    # the signature verifies over canonical({edgeId, records}) — byte-parity with the cloud verify
+    load_der_public_key(base64.b64decode(AUDIT_PUB_B64)).verify(
+        base64.b64decode(m["signature"]), canonical_bytes({"edgeId": "front-01", "records": RECS}))
+
+
+def test_build_audit_msg_binds_edgeid():
+    _, a = build_audit_msg(edge_id="edge-a", signing_key_b64=AUDIT_PRIV_B64, records=RECS)
+    _, b = build_audit_msg(edge_id="edge-b", signing_key_b64=AUDIT_PRIV_B64, records=RECS)
+    assert json.loads(a)["signature"] != json.loads(b)["signature"]  # edgeId is inside the signed bytes
+
+
+def test_parse_audit_ack_and_fail_secure_on_unknown_status():
+    assert parse_audit_ack('{"t":"audit_ack","batchId":"b:0-1","status":"accepted"}') == {"batchId": "b:0-1", "status": "accepted"}
+    assert parse_audit_ack('{"t":"audit_ack","status":"deferred"}') == {"batchId": None, "status": "deferred"}
+    assert parse_audit_ack('{"t":"audit_ack","batchId":"x","status":"granted"}') is None   # unknown status → None (→ deferred)
+    assert parse_audit_ack('{"t":"pong"}') is None
+    assert parse_audit_ack("not json") is None
+
+
+# ---- EdgeRuntime.flush_audit -----------------------------------------------------------------
+class FakeAuditUplink:
+    """Echoes the sent batchId in the ack (like the broker) with a configurable status; or returns None
+    (unreachable) / a bad line / raises."""
+    def __init__(self, status="accepted", *, raise_exc=None, ack_line=..., wrong_batch=False):
+        self.status = status
+        self.raise_exc = raise_exc
+        self.ack_line = ack_line
+        self.wrong_batch = wrong_batch
+        self.sent = []
+
+    def authorize(self, door_id, code):
+        return None
+
+    def send_audit(self, line):
+        self.sent.append(line)
+        if self.raise_exc:
+            raise self.raise_exc
+        if self.ack_line is not ...:
+            return self.ack_line                 # None (unreachable) or a raw override
+        bid = json.loads(line)["batchId"]
+        if self.wrong_batch:
+            bid = "MISMATCH"
+        return json.dumps({"t": "audit_ack", "batchId": bid, "status": self.status})
+
+
+def _flush_runtime(tmp_path, uplink, *, edge_id="front-01", key=AUDIT_PRIV_B64, n=2):
+    store = EnvelopeStore(str(tmp_path / "env"))
+    clock = TimeSource(str(tmp_path / "floor"))
+    audit = AuditLog(str(tmp_path / "audit.jsonl"), boot_epoch="b")
+    for i in range(n):
+        audit.append({"doorId": "front", "granted": True, "reason": "granted", "mode": "offline"}, ts_ms=1000 + i)
+    logs = []
+    rt = EdgeRuntime(
+        door_id="front", verify_key_b64=VK, edge_index_key=EDGE_KEY, store=store, audit=audit,
+        clock=clock, uplink=uplink, relay=FakeRelay(), now_provider=lambda: (1000, True),
+        edge_id=edge_id, audit_signing_key=key, log=lambda e, f=None: logs.append((e, f)),
+    )
+    return rt, audit, logs
+
+
+def test_flush_accepted_advances_the_cursor(tmp_path):
+    up = FakeAuditUplink("accepted")
+    rt, audit, _ = _flush_runtime(tmp_path, up)
+    assert len(audit.pending()) == 2
+    assert rt.flush_audit() == {"flushed": 2, "status": "accepted"}
+    assert audit.pending() == []                 # cursor advanced — durably recorded at the cloud anchor
+    assert len(up.sent) == 1 and "front-01" not in up.sent[0]  # edgeId not in the msg (broker adds it)
+
+
+def test_flush_deferred_and_rejected_keep_the_records(tmp_path):
+    for status, expect_log in (("deferred", None), ("rejected", "audit.flush-rejected")):
+        d = tmp_path / status
+        rt, audit, logs = _flush_runtime(d, FakeAuditUplink(status))
+        assert rt.flush_audit() == {"flushed": 0, "status": status}
+        assert len(audit.pending()) == 2         # NEVER dropped
+        if expect_log:
+            assert any(e == expect_log for e, _ in logs)
+
+
+def test_flush_unreachable_or_error_or_stale_ack_defers(tmp_path):
+    # unreachable (send_audit → None), transport raise, garbage ack, and a mismatched batchId all → deferred
+    for i, up in enumerate([
+        FakeAuditUplink(ack_line=None),
+        FakeAuditUplink(raise_exc=RuntimeError("socket")),
+        FakeAuditUplink(ack_line="not-json"),
+        FakeAuditUplink("accepted", wrong_batch=True),   # accepted but wrong batchId → do NOT advance
+    ]):
+        rt, audit, _ = _flush_runtime(tmp_path / f"u{i}", up)
+        assert rt.flush_audit()["status"] == "deferred"
+        assert len(audit.pending()) == 2
+
+
+def test_flush_empty_is_a_noop(tmp_path):
+    rt, _, _ = _flush_runtime(tmp_path, FakeAuditUplink("accepted"), n=0)
+    assert rt.flush_audit() == {"flushed": 0, "status": "empty"}
+
+
+def test_flush_unprovisioned_defers_and_never_sends(tmp_path):
+    up = FakeAuditUplink("accepted")
+    rt, audit, logs = _flush_runtime(tmp_path, up, key=None)  # no audit signing key
+    assert rt.flush_audit() == {"flushed": 0, "status": "deferred"}
+    assert up.sent == [] and len(audit.pending()) == 2
+    assert any(e == "audit.flush-unprovisioned" for e, _ in logs)
+
+
+def test_flush_never_leaks_the_scanned_code(tmp_path):
+    up = FakeAuditUplink("accepted")
+    rt, _, logs = _flush_runtime(tmp_path, up)
+    rt.flush_audit()
+    assert "SECRET" not in (json.dumps(up.sent) + json.dumps(logs))  # records carry no code anyway
+
+
+def test_audit_ack_compare_and_set_is_a_noop_on_a_stale_base(tmp_path):
+    # SEC #175 F1: ack(count, base) advances ONLY if the cursor still equals base — so a second
+    # concurrent flush (stale base) can't ack records it didn't send.
+    audit = AuditLog(str(tmp_path / "a.jsonl"), boot_epoch="b")
+    for i in range(3):
+        audit.append({"doorId": "front", "granted": True, "reason": "granted", "mode": "offline"}, ts_ms=i)
+    base, recs = audit.snapshot_pending()
+    assert base == 0 and len(recs) == 3
+    assert audit.ack(2, base=0) == 2                 # first flush advances 0→2
+    assert audit.ack(2, base=0) == 2                 # second flush, STALE base 0 → no-op (cursor stays 2)
+    assert len(audit.pending()) == 1                 # the 3rd record is still pending, not dropped
+
+
+def test_flush_accepted_survives_a_cursor_persist_failure(tmp_path):
+    # SEC #175 F2: an ack() persist error must not crash the flush — the cloud already has the records.
+    up = FakeAuditUplink("accepted")
+    rt, audit, logs = _flush_runtime(tmp_path, up)
+
+    def boom(*a, **k):
+        raise OSError("disk full")
+    audit.ack = boom
+    assert rt.flush_audit() == {"flushed": 2, "status": "accepted"}   # reported accepted, did not raise
+    assert any(e == "audit.ack-persist-error" for e, _ in logs)

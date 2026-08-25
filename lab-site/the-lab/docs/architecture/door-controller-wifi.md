@@ -594,10 +594,19 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      signature (the app does, S6-b-a). **Also folds the S6-b-b Lows**: the broker's audit relay is now
      **non-blocking** (never head-of-line-blocks a following `scan` — L1) and its in-flight relays are
      **capped** (`MAX_INFLIGHT_AUDIT=64` → over-cap `deferred`, CWE-400 — L2). +9 tests.
-   - **S6-b-c2** (next): the **edge flush** — `protocol.build_audit_msg` + a runtime
-     `pending`→sign→send→`ack` loop (advance the `audit.py` cursor only on `accepted`; keep on
-     `deferred`/`rejected`). Then the **admin UI** (S6-b2: tier + last status + `edgeDeviceId`/`brokerId`
-     bindings; a11y).
+   - **S6-b-c2 ✅** the **edge flush** — `protocol.build_audit_msg(edge_id, signing_key, records)` builds
+     the signed `{t:"audit", batchId, records, signature}` line (edgeId NOT in the message — the broker
+     attaches its cert id; it IS bound into the signature; `batchId` = `bootEpoch:firstSeq-lastSeq`,
+     deterministic per window) + `parse_audit_ack` (fail-secure: unknown status → None). `EdgeRuntime`
+     gains `edge_id`/`audit_signing_key` and `flush_audit()`: read `audit.pending()` → sign → `uplink.
+     send_audit(line)` → advance the cursor (`audit.ack`) **only** on an `accepted` whose `batchId`
+     matches; keep the records on `deferred`/`rejected`/unreachable/stale-ack/unprovisioned (NEVER drop
+     unuploaded audit; `rejected` = registration/sig problem → log + don't hot-loop). Idempotent (cloud
+     dedups by `(edgeId,bootEpoch,seq)`), safe on a timer; records carry no PII. +9 tests. **The audit
+     loop is now closed end to end** (edge → broker → cloud → anchor). The concrete `send_audit` transport
+     + the timer that calls `flush_audit` are the S4b-3 supervisor (bench-tested on a Pi).
+   - **S6-b2** (next): the door-access **admin UI** (tier + last status + `edgeDeviceId`/`brokerId`
+     bindings + the S6-b-a2 edge-key register/list; WCAG a11y).
 7. **S7 — Parallel-run + cut-over (§10).** Run the full 4-rung ladder + HA drill on one door, then roll
    out door-by-door; retire the Pico units (reversible).
 
@@ -614,6 +623,7 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
 | 2026-08-23 | **Round-3 SEC re-review → APPROVE (converged). Fold 6 Low items: Buffer-not-String zeroization, broker-key site-wide blast-radius honesty + §3e protection, per-`doorId` anti-rollback high-water, CSPRNG-issued entropy floor, cloud-authorized bootEpoch reset, HA shares one `brokerId` (2 envelope copies). +tests 9/11/12/13 tightened, +test 14.** | app dev |
 | 2026-08-23 | **Owner-accepted: promote `status: current`; §11 open questions → binding decisions (active/standby HA, 24h/72h TTLs, dedicated Proxmox host, scripted CA provisioning + master-rotation re-key, ≥7-day audit buffer, Pi Zero W + RTC HAT, ≥128-bit CSPRNG floor + NFC accepted-risk, F7 ships in first rollout); add §13 implementation slice plan (S1–S7).** | app dev |
 | 2026-08-24 | **Build progress + S2 sub-slicing: S1/S2a/S2b-1 landed; add the `brokerConfig` fail-closed loader (S2b prep). Lock S2 transport decisions — cert material by file path, app-builds→cloud-relays envelopes, `wss://` mutually-authed Link-B — and fold the S2b-2 transport (mTLS Link-A listener + Link-B uplink + cloud sender) into S2c so it's built + integration-tested with the container.** | app dev |
+| 2026-08-25 | **S6-b-c2 ✅ edge flush (audit loop CLOSED end-to-end): `protocol.build_audit_msg` (signed `{t:"audit",batchId,records,signature}`; edgeId bound in sig, not in msg; batchId=`bootEpoch:first-last`) + `parse_audit_ack` (fail-secure unknown→None). `EdgeRuntime.flush_audit()`: pending→sign→`uplink.send_audit`→`audit.ack` ONLY on accepted+matching-batchId; keep on deferred/rejected/unreachable/stale/unprovisioned (never drop; rejected→log, no hot-loop). Idempotent, no PII. +9 tests. send_audit transport + flush timer = S4b-3 supervisor.** | app dev |
 | 2026-08-25 | **S6-b-c1 ✅ cloud receive + fetch caller: `makeUplinkConnection` `audit` branch → `brokerAudit.makeRequestBrokerAudit` (POST `/api/internal/broker-audit`, bearer, timeout) → relays `{t:"audit_result",id,status}`. HTTP→verdict 200=accepted/400=rejected/409+5xx+net=deferred. Deny-by-default (pre-auth→deferred), fail-secure (throw/bogus→deferred); socket-server never inspects/logs records or verifies sig. Folds S6-b-b Lows: broker audit relay now NON-BLOCKING (no HOL-block on scans, L1) + in-flight cap `MAX_INFLIGHT_AUDIT=64` (L2, CWE-400). +9 tests.** | app dev |
 | 2026-08-25 | **S6-b-b ✅ broker audit relay: `brokerProtocol` `audit` case → broker attaches cert-CN `edgeId` (never the msg), caps ≤1000, relays opaquely up Link-B (`relayAudit`, `authz`-style correlation) → returns cloud verdict as `{t:"audit_ack",batchId,status}`. Deliberately NO broker up-queue — edge (`audit.py`) is the durable buffer; end-to-end ack, `deferred`=cloud-down→edge keeps+retries, bogus verdict→deferred (never false accept). Broker holds no audit state, never logs/verifies records. +7 tests.** | app dev |
 | 2026-08-25 | **S6-b-a2 ✅ key provisioning + registration (genesis/reflash binding): edge `generate_audit_keypair` + `edge.provision_audit_key` CLI (priv 0600, prints only pub, refuses silent overwrite); gated admin `edgeKey.register` (`Service.adminRegisterEdgeKey`, admin-only, validates Ed25519 SPKI, audits genesis vs rotation by fingerprint — never the raw key) + `edgeKey.list`/`adminListEdgeKeys` (id+fingerprint+updatedAt only). An edge can now be registered → transport slice has a live authenticated path. +11 tests.** | app dev |

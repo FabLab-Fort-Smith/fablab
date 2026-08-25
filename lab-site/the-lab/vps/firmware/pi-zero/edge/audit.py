@@ -113,11 +113,28 @@ class AuditLog:
 
     def pending(self):
         """Records not yet acked as uploaded to the cloud (store-and-forward queue)."""
-        return list(self._records[self._acked:])
+        with self._lock:  # lock the slice read (defense-in-depth vs. a concurrent append — SEC #175 F1)
+            return list(self._records[self._acked:])
 
-    def ack(self, count):
-        """Mark the first `count` still-pending records as uploaded (persist the cursor)."""
+    def snapshot_pending(self):
+        """Atomically return `(base_cursor, pending_records)` for one flush cycle. Pass `base` back to
+        `ack(count, base=...)` so a SECOND concurrent flush can't advance the cursor past records it
+        never sent (a compare-and-set — SEC #175 F1). `append` only grows the tail, so `base` stays valid
+        until an `ack` moves the cursor.
+        """
         with self._lock:
+            base = self._acked
+            return base, list(self._records[base:])
+
+    def ack(self, count, base=None):
+        """Mark the first `count` still-pending records as uploaded (persist the cursor). If `base` is
+        given, this is a compare-and-set: it advances ONLY when the cursor still equals `base` (else it's
+        a no-op — a concurrent flush already advanced), so two overlapping flushes can't ack an unsent
+        record. Returns the resulting cursor.
+        """
+        with self._lock:
+            if base is not None and self._acked != base:
+                return self._acked  # CAS miss — another flush moved the cursor; do not advance
             self._acked = min(self._acked + max(0, int(count)), len(self._records))
             tmp = self._ack_path() + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
