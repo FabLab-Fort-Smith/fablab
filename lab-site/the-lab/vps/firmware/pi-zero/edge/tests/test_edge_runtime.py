@@ -74,6 +74,11 @@ def test_store_survives_reopen(tmp_path):
     assert EnvelopeStore(str(tmp_path)).high_water("front") == 8   # file-as-truth persists
 
 
+def test_store_no_verify_guard(tmp_path):
+    s = EnvelopeStore(str(tmp_path))
+    assert s.put(_signed(version=1), verify=None)["reason"] == "no-verify"  # L2: fail-closed, no crash
+
+
 # ---- AuditLog --------------------------------------------------------------------------------
 def _ev(door="front", granted=True, reason="granted"):
     return {"doorId": door, "granted": granted, "reason": reason, "mode": "offline"}
@@ -115,6 +120,44 @@ def test_audit_reopen_continues_seq_per_boot_and_chain(tmp_path):
     c = AuditLog(p, boot_epoch="boot-2")           # new boot → seq resets to 0, chain still links
     r = c.append(_ev(), ts_ms=4)
     assert r["seq"] == 0 and r["prev"] != "" and c.verify_chain() is True
+
+
+def test_audit_torn_trailing_line_tolerated(tmp_path):
+    # M2: a power cut mid-append leaves a garbage final line — reload drops it, chain stays valid.
+    p = tmp_path / "audit.jsonl"
+    a = AuditLog(str(p), boot_epoch="b")
+    a.append(_ev(), ts_ms=1)
+    a.append(_ev(), ts_ms=2)
+    with open(p, "a", encoding="utf-8") as f:
+        f.write('{"bootEpoch":"b","seq":2,"ts":3,"ev')  # torn write, no newline
+    b = AuditLog(str(p), boot_epoch="b")
+    assert len(b.pending()) == 2 and b.verify_chain() is True
+    assert b.append(_ev(), ts_ms=4)["seq"] == 2  # resumes cleanly after the dropped torn line
+
+
+def test_audit_midfile_unparseable_fails_verify(tmp_path):
+    # M2: a corrupt (unparseable) NON-final line is corruption/tamper → verify_chain must fail, not raise.
+    p = tmp_path / "audit.jsonl"
+    a = AuditLog(str(p), boot_epoch="b")
+    a.append(_ev(), ts_ms=1)
+    a.append(_ev(), ts_ms=2)
+    lines = p.read_text().splitlines()
+    lines[0] = "{ garbage not json"
+    p.write_text("\n".join(lines) + "\n")
+    assert AuditLog(str(p), boot_epoch="b").verify_chain() is False
+
+
+def test_audit_append_strips_pii(tmp_path):
+    # L3: even if a caller passes a scanned code, the library projects to the allow-list only.
+    a = AuditLog(str(tmp_path / "audit.jsonl"), boot_epoch="b")
+    rec = a.append({"doorId": "front", "granted": True, "reason": "granted", "mode": "offline",
+                    "code": "SECRET-CARD-CODE", "extra": 1}, ts_ms=1)
+    assert set(rec["event"].keys()) == {"doorId", "granted", "reason", "mode"}
+    assert "SECRET-CARD-CODE" not in p_text(tmp_path / "audit.jsonl")
+
+
+def p_text(path):
+    return path.read_text()
 
 
 def test_audit_store_and_forward_ack_cursor(tmp_path):

@@ -14,11 +14,15 @@ First boot (no stored floor) trusts the battery-RTC reading and seeds the floor.
 
 import math
 import os
+import threading
+
+from ._fsutil import fsync_dir
 
 
 class TimeSource:
     def __init__(self, floor_path):
         self._path = floor_path
+        self._lock = threading.Lock()  # L1: guard the ratchet read-compare-write
         self._floor = self._load()
 
     def _load(self):
@@ -35,6 +39,7 @@ class TimeSource:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, self._path)
+        fsync_dir(os.path.dirname(self._path) or ".")  # M1: durable rename
 
     @property
     def floor(self):
@@ -47,10 +52,10 @@ class TimeSource:
         if isinstance(system_ms, bool) or not isinstance(system_ms, (int, float)) or not math.isfinite(system_ms):
             return system_ms, False  # unusable reading → deny (S4a also hard-rejects this)
         system_ms = int(system_ms)
-        if self._floor is not None and system_ms < self._floor:
-            return system_ms, False  # clock went backwards → untrusted; do NOT lower the floor
-        # good read: ratchet the floor up and trust it
-        if self._floor is None or system_ms > self._floor:
-            self._floor = system_ms
-            self._persist(system_ms)
-        return system_ms, True
+        with self._lock:  # L1: read-compare-write the ratchet atomically (no concurrent lowering)
+            if self._floor is not None and system_ms < self._floor:
+                return system_ms, False  # clock went backwards → untrusted; do NOT lower the floor
+            if self._floor is None or system_ms > self._floor:
+                self._floor = system_ms
+                self._persist(system_ms)
+            return system_ms, True

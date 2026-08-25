@@ -15,6 +15,8 @@ import os
 import re
 import threading
 
+from ._fsutil import fsync_dir
+
 _SAFE_DOOR = re.compile(r"^[A-Za-z0-9._-]{1,64}$")  # path-safe; same charset as issued ids
 
 
@@ -61,6 +63,8 @@ class EnvelopeStore:
         `verify(signed) -> bool` runs INSIDE the per-door lock (atomic with compare + write). Returns
         {"stored": bool, "reason"?: str, "version"?: int}. Never raises on a normal rejection.
         """
+        if not callable(verify):
+            return {"stored": False, "reason": "no-verify"}  # fail-closed on a misconfigured caller (L2)
         try:
             payload = (signed or {}).get("payload") or {}
             door_id = payload.get("doorId")
@@ -83,6 +87,7 @@ class EnvelopeStore:
                     f.flush()
                     os.fsync(f.fileno())
                 os.replace(tmp, path)  # atomic
+                fsync_dir(self._dir)   # M1: make the rename durable across a power cut
             except OSError as e:
                 return {"stored": False, "reason": "io-error:" + (getattr(e, "strerror", None) or "err")}
             return {"stored": True, "version": version}

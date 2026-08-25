@@ -15,9 +15,13 @@ import json
 import os
 import threading
 
+from ._fsutil import fsync_dir
 from .canonical import canonical_bytes
 
 GENESIS = ""  # prev-hash of the very first record in a file
+# The only fields an offline-decision audit event may carry — NEVER the scanned code (PII). The library
+# projects to these on append (L3), so the no-PII guarantee is structural, not caller-dependent.
+ALLOWED_EVENT_KEYS = ("doorId", "granted", "reason", "mode")
 
 
 def _hash(prev, boot_epoch, seq, ts_ms, event):
@@ -35,15 +39,28 @@ class AuditLog:
         self._records = []
         self._last_hash = GENESIS
         self._seq = 0  # per-boot
+        self._corrupt = False  # a mid-file unparseable record → verify_chain() must fail (tamper/damage)
         if os.path.exists(path):
             with open(path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        self._records.append(json.loads(line))
+                lines = [ln.strip() for ln in f if ln.strip()]
+            for i, line in enumerate(lines):
+                try:
+                    rec = json.loads(line)
+                    if not isinstance(rec, dict):
+                        raise ValueError("record is not an object")
+                except (ValueError, TypeError):
+                    # A power cut mid-append can leave a torn FINAL line — tolerate it (drop). A parse
+                    # failure anywhere earlier is corruption/tamper — flag it so verify_chain() fails (M2).
+                    if i == len(lines) - 1:
+                        break
+                    self._corrupt = True
+                    continue
+                self._records.append(rec)
             if self._records:
-                self._last_hash = self._records[-1]["hash"]
-                same_boot = [r["seq"] for r in self._records if r.get("bootEpoch") == boot_epoch]
+                self._last_hash = self._records[-1].get("hash", GENESIS)
+                same_boot = [r.get("seq") for r in self._records
+                             if r.get("bootEpoch") == boot_epoch and isinstance(r.get("seq"), int)
+                             and not isinstance(r.get("seq"), bool)]
                 self._seq = (max(same_boot) + 1) if same_boot else 0
         self._acked = self._load_ack()
 
@@ -59,10 +76,11 @@ class AuditLog:
 
     def append(self, event, *, ts_ms):
         """Append an audit event (no PII). Returns the stored record. Chains + fsyncs."""
+        ev = {k: event[k] for k in ALLOWED_EVENT_KEYS if isinstance(event, dict) and k in event}  # L3: no PII
         with self._lock:
             seq = self._seq
-            h = _hash(self._last_hash, self._boot, seq, ts_ms, event)
-            rec = {"bootEpoch": self._boot, "seq": seq, "ts": ts_ms, "event": event,
+            h = _hash(self._last_hash, self._boot, seq, ts_ms, ev)
+            rec = {"bootEpoch": self._boot, "seq": seq, "ts": ts_ms, "event": ev,
                    "prev": self._last_hash, "hash": h}
             with open(self._path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, separators=(",", ":"), ensure_ascii=False) + "\n")
@@ -74,14 +92,23 @@ class AuditLog:
             return rec
 
     def verify_chain(self):
-        """Recompute the whole chain — True iff every link + hash is intact (tamper-evident)."""
+        """Recompute the whole chain — True iff every link + hash is intact (tamper-evident).
+
+        Returns False (never raises) on a malformed/missing field, and on any mid-file parse corruption
+        detected at load (M2).
+        """
+        if self._corrupt:
+            return False
         prev = GENESIS
         for r in self._records:
-            if r.get("prev") != prev:
+            try:
+                if r.get("prev") != prev:
+                    return False
+                if _hash(prev, r["bootEpoch"], r["seq"], r["ts"], r["event"]) != r.get("hash"):
+                    return False
+                prev = r["hash"]
+            except (KeyError, TypeError):
                 return False
-            if _hash(prev, r["bootEpoch"], r["seq"], r["ts"], r["event"]) != r["hash"]:
-                return False
-            prev = r["hash"]
         return True
 
     def pending(self):
@@ -98,4 +125,5 @@ class AuditLog:
                 f.flush()
                 os.fsync(f.fileno())
             os.replace(tmp, self._ack_path())
+            fsync_dir(os.path.dirname(self._ack_path()) or ".")  # M1: durable rename
             return self._acked
