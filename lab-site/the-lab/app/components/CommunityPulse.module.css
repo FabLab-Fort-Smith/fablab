@@ -1,0 +1,74 @@
+.section {
+  padding: var(--space-2xl) var(--space-lg);
+  background: var(--color-surface);
+}
+
+.container {
+  max-width: var(--container-max);
+  margin: 0 auto;
+}
+
+.heading {
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  margin-bottom: var(--space-xl);
+  text-align: center;
+  color: var(--color-text-primary);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-xl);
+}
+
+@media (min-width: 768px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.card {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+.cardTitle {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin-bottom: var(--space-md);
+  color: var(--color-text-primary);
+}
+
+.tableWrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: calc(-1 * var(--space-md)) calc(-1 * var(--space-lg)) 0;
+  padding: 0 var(--space-lg) var(--space-md);
+}
+
+.tableWrapper table {
+  min-width: 600px;
+}
+
+.mapWrapper {
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+
+.mapWrapper > div {
+  width: 100% !important;
+  height: 300px;
+}
+
+@media (max-width: 480px) {
+  .mapWrapper > div {
+    height: 250px;
+  }
+}
