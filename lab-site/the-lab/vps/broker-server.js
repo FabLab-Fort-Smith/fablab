@@ -46,12 +46,17 @@ function loadRegistry() {
 // --- Link B: the cloud uplink (dial out) --------------------------------------------------------
 function startUplink(cfg, store) {
   const pending = new Map(); // authz correlation id → {resolve, timer}
+  const auditPending = new Map(); // audit correlation id → {resolve, timer}
   let ws = null;
   let backoff = 1;
 
   function drainPending(reason) {
     for (const [, p] of pending) { clearTimeout(p.timer); p.resolve(null); } // null → offline fallback, at once
     pending.clear();
+    // Audit relays in flight when the uplink drops resolve "deferred": the edge keeps the records (its
+    // durable store-and-forward) and retries on the next flush. Never lose or falsely-ack an audit.
+    for (const [, p] of auditPending) { clearTimeout(p.timer); p.resolve("deferred"); }
+    auditPending.clear();
     if (reason) log("uplink.pending-drained", { reason });
   }
 
@@ -72,6 +77,10 @@ function startUplink(cfg, store) {
       } else if (m.t === "authz_result" && m.id && pending.has(m.id)) {
         const p = pending.get(m.id); pending.delete(m.id); clearTimeout(p.timer);
         p.resolve(m && typeof m.granted === "boolean" ? { granted: m.granted, reason: m.reason } : null);
+      } else if (m.t === "audit_result" && m.id && auditPending.has(m.id)) {
+        const p = auditPending.get(m.id); auditPending.delete(m.id); clearTimeout(p.timer);
+        // Only the cloud's explicit verdict advances the edge; anything else → deferred (edge retries).
+        p.resolve(m.status === "accepted" || m.status === "rejected" ? m.status : "deferred");
       }
     });
     ws.on("close", () => { drainPending("uplink-closed"); log("uplink.down", {}); scheduleReconnect(); }); // F3: fall to offline at once
@@ -94,9 +103,28 @@ function startUplink(cfg, store) {
     });
   }
 
+  /**
+   * relayAudit: forward one edge-signed audit batch up to the cloud and resolve the cloud's verdict.
+   * Resolves "deferred" (never rejects) if the uplink is down or the cloud doesn't answer in time — the
+   * edge then keeps the records and retries. The broker holds NO audit state of its own (the edge is the
+   * durable buffer); `records` is relayed opaquely (may contain Restricted content — never logged here).
+   */
+  function relayAudit({ edgeId, records, signature }) {
+    return new Promise((resolve) => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return resolve("deferred");
+      const id = crypto.randomUUID();
+      const timer = setTimeout(() => { auditPending.delete(id); resolve("deferred"); }, 5000);
+      timer.unref?.();
+      auditPending.set(id, { resolve, timer });
+      try { ws.send(JSON.stringify({ t: "audit", id, edgeId, records, signature })); }
+      catch { auditPending.delete(id); clearTimeout(timer); resolve("deferred"); }
+    });
+  }
+
   connect();
   return {
     cloudAuthorize,
+    relayAudit,
     up: () => Boolean(ws && ws.readyState === WebSocket.OPEN), // rung-1 uplink reachable? (health #6)
     close: () => { try { ws?.close(); } catch { /* noop */ } },
   };
@@ -104,7 +132,7 @@ function startUplink(cfg, store) {
 function redactUrl(u) { try { const x = new URL(u); return `${x.protocol}//${x.host}${x.pathname}`; } catch { return "?"; } }
 
 // --- Link A: the edge mTLS listener -------------------------------------------------------------
-function startEdgeListener(cfg, store, registry, cloudAuthorize, denylist = { isDenied: () => false }) {
+function startEdgeListener(cfg, store, registry, cloudAuthorize, denylist = { isDenied: () => false }, relayAudit = null) {
   const server = tls.createServer(edgeListenerTlsOptions(cfg), (socket) => {
     // rejectUnauthorized already dropped anyone without a CA-signed cert; derive doorId from the cert.
     const cert = socket.getPeerCertificate?.();
@@ -128,11 +156,13 @@ function startEdgeListener(cfg, store, registry, cloudAuthorize, denylist = { is
           log("scan.replay-dropped", { doorId }); // F2: log, never silently swallow
           continue;
         }
-        const resp = await handleEdgeMessage(msg, { store, cloudAuthorize, doorId });
+        const resp = await handleEdgeMessage(msg, { store, cloudAuthorize, doorId, edgeId, relayAudit });
         if (resp) {
           // F4: audit the security-relevant event — an OFFLINE GRANT (decided locally, not centrally
           // audited until reconnect, #151) — rather than every offline result incl. denies.
           if (resp.t === "result" && resp.mode === "offline" && resp.granted) log("scan.offline-grant", { doorId });
+          // Observe an audit relay's outcome (edgeId only; records/signature are never logged).
+          if (resp.t === "audit_ack") log("audit.relayed", { edgeId, status: resp.status });
           try { socket.write(JSON.stringify(resp) + "\n"); } catch { /* client gone */ }
         }
       }
@@ -151,7 +181,7 @@ export function run() {
   const registry = loadRegistry();
   const uplink = startUplink(cfg, store);
   const denylist = makeEdgeDenylist({ path: cfg.edgeDenylistPath, log }); // F7 edge revocation (optional)
-  startEdgeListener(cfg, store, registry, uplink.cloudAuthorize, denylist);
+  startEdgeListener(cfg, store, registry, uplink.cloudAuthorize, denylist, uplink.relayAudit);
   // Loopback-only health for the container HEALTHCHECK (#6) — NEVER bound to the LAN.
   startHealthServer(
     () => ({ ready: true, uplinkUp: uplink.up(), doors: Object.keys(registry).length }),

@@ -68,3 +68,58 @@ test("online scan: a well-formed cloud grant is authoritative (mode online)", as
   const resp = await handleEdgeMessage({ t: "scan", cred: CODE, requestId: 9 }, { store, cloudAuthorize, doorId: "front" });
   expect(resp).toEqual({ t: "result", requestId: 9, granted: true, reason: "granted", mode: "online" });
 });
+
+// --- audit relay (S6-b-b): the broker is a stateless pass-through; edgeId comes from ctx (cert), not msg ---
+
+const REC = [{ prev: "", bootEpoch: "b", seq: 0, ts: 1, event: {}, hash: "h" }];
+
+test("audit → relays with the cert edgeId (never the message's) and returns the cloud verdict", async () => {
+  const seen = [];
+  const relayAudit = async (a) => { seen.push(a); return "accepted"; };
+  const resp = await handleEdgeMessage(
+    { t: "audit", batchId: "b1", records: REC, signature: "sig", edgeId: "SPOOFED" },
+    { edgeId: "front-01", relayAudit }
+  );
+  expect(resp).toEqual({ t: "audit_ack", batchId: "b1", status: "accepted" });
+  expect(seen).toEqual([{ edgeId: "front-01", records: REC, signature: "sig" }]); // cert edgeId, msg id ignored
+});
+
+test("audit passes the cloud's rejected/deferred verdict straight through", async () => {
+  for (const v of ["rejected", "deferred"]) {
+    const resp = await handleEdgeMessage({ t: "audit", batchId: "b", records: REC, signature: "s" }, { edgeId: "e1", relayAudit: async () => v });
+    expect(resp.status).toBe(v);
+  }
+});
+
+test("a malformed / oversize / unsigned batch → rejected, never relayed", async () => {
+  const relayAudit = jest.fn(async () => "accepted");
+  const bad = [
+    { t: "audit", batchId: "b", records: [], signature: "s" },              // empty
+    { t: "audit", batchId: "b", records: REC },                             // no signature
+    { t: "audit", batchId: "b", records: "nope", signature: "s" },          // not an array
+    { t: "audit", batchId: "b", records: Array.from({ length: 1001 }, () => REC[0]), signature: "s" }, // oversize
+  ];
+  for (const m of bad) {
+    const resp = await handleEdgeMessage(m, { edgeId: "e1", relayAudit });
+    expect(resp).toMatchObject({ t: "audit_ack", status: "rejected" });
+  }
+  expect(relayAudit).not.toHaveBeenCalled();
+});
+
+test("an unauthenticated connection (no cert edgeId) → rejected, never relayed", async () => {
+  const relayAudit = jest.fn(async () => "accepted");
+  const resp = await handleEdgeMessage({ t: "audit", batchId: "b", records: REC, signature: "s" }, { relayAudit });
+  expect(resp.status).toBe("rejected");
+  expect(relayAudit).not.toHaveBeenCalled();
+});
+
+test("no relay channel wired, or relay throws → deferred (edge keeps the records)", async () => {
+  expect((await handleEdgeMessage({ t: "audit", batchId: "b", records: REC, signature: "s" }, { edgeId: "e1" })).status).toBe("deferred");
+  const throwing = async () => { throw new Error("uplink boom"); };
+  expect((await handleEdgeMessage({ t: "audit", batchId: "b", records: REC, signature: "s" }, { edgeId: "e1", relayAudit: throwing })).status).toBe("deferred");
+});
+
+test("a bogus relay verdict is coerced to deferred (fail-secure, never a false accept)", async () => {
+  const resp = await handleEdgeMessage({ t: "audit", batchId: "b", records: REC, signature: "s" }, { edgeId: "e1", relayAudit: async () => "granted" });
+  expect(resp.status).toBe("deferred");
+});
