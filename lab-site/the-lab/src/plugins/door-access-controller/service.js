@@ -88,7 +88,10 @@ function validAuditRecord(r) {
   return r && typeof r === "object"
     && _int(r.seq) && r.seq >= 0
     && _int(r.ts)
-    && typeof r.bootEpoch === "string" && r.bootEpoch.length > 0 && r.bootEpoch.length <= 128
+    // bootEpoch is used as an object key AND a Mongo field name — reject reserved/operator keys at the
+    // boundary (a `__proto__`/`$`/`.` value would otherwise read an inherited member → unhandled 500,
+    // or land as a Mongo field). SEC #169 LOW.
+    && isSafeKey(r.bootEpoch) && r.bootEpoch.length <= 128
     && typeof r.prev === "string" && typeof r.hash === "string"
     && r.event && typeof r.event === "object" && !Array.isArray(r.event);
 }

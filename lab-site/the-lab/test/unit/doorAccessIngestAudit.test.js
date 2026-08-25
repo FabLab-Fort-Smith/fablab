@@ -47,6 +47,16 @@ test("boundary validation runs BEFORE any DB access", async () => {
   expect(Model.getAuditAnchor).not.toHaveBeenCalled();
 });
 
+test("a reserved-key bootEpoch is rejected at the boundary, not run as an object key (SEC #169)", async () => {
+  // __proto__/$/. as a bootEpoch would read an inherited member or land as a Mongo field — reject it.
+  for (const boot of ["__proto__", "constructor", "prototype", "$where", "a.b", ""]) {
+    const r = rec("", "b", 0, 1); r.bootEpoch = boot;
+    const res = await Service.ingestEdgeAudit({ edgeId: "e", records: [r] });
+    expect(res.rejected).toBe("malformed-record");
+  }
+  expect(Model.getAuditAnchor).not.toHaveBeenCalled(); // rejected before any DB access
+});
+
 test("empty records is a no-op (not an error)", async () => {
   expect(await Service.ingestEdgeAudit({ edgeId: "e", records: [] })).toEqual({ accepted: 0, duplicates: 0, alerts: [] });
 });
