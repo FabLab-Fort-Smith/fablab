@@ -49,9 +49,18 @@ summary: Verify the active/standby door-broker VIP fails over cleanly — the st
   until a broker returns or the envelope TTL expires (then fail-secure deny) — restore a broker
   (`runbooks/` broker deploy) or, if the outage will outlast the TTL, treat as an incident.
 
+## Scope & limits (read before relying on this)
+- **Failover triggers on the broker not SERVING (listener/health down), NOT on a stale cache.** If the
+  active's cloud uplink is down but it's still answering, keepalived keeps the VIP there while its rung-2
+  cache ages — bounded by the envelope TTL (then fail-secure deny) + the edge's rung-3. Freshness-aware
+  failover is a tracked follow-up (needs the health endpoint to expose uplink/cache state).
+- **VRRP `auth_pass` is NOT a security boundary** (plaintext, ≤8 chars). The VIP's integrity rests on an
+  **isolated, trusted broker LAN segment** — a hostile node on that LAN can hijack/blackhole the VIP.
+
 ## Escalation
 - Split-brain (VIP on both / neither), or the standby not serving after failover → page `<on-call>`;
-  check `virtual_router_id` uniqueness, VRRP peer auth, and that both members show as registered cloud-side.
+  check `virtual_router_id` uniqueness + priorities, that the broker LAN segment is isolated (VRRP auth
+  is not protective — see above), and that both members show as registered cloud-side.
 
 ## Related
 - `docs/architecture/door-controller-wifi.md` §13 S5 · `vps/keepalived/` (VIP config + check script) ·

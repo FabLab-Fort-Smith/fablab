@@ -133,6 +133,17 @@ describe("makeUplinkConnection — per-connection state machine", () => {
     conn.close();                                          // second close is a no-op
     expect(registry.count("b1")).toBe(0);
   });
+
+  test("a re-auth on an already-authenticated connection is ignored (F5 — one identity per conn)", async () => {
+    const registry = makeBrokerRegistry();
+    const ws = fakeWs();
+    const conn = makeUplinkConnection({ uplink: mkUplink(), registry })(ws);
+    await conn.message(JSON.stringify({ t: "auth", secret: "sek-one" })); // b1
+    await conn.message(JSON.stringify({ t: "auth", secret: "sek-two" })); // ignored
+    expect(conn.brokerId()).toBe("b1");
+    expect(registry.count("b1")).toBe(1);
+    expect(registry.count("b2")).toBe(0);                  // never registered under a second broker
+  });
 });
 
 describe("relayEnvelopes (HA — all members)", () => {
@@ -147,6 +158,15 @@ describe("relayEnvelopes (HA — all members)", () => {
     const env = { t: "envelope", signed: { payload: { doorId: "door-a" } } };
     expect(ws1.sent).toEqual([env]);
     expect(ws2.sent).toEqual([env]);                       // both members got it
+  });
+  test("cross-broker isolation: a relay for b1 never reaches b2's members (F6)", () => {
+    const registry = makeBrokerRegistry();
+    const a = fakeWs(); const b = fakeWs();
+    registry.add("b1", a); registry.add("b2", b);
+    const r = relayEnvelopes({ uplink: mkUplink(), registry }, "b1", [{ payload: { doorId: "door-a" } }]);
+    expect(r).toMatchObject({ connected: true, relayed: 1, members: 1 });
+    expect(a.sent.length).toBe(1);
+    expect(b.sent.length).toBe(0);   // b2's member got nothing
   });
   test("broker not connected → connected:false, nothing relayed", () => {
     const r = relayEnvelopes({ uplink: mkUplink(), registry: makeBrokerRegistry() }, "b1", [{ payload: { doorId: "door-a" } }]);

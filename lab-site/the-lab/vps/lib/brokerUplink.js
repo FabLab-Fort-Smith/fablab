@@ -205,6 +205,7 @@ export function makeUplinkConnection({ uplink, registry, log = () => {}, onConne
         let m;
         try { m = JSON.parse(raw); } catch { return; }
         if (m.t === "auth") {
+          if (brokerId) { emit("broker.reauth-ignored", { brokerId }); return; } // one identity per conn (F5)
           const id = uplink.authenticate(typeof m.secret === "string" ? m.secret : "");
           if (!id) { // never reveal which part failed
             emit("broker.auth-failed", {});
