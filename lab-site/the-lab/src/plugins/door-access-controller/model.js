@@ -14,6 +14,7 @@ const POLICY = "doorAccessPolicy";
 const COUNTERS = "doorAccessCounters"; // monotonic per-door envelope version (anti-rollback, F5)
 const ANCHORS = "doorAccessAuditAnchors"; // per-edge audit anchor {_id:edgeId, boots, currentBoot, version}
 const EDGE_KEYS = "doorAccessEdgeKeys"; // per-edge audit signing PUBLIC key {_id:edgeId, pubSpki, updatedAt}
+const EDGE_STATUS = "doorAccessEdgeStatus"; // best-effort per-edge liveness telemetry (S6-b3, non-security)
 const POLICY_ID = "policy:door-access-controller"; // single well-known doc
 
 let indexesEnsured = false;
@@ -214,6 +215,28 @@ export async function listEdgeKeys() {
   return (await database()).collection(EDGE_KEYS).find({}).sort({ _id: 1 }).toArray();
 }
 
+/**
+ * Record best-effort per-edge liveness telemetry (S6-b3), stamped on each authenticated audit ingest.
+ * NON-security (display only) — it never gates a decision, so a last-write-wins upsert is fine. Carries
+ * no PII: `lastMode` is the decision path (online/offline), never the scanned code. @param {string} edgeId
+ */
+export async function recordEdgeStatus(edgeId, { lastBrokerId = null, bootEpoch = null, lastSeq = null, lastMode = null } = {}) {
+  await cards();
+  await (await database())
+    .collection(EDGE_STATUS)
+    .updateOne(
+      { _id: edgeId },
+      { $set: { lastSeenAt: new Date().toISOString(), lastBrokerId, bootEpoch, lastSeq, lastMode } },
+      { upsert: true }
+    );
+}
+
+/** List all per-edge status docs (best-effort telemetry; merged into the admin overview). */
+export async function listEdgeStatuses() {
+  await cards();
+  return (await database()).collection(EDGE_STATUS).find({}).toArray();
+}
+
 const Model = {
   findCardByBlindIndex,
   upsertCard,
@@ -231,6 +254,8 @@ const Model = {
   getEdgeSigningKey,
   registerEdgeSigningKey,
   listEdgeKeys,
+  recordEdgeStatus,
+  listEdgeStatuses,
 };
 
 export default Model;

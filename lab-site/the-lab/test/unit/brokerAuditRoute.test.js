@@ -32,16 +32,21 @@ test("authed but missing edgeId or records → 400", async () => {
   expect(Service.ingestEdgeAudit).not.toHaveBeenCalled();
 });
 
-test("valid call → 200, delegates to the service (edgeId, records, signature passed through)", async () => {
-  const res = await post({ authorization: `Bearer ${SECRET}` }, { edgeId: "edge-1", records: REC, signature: SIG });
+test("valid call → 200, delegates to the service (edgeId, records, signature, brokerId passed through)", async () => {
+  const res = await post({ authorization: `Bearer ${SECRET}` }, { edgeId: "edge-1", records: REC, signature: SIG, brokerId: "broker-a" });
   expect(res.status).toBe(200);
   expect(await res.json()).toMatchObject({ accepted: 1 });
-  expect(Service.ingestEdgeAudit).toHaveBeenCalledWith({ edgeId: "edge-1", records: REC, signature: SIG });
+  expect(Service.ingestEdgeAudit).toHaveBeenCalledWith({ edgeId: "edge-1", records: REC, signature: SIG, brokerId: "broker-a" });
+});
+
+test("a non-string / absent brokerId is passed as null (telemetry only)", async () => {
+  await post({ authorization: `Bearer ${SECRET}` }, { edgeId: "edge-1", records: REC, signature: SIG });
+  expect(Service.ingestEdgeAudit).toHaveBeenCalledWith(expect.objectContaining({ brokerId: null }));
 });
 
 test("a non-string signature is passed as null (service enforces the auth, fail-closed)", async () => {
   await post({ authorization: `Bearer ${SECRET}` }, { edgeId: "edge-1", records: REC, signature: 123 });
-  expect(Service.ingestEdgeAudit).toHaveBeenCalledWith({ edgeId: "edge-1", records: REC, signature: null });
+  expect(Service.ingestEdgeAudit).toHaveBeenCalledWith({ edgeId: "edge-1", records: REC, signature: null, brokerId: null });
 });
 
 test("an accepted batch carrying tamper alerts is still 200 (alerts surfaced, not an HTTP error)", async () => {

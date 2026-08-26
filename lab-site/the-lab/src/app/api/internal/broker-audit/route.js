@@ -23,12 +23,16 @@ export async function POST(req) {
         const edgeId = body && typeof body.edgeId === 'string' ? body.edgeId : null;
         const records = body && Array.isArray(body.records) ? body.records : null;
         const signature = body && typeof body.signature === 'string' ? body.signature : null;
+        // brokerId is attested by the authenticated Link-B connection (the socket-server sets it); it is
+        // informational telemetry only (the edge signature is the security gate), so a bad value is just
+        // dropped to null by the service.
+        const brokerId = body && typeof body.brokerId === 'string' ? body.brokerId : null;
         if (!edgeId || !records) {
             return NextResponse.json({ error: 'edgeId and records[] are required' }, { status: 400 });
         }
         // The edge-batch signature is verified inside the service against the edge's registered key
         // (fail-closed: a missing/bad signature → rejected, not an ingest). We pass it through as-is.
-        const result = await Service.ingestEdgeAudit({ edgeId, records, signature });
+        const result = await Service.ingestEdgeAudit({ edgeId, records, signature, brokerId });
         // A boundary/auth rejection (bad-edgeId / batch-too-large / malformed-record / unregistered-edge /
         // bad-signature) is a 400; an accepted batch (even one carrying tamper ALERTS — those are
         // surfaced, not an HTTP error) is 200.

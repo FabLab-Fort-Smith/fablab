@@ -19,6 +19,16 @@ test("POSTs to /api/internal/broker-audit with the bearer + full batch body", as
   expect(JSON.parse(call.opts.body)).toEqual(BATCH); // edgeId + records + signature forwarded
 });
 
+test("brokerId is forwarded in the body when present, omitted when absent", async () => {
+  let body = null;
+  const audit = makeRequestBrokerAudit({ env: ENV, fetchImpl: async (_u, o) => { body = JSON.parse(o.body); return res(200); } });
+  await audit({ ...BATCH, brokerId: "broker-a" });
+  expect(body).toEqual({ ...BATCH, brokerId: "broker-a" });
+  await audit(BATCH); // no brokerId
+  expect(body).toEqual(BATCH);
+  expect("brokerId" in body).toBe(false);
+});
+
 test("HTTP → verdict mapping: 200→accepted, 400→rejected, 409/5xx→deferred", async () => {
   const at = (status) => makeRequestBrokerAudit({ env: ENV, fetchImpl: async () => res(status) })(BATCH);
   expect(await at(200)).toBe("accepted");

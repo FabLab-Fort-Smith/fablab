@@ -19,7 +19,7 @@
  */
 export function makeRequestBrokerAudit({ env = process.env, fetchImpl, timeoutMs = 5000, log = () => {} } = {}) {
   const doFetch = fetchImpl || ((...a) => fetch(...a));
-  return async function requestBrokerAudit({ edgeId, records, signature } = {}) {
+  return async function requestBrokerAudit({ edgeId, records, signature, brokerId = null } = {}) {
     const appUrl = env.APP_INTERNAL_URL;
     const secret = env.INTERNAL_API_SECRET;
     // Not configured, or nothing to relay → "deferred": the edge keeps the batch (never a false accept).
@@ -29,10 +29,13 @@ export function makeRequestBrokerAudit({ env = process.env, fetchImpl, timeoutMs
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
+      // brokerId is informational telemetry (edge<->broker binding, S6-b3); the edge signature is the
+      // security gate. Only include it when present.
+      const payload = brokerId ? { edgeId, records, signature, brokerId } : { edgeId, records, signature };
       const r = await doFetch(`${appUrl}/api/internal/broker-audit`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${secret}` },
-        body: JSON.stringify({ edgeId, records, signature }),
+        body: JSON.stringify(payload),
         signal: controller.signal,
       });
       if (!r) return "deferred";
