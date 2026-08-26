@@ -405,7 +405,7 @@ const Service = {
    * ingests), and ROUTES every anomaly to the audit log at its severity. Returns {accepted,duplicates,alerts}.
    * @param {{edgeId:string, records:Array}} args
    */
-  async ingestEdgeAudit({ edgeId, records, signature } = {}) {
+  async ingestEdgeAudit({ edgeId, records, signature, brokerId = null } = {}) {
     if (typeof edgeId !== "string" || !isSafeKey(edgeId) || edgeId.length > 128) {
       return { accepted: 0, duplicates: 0, alerts: [], rejected: "bad-edgeId" };
     }
@@ -442,6 +442,21 @@ const Service = {
       auditLog("door-access.audit", { actor: { pluginId: PLUGIN_ID }, target: edgeId, outcome: "cas-conflict" });
       return { accepted: 0, duplicates: 0, alerts: [], rejected: "conflict" };
     }
+    // Best-effort liveness telemetry (S6-b3): the batch is authenticated + processed, so this edge is
+    // alive and reachable via this broker. Stamp last-seen / broker binding / last boot+seq+mode for the
+    // admin status view. NON-security (display only) — never fail the ingest on a status-write error, and
+    // carry no PII (mode = decision path, not the code). `brokerId` is attested by the authed Link-B conn.
+    try {
+      const last = records[records.length - 1];
+      await Model.recordEdgeStatus(edgeId, {
+        lastBrokerId: typeof brokerId === "string" && isSafeKey(brokerId) ? brokerId : null,
+        bootEpoch: last.bootEpoch,
+        lastSeq: last.seq,
+        lastMode: last.event && typeof last.event.mode === "string" ? last.event.mode : null,
+      });
+    } catch {
+      auditLog("door-access.audit", { actor: { pluginId: PLUGIN_ID }, target: edgeId, outcome: "status-write-error" });
+    }
     // Route anomalies to a monitored channel (master §9). Alerts carry no PII (type/seq/reason only).
     for (const a of result.alerts) {
       auditLog("door-access.audit", {
@@ -458,19 +473,30 @@ const Service = {
   /** Everything the admin page needs. Cards are sanitized (no ciphertext / blind index). */
   async adminOverview(actor) {
     assertPermission(actor, PERM_ADMIN);
-    const [doors, policy, cards, edgeKeys] = await Promise.all([
-      Model.listDoors(), Model.getPolicyDoc(), Model.listCards({}), Model.listEdgeKeys(),
+    const [doors, policy, cards, edgeKeys, edgeStatuses] = await Promise.all([
+      Model.listDoors(), Model.getPolicyDoc(), Model.listCards({}), Model.listEdgeKeys(), Model.listEdgeStatuses(),
     ]);
+    const statusById = new Map(edgeStatuses.map((s) => [s._id, s]));
     return {
       doors,
       policy,
       cards: cards.map(publicCard),
-      // Registered edge audit-signing keys — id + FINGERPRINT + updatedAt only (never the raw key).
-      edges: edgeKeys.map((d) => ({
-        edgeId: d._id,
-        fingerprint: typeof d.pubSpki === "string" ? edgeKeyFingerprint(d.pubSpki) : null,
-        updatedAt: d.updatedAt || null,
-      })),
+      // Registered edge audit-signing keys — id + FINGERPRINT + updatedAt only (never the raw key) —
+      // enriched with best-effort liveness telemetry (S6-b3): last-seen / broker binding / boot / seq /
+      // decision mode. No PII (mode is the decision path, not the code).
+      edges: edgeKeys.map((d) => {
+        const st = statusById.get(d._id) || {};
+        return {
+          edgeId: d._id,
+          fingerprint: typeof d.pubSpki === "string" ? edgeKeyFingerprint(d.pubSpki) : null,
+          updatedAt: d.updatedAt || null,
+          lastSeenAt: st.lastSeenAt || null,
+          lastBrokerId: st.lastBrokerId || null,
+          bootEpoch: st.bootEpoch || null,
+          lastSeq: typeof st.lastSeq === "number" ? st.lastSeq : null,
+          lastMode: st.lastMode || null,
+        };
+      }),
       allowlist: { signingReady: allowlistSigningReady() },
     };
   },

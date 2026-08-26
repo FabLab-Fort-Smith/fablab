@@ -6,7 +6,7 @@ import crypto from "crypto";
 
 jest.mock("@/plugins/door-access-controller/model", () => ({
   __esModule: true,
-  default: { getAuditAnchor: jest.fn(), casAuditAnchor: jest.fn(), getEdgeSigningKey: jest.fn() },
+  default: { getAuditAnchor: jest.fn(), casAuditAnchor: jest.fn(), getEdgeSigningKey: jest.fn(), recordEdgeStatus: jest.fn() },
 }));
 jest.mock("@/lib/audit", () => ({ __esModule: true, auditLog: jest.fn() }));
 
@@ -37,6 +37,7 @@ beforeEach(() => {
   Model.getAuditAnchor.mockImplementation(async () => empty());
   Model.casAuditAnchor.mockResolvedValue(true);
   Model.getEdgeSigningKey.mockResolvedValue(PUB); // edge is provisioned by default
+  Model.recordEdgeStatus.mockResolvedValue(undefined);
 });
 
 test("a valid genesis batch is persisted via CAS and accepted", async () => {
@@ -150,6 +151,35 @@ test("a conflict that clears on retry succeeds", async () => {
   const res = await ingest("e", [rec("", "b", 0, 1)]);
   expect(res.accepted).toBe(1);
   expect(Model.getAuditAnchor).toHaveBeenCalledTimes(2);
+});
+
+// --- S6-b3 liveness telemetry ---
+
+test("a successful ingest stamps edge status with the broker binding + last boot/seq/mode", async () => {
+  const r0 = rec("", "b", 0, 1, { doorId: "front", granted: true, reason: "granted", mode: "offline" });
+  await Service.ingestEdgeAudit({ edgeId: "edge-1", records: [r0], signature: sign("edge-1", [r0]), brokerId: "broker-a" });
+  expect(Model.recordEdgeStatus).toHaveBeenCalledWith("edge-1", { lastBrokerId: "broker-a", bootEpoch: "b", lastSeq: 0, lastMode: "offline" });
+});
+
+test("an unsafe brokerId is dropped to null in the status stamp (telemetry only)", async () => {
+  const r0 = rec("", "b", 0, 1);
+  await Service.ingestEdgeAudit({ edgeId: "e", records: [r0], signature: sign("e", [r0]), brokerId: "a.b$evil" });
+  expect(Model.recordEdgeStatus).toHaveBeenCalledWith("e", expect.objectContaining({ lastBrokerId: null }));
+});
+
+test("status is NOT stamped on a rejected batch (unregistered / bad-signature)", async () => {
+  Model.getEdgeSigningKey.mockResolvedValueOnce(null);
+  await ingest("edge-x", [rec("", "b", 0, 1)]);           // unregistered
+  await Service.ingestEdgeAudit({ edgeId: "e", records: [rec("", "b", 0, 1)] }); // no signature
+  expect(Model.recordEdgeStatus).not.toHaveBeenCalled();
+});
+
+test("a status-write failure never fails the ingest (best-effort telemetry)", async () => {
+  Model.recordEdgeStatus.mockRejectedValueOnce(new Error("mongo down"));
+  const r0 = rec("", "b", 0, 1);
+  const res = await Service.ingestEdgeAudit({ edgeId: "e", records: [r0], signature: sign("e", [r0]) });
+  expect(res.accepted).toBe(1);                            // ingest still succeeds
+  expect(auditLog).toHaveBeenCalledWith("door-access.audit", expect.objectContaining({ outcome: "status-write-error" }));
 });
 
 test("no scan code is ever in an alert log line", async () => {

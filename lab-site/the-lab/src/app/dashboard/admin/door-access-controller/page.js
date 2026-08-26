@@ -149,23 +149,28 @@ export default function AdminDoorAccessPage() {
           (<code>python -m edge.provision_audit_key</code>) and register the printed public key here so the
           cloud will accept that edge&apos;s audit. Registering a new key for an existing edge is a rotation.
         </p>
+        <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr>{['Edge ID', 'Key fingerprint', 'Registered'].map((h) => (
-              <th key={h} scope="col" style={{ textAlign: 'left', borderBottom: '1px solid var(--border)', padding: '6px 8px' }}>{h}</th>
+            <tr>{['Edge ID', 'Key fingerprint', 'Registered', 'Last seen', 'Via broker', 'Last mode'].map((h) => (
+              <th key={h} scope="col" style={{ textAlign: 'left', borderBottom: '1px solid var(--border)', padding: '6px 8px', whiteSpace: 'nowrap' }}>{h}</th>
             ))}</tr>
           </thead>
           <tbody>
-            {edges.length === 0 ? <tr><td colSpan={3} style={{ padding: 8, color: 'var(--text-dim)' }}>No edges registered yet.</td></tr>
+            {edges.length === 0 ? <tr><td colSpan={6} style={{ padding: 8, color: 'var(--text-dim)' }}>No edges registered yet.</td></tr>
               : edges.map((x) => (
                 <tr key={x.edgeId}>
                   <td style={{ padding: '6px 8px' }}>{x.edgeId}</td>
                   <td style={{ padding: '6px 8px', fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>{x.fingerprint || '—'}</td>
-                  <td style={{ padding: '6px 8px' }}>{x.updatedAt ? new Date(x.updatedAt).toLocaleString() : '—'}</td>
+                  <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{x.updatedAt ? new Date(x.updatedAt).toLocaleString() : '—'}</td>
+                  <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{x.lastSeenAt ? new Date(x.lastSeenAt).toLocaleString() : 'never'}</td>
+                  <td style={{ padding: '6px 8px' }}>{x.lastBrokerId || '—'}</td>
+                  <td style={{ padding: '6px 8px' }}>{x.lastMode || '—'}</td>
                 </tr>
               ))}
           </tbody>
         </table>
+        </div>
 
         <form onSubmit={registerEdgeKey} style={{ marginTop: 12, display: 'grid', gap: 8, maxWidth: 560 }}>
           <h3 style={{ fontSize: 13, margin: '4px 0' }}>Register / rotate an edge key</h3>

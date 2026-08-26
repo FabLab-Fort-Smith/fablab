@@ -196,7 +196,8 @@ describe("makeUplinkConnection — audit relay (S6-b-c1)", () => {
     const conn = makeUplinkConnection({ uplink: mkUplink(), registry: makeBrokerRegistry(), ingestAudit, log: (e, f) => logs.push({ e, f }) })(ws);
     await auth(conn);
     await conn.message(JSON.stringify({ t: "audit", id: "r7", edgeId: "front-01", records: REC, signature: "sig" }));
-    expect(seen).toEqual([{ edgeId: "front-01", records: REC, signature: "sig" }]); // records/signature relayed opaquely
+    // records/signature relayed opaquely; brokerId is the connection's AUTHENTICATED id (telemetry)
+    expect(seen).toEqual([{ edgeId: "front-01", records: REC, signature: "sig", brokerId: "b1" }]);
     expect(ws.last()).toEqual({ t: "audit_result", id: "r7", status: "accepted" });
     // the relay log line carries edgeId+status only — never records/signature (SEC #174 F3)
     const dump = JSON.stringify(logs);

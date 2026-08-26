@@ -234,7 +234,8 @@ export function makeUplinkConnection({ uplink, registry, log = () => {}, onConne
             const records = Array.isArray(m.records) ? m.records : null;
             const signature = typeof m.signature === "string" ? m.signature : null;
             try {
-              const r = await ingestAudit({ edgeId, records, signature });
+              // brokerId is this connection's AUTHENTICATED id (telemetry for the edge↔broker binding).
+              const r = await ingestAudit({ edgeId, records, signature, brokerId });
               if (r === "accepted" || r === "rejected" || r === "deferred") status = r;
             } catch { status = "deferred"; } // fail-secure — never a false accept
             emit("broker.audit-relayed", { brokerId, edgeId, status });

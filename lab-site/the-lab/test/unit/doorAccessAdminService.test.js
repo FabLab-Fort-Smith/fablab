@@ -3,7 +3,7 @@
 
 jest.mock("@/plugins/door-access-controller/model", () => ({
   __esModule: true,
-  default: { listDoors: jest.fn(), getPolicyDoc: jest.fn(), listCards: jest.fn(), upsertDoor: jest.fn(), savePolicyDoc: jest.fn(), revokeCardsByUserID: jest.fn(), getEdgeSigningKey: jest.fn(), registerEdgeSigningKey: jest.fn(), listEdgeKeys: jest.fn() },
+  default: { listDoors: jest.fn(), getPolicyDoc: jest.fn(), listCards: jest.fn(), upsertDoor: jest.fn(), savePolicyDoc: jest.fn(), revokeCardsByUserID: jest.fn(), getEdgeSigningKey: jest.fn(), registerEdgeSigningKey: jest.fn(), listEdgeKeys: jest.fn(), listEdgeStatuses: jest.fn() },
 }));
 jest.mock("@/plugins/door-access-controller/config", () => ({ __esModule: true, PLUGIN_ID: "door-access-controller", PERM_ADMIN: "door-access-controller:admin", resolveConfig: jest.fn(async () => ({})) }));
 jest.mock("@/lib/access-control", () => ({ __esModule: true, pushAllowlist: jest.fn() }));
@@ -27,6 +27,7 @@ beforeEach(() => {
   Model.getPolicyDoc.mockResolvedValue({ rules: [], accountOverrides: {} });
   Model.listCards.mockResolvedValue([{ userID: "u1", codeEnc: "IV:TAG:CT", bi: "beef", credentialType: "nfc", status: "active", createdAt: "2026-01-01" }]);
   Model.listEdgeKeys.mockResolvedValue([]);
+  Model.listEdgeStatuses.mockResolvedValue([]);
 });
 
 test("adminOverview requires admin", async () => {
@@ -40,12 +41,23 @@ test("adminOverview sanitizes cards (no codeEnc / bi leak)", async () => {
   expect(JSON.stringify(out.cards)).not.toMatch(/codeEnc|beef|IV:TAG:CT/);
 });
 
-test("adminOverview includes registered edges as {edgeId,fingerprint,updatedAt} only (no raw key)", async () => {
+test("adminOverview includes registered edges (fingerprint only, no raw key) + merged status", async () => {
   const pub = edPub();
   Model.listEdgeKeys.mockResolvedValue([{ _id: "front-01", pubSpki: pub, updatedAt: "2026-08-25" }]);
+  Model.listEdgeStatuses.mockResolvedValue([{ _id: "front-01", lastSeenAt: "2026-08-25T12:00:00Z", lastBrokerId: "broker-a", bootEpoch: "b1", lastSeq: 42, lastMode: "offline" }]);
   const out = await Service.adminOverview(ADMIN);
-  expect(out.edges).toEqual([{ edgeId: "front-01", fingerprint: expect.stringMatching(/^[0-9a-f]{16}$/), updatedAt: "2026-08-25" }]);
+  expect(out.edges).toEqual([{
+    edgeId: "front-01", fingerprint: expect.stringMatching(/^[0-9a-f]{16}$/), updatedAt: "2026-08-25",
+    lastSeenAt: "2026-08-25T12:00:00Z", lastBrokerId: "broker-a", bootEpoch: "b1", lastSeq: 42, lastMode: "offline",
+  }]);
   expect(JSON.stringify(out.edges)).not.toContain(pub); // never the raw public key
+});
+
+test("adminOverview edge with no status yet shows null telemetry fields", async () => {
+  Model.listEdgeKeys.mockResolvedValue([{ _id: "e2", pubSpki: edPub(), updatedAt: "2026-08-25" }]);
+  Model.listEdgeStatuses.mockResolvedValue([]); // never seen
+  const out = await Service.adminOverview(ADMIN);
+  expect(out.edges[0]).toMatchObject({ edgeId: "e2", lastSeenAt: null, lastBrokerId: null, bootEpoch: null, lastSeq: null, lastMode: null });
 });
 
 test("adminUpsertDoor validates + upserts", async () => {
