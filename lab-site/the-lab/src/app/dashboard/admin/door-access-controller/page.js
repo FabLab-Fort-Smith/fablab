@@ -16,6 +16,7 @@ export default function AdminDoorAccessPage() {
   const [busy, setBusy] = useState(false);
   const [door, setDoor] = useState({ doorId: '', name: '', deviceId: '', timezone: '', enabled: true });
   const [policyText, setPolicyText] = useState('');
+  const [edgeKey, setEdgeKey] = useState({ edgeId: '', pubSpki: '' });
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/auth/signin');
@@ -47,7 +48,8 @@ export default function AdminDoorAccessPage() {
       if (!res.ok) throw new Error(body.error || `Action failed (${res.status})`);
       setStatus_(okMsg);
       await load();
-    } catch (e) { setStatus_(e.message); } finally { setBusy(false); }
+      return true;
+    } catch (e) { setStatus_(e.message); return false; } finally { setBusy(false); }
   };
 
   const addDoor = (e) => {
@@ -62,10 +64,23 @@ export default function AdminDoorAccessPage() {
     act({ action: 'policy.save', rules: parsed.rules, accountOverrides: parsed.accountOverrides }, 'Policy saved.');
   };
 
+  const registerEdgeKey = (e) => {
+    e.preventDefault();
+    const edgeId = edgeKey.edgeId.trim();
+    const pubSpki = edgeKey.pubSpki.trim();
+    if (!edgeId || !pubSpki) { setStatus_('Edge ID and public key are required.'); return; }
+    // The server re-anchors this edge's audit trust and audits it; a rotation replaces the prior key.
+    const known = edges.find((x) => x.edgeId === edgeId);
+    if (known && !confirm(`Edge "${edgeId}" already has a key — replace it (rotation)?`)) return;
+    act({ action: 'edgeKey.register', edgeId, pubSpki }, `Registered audit key for "${edgeId}".`)
+      .then((ok) => { if (ok) setEdgeKey({ edgeId: '', pubSpki: '' }); });
+  };
+
   if (status !== 'authenticated') return null;
 
   const doors = data?.doors || [];
   const cards = data?.cards || [];
+  const edges = data?.edges || [];
 
   return (
     <main style={{ padding: '20px 24px', maxWidth: 960 }}>
@@ -123,6 +138,45 @@ export default function AdminDoorAccessPage() {
           <div style={{ gridColumn: '1 / -1' }}>
             <button type="submit" disabled={busy}>Save door</button>
           </div>
+        </form>
+      </section>
+
+      {/* Edge audit keys */}
+      <section aria-labelledby="edge-h" style={{ marginBottom: 28 }}>
+        <h2 id="edge-h" style={{ fontSize: 16 }}>Edge audit keys</h2>
+        <p style={{ color: 'var(--text-dim)', margin: '4px 0 10px' }}>
+          Each edge signs its offline audit with a per-device key. Provision it on the device
+          (<code>python -m edge.provision_audit_key</code>) and register the printed public key here so the
+          cloud will accept that edge&apos;s audit. Registering a new key for an existing edge is a rotation.
+        </p>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>{['Edge ID', 'Key fingerprint', 'Registered'].map((h) => (
+              <th key={h} scope="col" style={{ textAlign: 'left', borderBottom: '1px solid var(--border)', padding: '6px 8px' }}>{h}</th>
+            ))}</tr>
+          </thead>
+          <tbody>
+            {edges.length === 0 ? <tr><td colSpan={3} style={{ padding: 8, color: 'var(--text-dim)' }}>No edges registered yet.</td></tr>
+              : edges.map((x) => (
+                <tr key={x.edgeId}>
+                  <td style={{ padding: '6px 8px' }}>{x.edgeId}</td>
+                  <td style={{ padding: '6px 8px', fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>{x.fingerprint || '—'}</td>
+                  <td style={{ padding: '6px 8px' }}>{x.updatedAt ? new Date(x.updatedAt).toLocaleString() : '—'}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+
+        <form onSubmit={registerEdgeKey} style={{ marginTop: 12, display: 'grid', gap: 8, maxWidth: 560 }}>
+          <h3 style={{ fontSize: 13, margin: '4px 0' }}>Register / rotate an edge key</h3>
+          <Field id="e-id" label="Edge ID (device cert CN)" value={edgeKey.edgeId} onChange={(v) => setEdgeKey({ ...edgeKey, edgeId: v })} required placeholder="front-01" />
+          <label htmlFor="e-pub" style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+            <span>Public key (SPKI, base64) *</span>
+            <textarea id="e-pub" value={edgeKey.pubSpki} onChange={(e) => setEdgeKey({ ...edgeKey, pubSpki: e.target.value })}
+              required rows={3} spellCheck={false} placeholder="MCowBQYDK2Vw..."
+              style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12, padding: '6px 8px' }} />
+          </label>
+          <div><button type="submit" disabled={busy}>Register key</button></div>
         </form>
       </section>
 
