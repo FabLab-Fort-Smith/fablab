@@ -452,7 +452,9 @@ const Service = {
         lastBrokerId: typeof brokerId === "string" && isSafeKey(brokerId) ? brokerId : null,
         bootEpoch: last.bootEpoch,
         lastSeq: last.seq,
-        lastMode: last.event && typeof last.event.mode === "string" ? last.event.mode : null,
+        // Clamp to the known decision-path enum (SEC #177 INFO-1) — a signed edge can't inject anything
+        // odd here, but bound the stored+displayed value to a fixed set for sanity.
+        lastMode: last.event && (last.event.mode === "online" || last.event.mode === "offline") ? last.event.mode : null,
       });
     } catch {
       auditLog("door-access.audit", { actor: { pluginId: PLUGIN_ID }, target: edgeId, outcome: "status-write-error" });

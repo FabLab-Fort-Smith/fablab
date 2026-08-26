@@ -167,6 +167,12 @@ test("an unsafe brokerId is dropped to null in the status stamp (telemetry only)
   expect(Model.recordEdgeStatus).toHaveBeenCalledWith("e", expect.objectContaining({ lastBrokerId: null }));
 });
 
+test("lastMode is clamped to the online/offline enum (SEC #177 INFO-1)", async () => {
+  const weird = rec("", "b", 0, 1, { doorId: "front", granted: true, reason: "granted", mode: "WEIRD" });
+  await Service.ingestEdgeAudit({ edgeId: "e", records: [weird], signature: sign("e", [weird]) });
+  expect(Model.recordEdgeStatus).toHaveBeenCalledWith("e", expect.objectContaining({ lastMode: null }));
+});
+
 test("status is NOT stamped on a rejected batch (unregistered / bad-signature)", async () => {
   Model.getEdgeSigningKey.mockResolvedValueOnce(null);
   await ingest("edge-x", [rec("", "b", 0, 1)]);           // unregistered
