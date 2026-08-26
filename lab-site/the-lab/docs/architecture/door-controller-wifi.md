@@ -628,6 +628,7 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
 ## Changelog
 | Date | Change | Author |
 |------|--------|--------|
+| 2026-08-25 | **S4b-3 (non-hardware core) ✅ edge supervisor scheduling policy: `edge/supervisor.py` — pure `next_backoff_ms` (capped exp reconnect backoff, overflow-safe), `due_for_flush` (fail-safe on a bad clock), and `plan_tick` (disconnected→reconnect+backoff, connected→flush iff pending+due, sleep-until-due floored to min so it never busy-spins). Decides scheduling only — no I/O, no access decision, no crypto. +9 tests. The blocking loop + NFC/GPIO/mTLS-socket adapters that wire it remain S4b-3 bench (hardware).** | app dev |
 | 2026-08-23 | Initial proposed design (brokered via cloud) | app dev |
 | 2026-08-23 | Revised for offline-VPS-down + keep-Pico | app dev |
 | 2026-08-23 | Freeze Pico, two Pi Zero W (broker+reader), strike on broker, reader dials broker | app dev |

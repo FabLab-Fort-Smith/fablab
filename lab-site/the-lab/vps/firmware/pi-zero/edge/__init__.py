@@ -12,6 +12,7 @@ from .crypto import (cred_hash, derive_index_key, generate_audit_keypair, sign_a
 from .decide import REASON, decide_offline
 from .protocol import build_audit_msg, build_scan_msg, parse_audit_ack, parse_result
 from .runtime import EdgeRuntime, new_boot_epoch
+from .supervisor import due_for_flush, next_backoff_ms, plan_tick
 from .store import EnvelopeStore
 from .windows import in_window
 
@@ -34,4 +35,7 @@ __all__ = [
     "build_audit_msg",
     "parse_audit_ack",
     "parse_result",
+    "next_backoff_ms",
+    "due_for_flush",
+    "plan_tick",
 ]
