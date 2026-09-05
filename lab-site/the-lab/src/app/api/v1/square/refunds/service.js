@@ -37,16 +37,22 @@ export async function refund({ paymentId, amountCents, reason } = {}) {
   if (!Number.isFinite(captured) || captured <= 0) {
     throw new RefundValidationError("payment has no refundable amount");
   }
+  // Enforce against the REMAINING refundable amount, not the full captured total — Square records prior
+  // refunds on the payment (`refundedMoney`), so a repeated partial can't stack past what was paid
+  // (SEC #180 F-1). A full refund refunds exactly the remainder.
+  const alreadyRefunded = Number(pay.refundedMoney?.amount) || 0;
+  const remaining = captured - alreadyRefunded;
+  if (remaining <= 0) throw new RefundValidationError("payment is already fully refunded");
 
   let amount;
   if (amountCents === undefined || amountCents === null) {
-    amount = captured; // full refund
+    amount = remaining; // full refund = whatever is left
   } else {
     if (!Number.isInteger(amountCents) || amountCents <= 0) {
       throw new RefundValidationError("amountCents must be a positive integer (minor units)");
     }
-    if (amountCents > captured) {
-      throw new RefundValidationError("refund amount exceeds the captured amount");
+    if (amountCents > remaining) {
+      throw new RefundValidationError("refund amount exceeds the remaining refundable amount");
     }
     amount = amountCents;
   }

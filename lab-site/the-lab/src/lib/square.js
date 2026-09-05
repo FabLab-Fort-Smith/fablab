@@ -227,7 +227,12 @@ export async function getPayment(paymentId) {
 export async function refundPayment(body) {
   if (USE_V44) {
     const c = await v44();
-    return c.refunds.refundPayment(body);
+    // v44 requires bigint minor-units on input (matching its bigint output). Callers build amount as a
+    // JS number; coerce here so a v44 cutover doesn't throw (SEC #180 F-2).
+    const b = body?.amountMoney?.amount != null
+      ? { ...body, amountMoney: { ...body.amountMoney, amount: BigInt(body.amountMoney.amount) } }
+      : body;
+    return c.refunds.refundPayment(b);
   }
   const { result } = await v39.refundsApi.refundPayment(body);
   return result; // { refund }

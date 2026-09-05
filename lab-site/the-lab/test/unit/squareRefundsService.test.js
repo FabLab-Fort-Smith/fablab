@@ -54,3 +54,25 @@ test("rejects a payment with no refundable amount", async () => {
   getPayment.mockResolvedValueOnce({ payment: { id: "p1", amountMoney: { amount: 0, currency: "USD" } } });
   await expect(refund({ paymentId: "p1" })).rejects.toThrow(/no refundable amount/);
 });
+
+test("enforces the REMAINING amount when the payment is partially refunded (F-1)", async () => {
+  // $45 captured, $40 already refunded → only $5 remains.
+  getPayment.mockResolvedValue({
+    payment: { id: "p1", amountMoney: { amount: 4500, currency: "USD" }, refundedMoney: { amount: 4000, currency: "USD" } },
+  });
+  // Full refund refunds the remainder, not the captured total.
+  await refund({ paymentId: "p1" });
+  expect(refundPayment.mock.calls[0][0].amountMoney).toEqual({ amount: 500, currency: "USD" });
+  // A partial over the remainder (but under captured) is rejected — closes the double-refund gap.
+  await expect(refund({ paymentId: "p1", amountCents: 600 })).rejects.toThrow(/remaining/);
+  // At-the-remainder partial is allowed.
+  await refund({ paymentId: "p1", amountCents: 500 });
+  expect(refundPayment.mock.calls[1][0].amountMoney).toEqual({ amount: 500, currency: "USD" });
+});
+
+test("rejects a payment already fully refunded (F-1)", async () => {
+  getPayment.mockResolvedValueOnce({
+    payment: { id: "p1", amountMoney: { amount: 4500, currency: "USD" }, refundedMoney: { amount: 4500, currency: "USD" } },
+  });
+  await expect(refund({ paymentId: "p1" })).rejects.toThrow(/already fully refunded/);
+});
