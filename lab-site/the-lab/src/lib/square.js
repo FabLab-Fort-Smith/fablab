@@ -265,6 +265,28 @@ export async function listRefunds({ beginTime, endTime, limit } = {}) {
   return result; // { refunds, cursor }
 }
 
+// ---- Disputes (read) -----------------------------------------------------
+// AC-2: admin read-only view of chargebacks/disputes. Amounts are bigint under
+// v44 — serialize responses with bigintReplacer.
+
+export async function listDisputes({ cursor, states } = {}) {
+  if (USE_V44) {
+    const c = await v44();
+    return { disputes: firstPage(await c.disputes.list({ cursor, states })) };
+  }
+  const { result } = await v39.disputesApi.listDisputes(cursor, states, undefined /* locationId */);
+  return result; // { disputes, cursor }
+}
+
+export async function getDispute(disputeId) {
+  if (USE_V44) {
+    const c = await v44();
+    return c.disputes.get({ disputeId });
+  }
+  const { result } = await v39.disputesApi.retrieveDispute(disputeId);
+  return result; // { dispute }
+}
+
 // ---- Customers -----------------------------------------------------------
 
 export async function createCustomer(body) {
