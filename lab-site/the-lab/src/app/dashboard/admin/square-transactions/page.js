@@ -20,6 +20,7 @@ export default function SquareTransactionsPage() {
     const [plans, setPlans] = useState([]);
     const [selectedVariationId, setSelectedVariationId] = useState('');
     const [subStartDate, setSubStartDate] = useState('');
+    const [refundDialog, setRefundDialog] = useState({ open: false, paymentId: null, maxCents: 0, amountStr: '', reason: '', submitting: false });
 
     useEffect(() => {
         if (status === 'unauthenticated') router.push('/auth/signin');
@@ -32,6 +33,36 @@ export default function SquareTransactionsPage() {
     const showToast = (msg, type = 'success') => {
         setToast({ msg, type });
         setTimeout(() => setToast(null), 4000);
+    };
+
+    const openRefund = (t) => setRefundDialog({
+        open: true, paymentId: t.id, maxCents: Math.round((t.amount || 0) * 100), amountStr: '', reason: '', submitting: false,
+    });
+
+    const submitRefund = async () => {
+        const payload = { paymentId: refundDialog.paymentId };
+        const amt = refundDialog.amountStr.trim();
+        if (amt) {
+            const cents = Math.round(parseFloat(amt) * 100);
+            if (!Number.isFinite(cents) || cents <= 0) { showToast('Enter a valid amount.', 'error'); return; }
+            if (cents > refundDialog.maxCents) { showToast('Amount exceeds the payment.', 'error'); return; }
+            payload.amountCents = cents;
+        }
+        if (refundDialog.reason.trim()) payload.reason = refundDialog.reason.trim();
+        setRefundDialog(d => ({ ...d, submitting: true }));
+        try {
+            const res = await fetch('/api/v1/admin/square/refund', {
+                method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `Refund failed (${res.status})`);
+            showToast(amt ? `Refunded $${amt}.` : 'Full refund issued.');
+            setRefundDialog({ open: false, paymentId: null, maxCents: 0, amountStr: '', reason: '', submitting: false });
+            fetchTransactions();
+        } catch (e) {
+            showToast(e.message, 'error');
+            setRefundDialog(d => ({ ...d, submitting: false }));
+        }
     };
 
     const fetchTransactions = async () => {
@@ -208,7 +239,7 @@ export default function SquareTransactionsPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--mono)', fontSize: 11 }}>
                     <thead>
                         <tr style={{ borderBottom: '1px solid var(--bd)', background: 'var(--bg-1)' }}>
-                            {['date', 'amount', 'status', 'type', 'note', 'linked member', 'sq customer'].map(h => (
+                            {['date', 'amount', 'status', 'type', 'note', 'linked member', 'sq customer', 'actions'].map(h => (
                                 <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-dim)', letterSpacing: '0.08em', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>
                                     {h}
                                 </th>
@@ -218,7 +249,7 @@ export default function SquareTransactionsPage() {
                     <tbody>
                         {filteredTxns.length === 0 && (
                             <tr>
-                                <td colSpan={7} style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--text-dim)' }}>
+                                <td colSpan={8} style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--text-dim)' }}>
                                     no transactions found
                                 </td>
                             </tr>
@@ -288,11 +319,58 @@ export default function SquareTransactionsPage() {
                                         </span>
                                     )}
                                 </td>
+                                <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                                    {t.status === 'COMPLETED' && t.id ? (
+                                        <button
+                                            className="btn btn--sm"
+                                            onClick={() => openRefund(t)}
+                                            style={{ fontSize: 9, padding: '2px 6px', color: 'var(--amber)', borderColor: 'var(--amber)' }}
+                                        >
+                                            $ refund
+                                        </button>
+                                    ) : (
+                                        <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>—</span>
+                                    )}
+                                </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
+
+            {/* Refund dialog */}
+            {refundDialog.open && (
+                <div role="dialog" aria-modal="true" aria-labelledby="refund-title" style={{
+                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', zIndex: 100,
+                }}>
+                    <div style={{ background: 'var(--bg)', border: '1px solid var(--bd)', padding: 20, width: 360, maxWidth: '90vw' }}>
+                        <h2 id="refund-title" style={{ fontSize: 14, marginTop: 0, color: 'var(--amber)' }}>Refund payment</h2>
+                        <p style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+                            Full amount is <strong>${(refundDialog.maxCents / 100).toFixed(2)}</strong>. Leave the amount blank for a full refund, or enter a smaller amount for a partial refund.
+                        </p>
+                        <label htmlFor="refund-amount" style={{ display: 'block', fontSize: 11, color: 'var(--text-mid)', marginTop: 8 }}>Amount ($) — blank = full</label>
+                        <input id="refund-amount" type="text" inputMode="decimal" value={refundDialog.amountStr}
+                            onChange={e => setRefundDialog(d => ({ ...d, amountStr: e.target.value }))}
+                            placeholder={(refundDialog.maxCents / 100).toFixed(2)}
+                            style={{ width: '100%', padding: '6px 8px', marginTop: 2, background: 'var(--bg-alt, #111)', color: 'var(--text)', border: '1px solid var(--bd)' }} />
+                        <label htmlFor="refund-reason" style={{ display: 'block', fontSize: 11, color: 'var(--text-mid)', marginTop: 10 }}>Reason (optional)</label>
+                        <input id="refund-reason" type="text" value={refundDialog.reason}
+                            onChange={e => setRefundDialog(d => ({ ...d, reason: e.target.value }))}
+                            style={{ width: '100%', padding: '6px 8px', marginTop: 2, background: 'var(--bg-alt, #111)', color: 'var(--text)', border: '1px solid var(--bd)' }} />
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+                            <button className="btn btn--sm" disabled={refundDialog.submitting}
+                                onClick={() => setRefundDialog({ open: false, paymentId: null, maxCents: 0, amountStr: '', reason: '', submitting: false })}>
+                                Cancel
+                            </button>
+                            <button className="btn btn--sm" disabled={refundDialog.submitting}
+                                onClick={submitRefund} style={{ color: 'var(--amber)', borderColor: 'var(--amber)' }}>
+                                {refundDialog.submitting ? 'Refunding…' : 'Issue refund'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Link dialog */}
             {linkDialog.open && (

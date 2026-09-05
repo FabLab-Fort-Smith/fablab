@@ -219,6 +219,47 @@ export async function getPayment(paymentId) {
   return result; // { payment }
 }
 
+// ---- Refunds -------------------------------------------------------------
+// AC-1: refund a captured payment (admin). `body` = { idempotencyKey, paymentId,
+// amountMoney:{amount,currency}, reason? }. amountMoney.amount is minor units
+// (bigint under v44, number under v39) — serialize responses with bigintReplacer.
+
+export async function refundPayment(body) {
+  if (USE_V44) {
+    const c = await v44();
+    return c.refunds.refundPayment(body);
+  }
+  const { result } = await v39.refundsApi.refundPayment(body);
+  return result; // { refund }
+}
+
+export async function getRefund(refundId) {
+  if (USE_V44) {
+    const c = await v44();
+    return c.refunds.get({ refundId });
+  }
+  const { result } = await v39.refundsApi.getPaymentRefund(refundId);
+  return result; // { refund }
+}
+
+export async function listRefunds({ beginTime, endTime, limit } = {}) {
+  if (USE_V44) {
+    const c = await v44();
+    return { refunds: firstPage(await c.refunds.list({ beginTime, endTime, limit, sortOrder: "DESC" })) };
+  }
+  const { result } = await v39.refundsApi.listPaymentRefunds(
+    beginTime,
+    endTime,
+    undefined, // sortOrder
+    undefined, // cursor
+    undefined, // locationId
+    undefined, // status
+    undefined, // sourceType
+    limit,
+  );
+  return result; // { refunds, cursor }
+}
+
 // ---- Customers -----------------------------------------------------------
 
 export async function createCustomer(body) {
