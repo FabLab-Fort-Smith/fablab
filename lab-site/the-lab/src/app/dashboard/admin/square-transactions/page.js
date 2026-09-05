@@ -21,6 +21,10 @@ export default function SquareTransactionsPage() {
     const [selectedVariationId, setSelectedVariationId] = useState('');
     const [subStartDate, setSubStartDate] = useState('');
     const [refundDialog, setRefundDialog] = useState({ open: false, paymentId: null, maxCents: 0, amountStr: '', reason: '', submitting: false });
+    // AC-2: payment detail drawer + disputes (read-only)
+    const [detail, setDetail] = useState({ open: false, loading: false, data: null, error: null });
+    const [disputesPanel, setDisputesPanel] = useState({ open: false, loading: false, loaded: false, items: [], error: null });
+    const [disputeDrawer, setDisputeDrawer] = useState({ open: false, loading: false, data: null, error: null });
 
     useEffect(() => {
         if (status === 'unauthenticated') router.push('/auth/signin');
@@ -29,6 +33,18 @@ export default function SquareTransactionsPage() {
             else { fetchTransactions(); fetchAllUsers(); }
         }
     }, [status, session]);
+
+    // Close the top-most open drawer/dialog on Escape (keyboard operability).
+    useEffect(() => {
+        const onKey = (e) => {
+            if (e.key !== 'Escape') return;
+            if (disputeDrawer.open) setDisputeDrawer({ open: false, loading: false, data: null, error: null });
+            else if (detail.open) setDetail({ open: false, loading: false, data: null, error: null });
+            else if (refundDialog.open && !refundDialog.submitting) setRefundDialog({ open: false, paymentId: null, maxCents: 0, amountStr: '', reason: '', submitting: false });
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [disputeDrawer.open, detail.open, refundDialog.open, refundDialog.submitting]);
 
     const showToast = (msg, type = 'success') => {
         setToast({ msg, type });
@@ -57,11 +73,59 @@ export default function SquareTransactionsPage() {
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.error || `Refund failed (${res.status})`);
             showToast(amt ? `Refunded $${amt}.` : 'Full refund issued.');
+            const refundedPaymentId = refundDialog.paymentId;
             setRefundDialog({ open: false, paymentId: null, maxCents: 0, amountStr: '', reason: '', submitting: false });
             fetchTransactions();
+            if (detail.open && detail.data?.id === refundedPaymentId) openDetail(refundedPaymentId);
         } catch (e) {
             showToast(e.message, 'error');
             setRefundDialog(d => ({ ...d, submitting: false }));
+        }
+    };
+
+    const openDetail = async (paymentId) => {
+        if (!paymentId) return;
+        setDetail({ open: true, loading: true, data: null, error: null });
+        try {
+            const res = await fetch(`/api/v1/admin/square/payment/${encodeURIComponent(paymentId)}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `Failed to load payment (${res.status})`);
+            setDetail({ open: true, loading: false, data, error: null });
+        } catch (e) {
+            setDetail({ open: true, loading: false, data: null, error: e.message });
+        }
+    };
+
+    // Refund from the detail drawer — guard against the REMAINING refundable amount (server is authoritative).
+    const openRefundFromDetail = (d) => setRefundDialog({
+        open: true, paymentId: d.id, maxCents: d.refundableCents ?? d.amountCents ?? 0, amountStr: '', reason: '', submitting: false,
+    });
+
+    const toggleDisputes = async () => {
+        if (disputesPanel.open) { setDisputesPanel(p => ({ ...p, open: false })); return; }
+        setDisputesPanel(p => ({ ...p, open: true }));
+        if (disputesPanel.loaded) return;
+        setDisputesPanel(p => ({ ...p, loading: true, error: null }));
+        try {
+            const res = await fetch('/api/v1/admin/square/disputes');
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `Failed to load disputes (${res.status})`);
+            setDisputesPanel({ open: true, loading: false, loaded: true, items: data.disputes || [], error: null });
+        } catch (e) {
+            setDisputesPanel({ open: true, loading: false, loaded: false, items: [], error: e.message });
+        }
+    };
+
+    const openDispute = async (disputeId) => {
+        if (!disputeId) return;
+        setDisputeDrawer({ open: true, loading: true, data: null, error: null });
+        try {
+            const res = await fetch(`/api/v1/admin/square/disputes/${encodeURIComponent(disputeId)}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `Failed to load dispute (${res.status})`);
+            setDisputeDrawer({ open: true, loading: false, data, error: null });
+        } catch (e) {
+            setDisputeDrawer({ open: true, loading: false, data: null, error: e.message });
         }
     };
 
@@ -320,23 +384,174 @@ export default function SquareTransactionsPage() {
                                     )}
                                 </td>
                                 <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                                    {t.status === 'COMPLETED' && t.id ? (
-                                        <button
-                                            className="btn btn--sm"
-                                            onClick={() => openRefund(t)}
-                                            style={{ fontSize: 9, padding: '2px 6px', color: 'var(--amber)', borderColor: 'var(--amber)' }}
-                                        >
-                                            $ refund
-                                        </button>
-                                    ) : (
-                                        <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>—</span>
-                                    )}
+                                    <span style={{ display: 'flex', gap: 6 }}>
+                                        {t.id && (
+                                            <button
+                                                className="btn btn--sm"
+                                                onClick={() => openDetail(t.id)}
+                                                style={{ fontSize: 9, padding: '2px 6px' }}
+                                            >
+                                                $ details
+                                            </button>
+                                        )}
+                                        {t.status === 'COMPLETED' && t.id && (
+                                            <button
+                                                className="btn btn--sm"
+                                                onClick={() => openRefund(t)}
+                                                style={{ fontSize: 9, padding: '2px 6px', color: 'var(--amber)', borderColor: 'var(--amber)' }}
+                                            >
+                                                $ refund
+                                            </button>
+                                        )}
+                                        {!t.id && <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>—</span>}
+                                    </span>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
+
+            {/* Disputes (read-only) */}
+            <div style={{ border: '1px solid var(--bd-1)' }}>
+                <button
+                    className="btn btn--sm"
+                    onClick={toggleDisputes}
+                    aria-expanded={disputesPanel.open}
+                    aria-controls="disputes-panel"
+                    style={{ fontSize: 10, width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: 0 }}
+                >
+                    {disputesPanel.open ? '▾' : '▸'} $ disputes / chargebacks{disputesPanel.loaded ? ` (${disputesPanel.items.length})` : ''}
+                </button>
+                {disputesPanel.open && (
+                    <div id="disputes-panel" style={{ borderTop: '1px solid var(--bd)', overflowX: 'auto' }}>
+                        {disputesPanel.loading && <div style={{ padding: '16px 12px', color: 'var(--text-dim)', fontSize: 11, fontFamily: 'var(--mono)' }}>$ loading disputes…</div>}
+                        {disputesPanel.error && <div style={{ padding: '16px 12px', color: 'var(--red, #ff4444)', fontSize: 11 }}>{disputesPanel.error}</div>}
+                        {disputesPanel.loaded && !disputesPanel.items.length && <div style={{ padding: '16px 12px', color: 'var(--text-dim)', fontSize: 11 }}>no disputes 🎉</div>}
+                        {disputesPanel.loaded && disputesPanel.items.length > 0 && (
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--mono)', fontSize: 11 }}>
+                                <thead>
+                                    <tr style={{ borderBottom: '1px solid var(--bd)', background: 'var(--bg-1)' }}>
+                                        {['reported', 'amount', 'state', 'reason', 'card', 'due', 'actions'].map(h => (
+                                            <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-dim)', letterSpacing: '0.08em', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {disputesPanel.items.map((d, i) => (
+                                        <tr key={d.id || i} style={{ borderBottom: '1px solid var(--bd)' }}>
+                                            <td style={{ padding: '8px 12px', color: 'var(--text-mid)', whiteSpace: 'nowrap' }}>{(d.reportedAt || d.createdAt) ? new Date(d.reportedAt || d.createdAt).toLocaleDateString() : '—'}</td>
+                                            <td style={{ padding: '8px 12px', color: 'var(--text)', whiteSpace: 'nowrap' }}>{d.amountCents != null ? `$${(d.amountCents / 100).toFixed(2)}` : '—'}</td>
+                                            <td style={{ padding: '8px 12px' }}><span style={{ fontSize: 9, padding: '2px 6px', letterSpacing: '0.06em', border: '1px solid var(--amber)', color: 'var(--amber)' }}>{d.state || '—'}</span></td>
+                                            <td style={{ padding: '8px 12px', color: 'var(--text-dim)' }}>{d.reason || '—'}</td>
+                                            <td style={{ padding: '8px 12px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>{d.cardBrand || '—'}</td>
+                                            <td style={{ padding: '8px 12px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>{d.dueAt ? new Date(d.dueAt).toLocaleDateString() : '—'}</td>
+                                            <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                                                <button className="btn btn--sm" onClick={() => openDispute(d.id)} style={{ fontSize: 9, padding: '2px 6px' }}>$ view</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* Payment detail drawer */}
+            {detail.open && (
+                <div role="dialog" aria-modal="true" aria-labelledby="detail-title" onClick={() => setDetail({ open: false, loading: false, data: null, error: null })}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'flex-end', zIndex: 120 }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg)', borderLeft: '1px solid var(--bd)', padding: 20, width: 420, maxWidth: '92vw', height: '100%', overflowY: 'auto', fontFamily: 'var(--mono)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h2 id="detail-title" style={{ fontSize: 14, margin: 0, color: 'var(--text-bright)' }}>payment_detail</h2>
+                            <button autoFocus className="btn btn--sm" onClick={() => setDetail({ open: false, loading: false, data: null, error: null })} aria-label="Close payment detail" style={{ fontSize: 12 }}>×</button>
+                        </div>
+                        {detail.loading && <div style={{ color: 'var(--text-dim)', fontSize: 11, marginTop: 16 }}>$ loading…</div>}
+                        {detail.error && <div style={{ color: 'var(--red, #ff4444)', fontSize: 11, marginTop: 16 }}>{detail.error}</div>}
+                        {detail.data && (() => {
+                            const d = detail.data;
+                            const row = (k, v) => (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '6px 0', borderBottom: '1px solid var(--bd)', fontSize: 11 }}>
+                                    <span style={{ color: 'var(--text-dim)' }}>{k}</span>
+                                    <span style={{ color: 'var(--text)', textAlign: 'right', wordBreak: 'break-all' }}>{v}</span>
+                                </div>
+                            );
+                            const money = (c) => c == null ? '—' : `$${(c / 100).toFixed(2)}`;
+                            return (
+                                <div style={{ marginTop: 14 }}>
+                                    {row('id', d.id)}
+                                    {row('status', d.status || '—')}
+                                    {row('amount', `${money(d.amountCents)} ${d.currency}`)}
+                                    {row('refunded', money(d.refundedCents))}
+                                    {row('refundable', money(d.refundableCents))}
+                                    {d.tipCents != null && row('tip', money(d.tipCents))}
+                                    {d.processingFeeCents != null && row('processing fee', money(d.processingFeeCents))}
+                                    {row('type', d.sourceType || '—')}
+                                    {d.card && row('card', `${d.card.brand || '—'} •••• ${d.card.last4 || '—'}${d.card.expMonth ? ` (${d.card.expMonth}/${d.card.expYear})` : ''}`)}
+                                    {row('created', d.createdAt ? new Date(d.createdAt).toLocaleString() : '—')}
+                                    {d.note && row('note', d.note)}
+                                    {d.orderId && row('order', d.orderId)}
+                                    {d.customerId && row('sq customer', d.customerId)}
+                                    {row('refunds', d.refundIds?.length ? d.refundIds.length : 0)}
+                                    {typeof d.receiptUrl === 'string' && d.receiptUrl.startsWith('https://') && (
+                                        <div style={{ marginTop: 12 }}>
+                                            <a href={d.receiptUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--cyan, #00e5ff)', fontSize: 11 }}>$ view receipt ↗</a>
+                                        </div>
+                                    )}
+                                    {d.status === 'COMPLETED' && (d.refundableCents ?? 0) > 0 && (
+                                        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                                            <button className="btn btn--sm" onClick={() => openRefundFromDetail(d)} style={{ fontSize: 10, color: 'var(--amber)', borderColor: 'var(--amber)' }}>$ refund</button>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+                    </div>
+                </div>
+            )}
+
+            {/* Dispute detail drawer */}
+            {disputeDrawer.open && (
+                <div role="dialog" aria-modal="true" aria-labelledby="dispute-title" onClick={() => setDisputeDrawer({ open: false, loading: false, data: null, error: null })}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'flex-end', zIndex: 120 }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg)', borderLeft: '1px solid var(--bd)', padding: 20, width: 420, maxWidth: '92vw', height: '100%', overflowY: 'auto', fontFamily: 'var(--mono)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h2 id="dispute-title" style={{ fontSize: 14, margin: 0, color: 'var(--amber)' }}>dispute_detail</h2>
+                            <button autoFocus className="btn btn--sm" onClick={() => setDisputeDrawer({ open: false, loading: false, data: null, error: null })} aria-label="Close dispute detail" style={{ fontSize: 12 }}>×</button>
+                        </div>
+                        {disputeDrawer.loading && <div style={{ color: 'var(--text-dim)', fontSize: 11, marginTop: 16 }}>$ loading…</div>}
+                        {disputeDrawer.error && <div style={{ color: 'var(--red, #ff4444)', fontSize: 11, marginTop: 16 }}>{disputeDrawer.error}</div>}
+                        {disputeDrawer.data && (() => {
+                            const d = disputeDrawer.data;
+                            const row = (k, v) => (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '6px 0', borderBottom: '1px solid var(--bd)', fontSize: 11 }}>
+                                    <span style={{ color: 'var(--text-dim)' }}>{k}</span>
+                                    <span style={{ color: 'var(--text)', textAlign: 'right', wordBreak: 'break-all' }}>{v}</span>
+                                </div>
+                            );
+                            return (
+                                <div style={{ marginTop: 14 }}>
+                                    {row('id', d.id)}
+                                    {row('state', d.state || '—')}
+                                    {row('reason', d.reason || '—')}
+                                    {row('amount', d.amountCents != null ? `$${(d.amountCents / 100).toFixed(2)} ${d.currency}` : '—')}
+                                    {row('card', d.cardBrand || '—')}
+                                    {row('payment', d.paymentId || '—')}
+                                    {row('due', d.dueAt ? new Date(d.dueAt).toLocaleString() : '—')}
+                                    {row('reported', (d.reportedAt || d.createdAt) ? new Date(d.reportedAt || d.createdAt).toLocaleString() : '—')}
+                                    {row('evidence', d.evidenceIds?.length ? `${d.evidenceIds.length} file(s)` : 'none')}
+                                    {d.paymentId && (
+                                        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                                            <button className="btn btn--sm" onClick={() => { setDisputeDrawer({ open: false, loading: false, data: null, error: null }); openDetail(d.paymentId); }} style={{ fontSize: 10 }}>$ view payment →</button>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+                    </div>
+                </div>
+            )}
 
             {/* Refund dialog */}
             {refundDialog.open && (
