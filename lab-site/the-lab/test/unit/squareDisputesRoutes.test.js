@@ -33,6 +33,7 @@ test("list: passes cursor + state query through; 200 bigint-safe", async () => {
   expect(res.status).toBe(200);
   expect(await res.text()).toContain('"amountCents":"2500"');
   expect(listDisputes).toHaveBeenCalledWith({ cursor: "c1", states: "WON" });
+  expect(auditLog).toHaveBeenCalledWith("admin.square.disputes.list", expect.objectContaining({ count: 1, outcome: "ok" }));
 });
 
 test("list: unexpected error → 500 generic", async () => {

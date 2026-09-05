@@ -494,7 +494,7 @@ export default function SquareTransactionsPage() {
                                     {d.orderId && row('order', d.orderId)}
                                     {d.customerId && row('sq customer', d.customerId)}
                                     {row('refunds', d.refundIds?.length ? d.refundIds.length : 0)}
-                                    {d.receiptUrl && (
+                                    {typeof d.receiptUrl === 'string' && d.receiptUrl.startsWith('https://') && (
                                         <div style={{ marginTop: 12 }}>
                                             <a href={d.receiptUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--cyan, #00e5ff)', fontSize: 11 }}>$ view receipt ↗</a>
                                         </div>
