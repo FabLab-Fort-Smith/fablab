@@ -421,9 +421,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     console.error("Grace period check failed:", e);
                 }
             }
+            // Revocation on refresh: if the account was deleted / GDPR-purged / merged away, invalidate
+            // the session so a still-valid JWT can't keep acting as the removed member (SEC #184
+            // carry-in). Throttled (≤ once / 15 min / session) to avoid a DB hit on every request; also
+            // refreshes the role so a demotion propagates to a live session within the window.
+            try {
+                if (token.userID && !token.invalidated) {
+                    const now = Date.now();
+                    if (!token.checkedAt || now - token.checkedAt > 15 * 60 * 1000) {
+                        const exists = await UsersService.getUserByQuery({ userID: token.userID });
+                        if (!exists) {
+                            token.invalidated = true;
+                            const goneRef = maskId(token.userID);
+                            console.log(`🔒 Session invalidated for ${goneRef} — account no longer exists`);
+                        } else {
+                            token.checkedAt = now;
+                            token.role = exists.role;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Session revocation check failed:", e);
+            }
+
             return token;
         },
         async session({ session, token }) {
+            if (token?.invalidated) {
+                // Account gone — return a de-identified session so every server-side role/ownership
+                // check fails closed (role/userID undefined → not admin → 401).
+                session.user = { invalidated: true };
+                return session;
+            }
             if (token) {
                 session.user.userID = token.userID;
                 session.user.name = token.name;

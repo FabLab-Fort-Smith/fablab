@@ -42,25 +42,36 @@ function sanitizeCard(card) {
 
 // Editable customer fields (allow-list — nothing else is forwarded to Square).
 const EDITABLE = ["givenName", "familyName", "emailAddress", "phoneNumber", "note"];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_RE = /^\+?[0-9().\-\s]{7,20}$/;
+
 function pickEditable(input) {
   const out = {};
   for (const k of EDITABLE) if (typeof input[k] === "string" && input[k].trim()) out[k] = input[k].trim();
+  // Positive format/length validation → 400 (not a generic 500 from Square) (SEC #187 L-1).
+  if (out.emailAddress && !EMAIL_RE.test(out.emailAddress)) throw new CustomerValidationError("emailAddress is not a valid email");
+  if (out.phoneNumber && !PHONE_RE.test(out.phoneNumber)) throw new CustomerValidationError("phoneNumber is not a valid phone number");
+  for (const k of ["givenName", "familyName"]) if (out[k] && out[k].length > 100) throw new CustomerValidationError(`${k} is too long (max 100)`);
+  if (out.note && out.note.length > 500) throw new CustomerValidationError("note is too long (max 500)");
   return out;
 }
 
-/** Search customers by email (Square fuzzy match on email address). */
-export async function searchCustomersAdmin({ query } = {}) {
+/** Search customers by email (Square fuzzy match on email address). Read is audited (SEC #187 L-2). */
+export async function searchCustomersAdmin({ query, actor } = {}) {
   if (typeof query !== "string" || !query.trim()) throw new CustomerValidationError("query is required");
   const res = await searchCustomers({ query: { filter: { emailAddress: { fuzzy: query.trim() } } }, limit: 50 });
-  return { customers: (res.customers || []).map(sanitizeCustomer) };
+  const customers = (res.customers || []).map(sanitizeCustomer);
+  auditLog("admin.square.customer.search", { actor: actor?.userID || "admin", count: customers.length, outcome: "success" });
+  return { customers };
 }
 
-/** Fetch one customer + their saved cards (sanitized). */
-export async function getCustomerAdmin(customerId) {
+/** Fetch one customer + their saved cards (sanitized). Read is audited (SEC #187 L-2). */
+export async function getCustomerAdmin(customerId, actor) {
   if (typeof customerId !== "string" || !customerId.trim()) throw new CustomerValidationError("customerId is required");
   const customer = (await getCustomer(customerId))?.customer;
   if (!customer) throw new CustomerNotFoundError();
   const cardsRes = await listCards({ customerId });
+  auditLog("admin.square.customer.view", { actor: actor?.userID || "admin", target: customerId, outcome: "success" });
   return { customer: sanitizeCustomer(customer), cards: (cardsRes.cards || []).map(sanitizeCard) };
 }
 

@@ -189,6 +189,15 @@ export default class UserController {
                 );
             }
 
+            // Audit privilege/access-sensitive changes made through the broad admin PUT so this path
+            // isn't an unaudited alternative to the dedicated AC-3 role/status endpoints (SEC #183 carry-in).
+            if (isAdminUser) {
+                if (Object.prototype.hasOwnProperty.call(updateData, "role"))
+                    auditLog("admin.member.role.change", { actor: session.user.userID, target: query, after: updateData.role, source: "users.PUT", outcome: "success" });
+                if (updateData.membership && Object.prototype.hasOwnProperty.call(updateData.membership, "status"))
+                    auditLog("admin.member.status.change", { actor: session.user.userID, target: query, after: updateData.membership.status, source: "users.PUT", outcome: "success" });
+            }
+
             return new Response(
                 JSON.stringify({ message: "User updated successfully", user: updatedUser }),
                 { status: 200 }

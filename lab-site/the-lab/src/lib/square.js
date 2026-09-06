@@ -328,13 +328,23 @@ export async function updateCustomer(customerId, body) {
 
 // ---- Cards ---------------------------------------------------------------
 
-export async function listCards({ customerId, cursor } = {}) {
+// Returns ALL of a customer's cards. The v39 path loops the cursor so callers that gate on card
+// ownership (AC-5/AC-7) see the complete set rather than only the first page (SEC #185 F-1). A page
+// cap bounds the loop defensively. (v44 is validated before enablement; prod runs v39.)
+export async function listCards({ customerId } = {}) {
   if (USE_V44) {
     const c = await v44();
-    return { cards: firstPage(await c.cards.list({ customerId, cursor, sortOrder: "DESC" })) };
+    return { cards: firstPage(await c.cards.list({ customerId, sortOrder: "DESC" })) };
   }
-  const { result } = await v39.cardsApi.listCards(cursor, customerId);
-  return result; // { cards, cursor }
+  const cards = [];
+  let cursor;
+  let pages = 0;
+  do {
+    const { result } = await v39.cardsApi.listCards(cursor, customerId);
+    cards.push(...(result.cards || []));
+    cursor = result.cursor;
+  } while (cursor && ++pages < 50);
+  return { cards };
 }
 
 // AC-5: disable (deactivate) a card on file. Square has no hard card delete — disable is the erase.

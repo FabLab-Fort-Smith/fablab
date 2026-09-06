@@ -25,13 +25,14 @@ const map = (e) => {
 };
 
 export async function GET(request) {
-  if (!await requireAdmin()) return json({ error: "Unauthorized" }, 401);
+  const actor = await requireAdmin();
+  if (!actor) return json({ error: "Unauthorized" }, 401);
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   const q = searchParams.get("q");
   try {
-    if (id) return json(await getCustomerAdmin(id), 200);
-    if (q) return json(await searchCustomersAdmin({ query: q }), 200);
+    if (id) return json(await getCustomerAdmin(id, actor), 200);
+    if (q) return json(await searchCustomersAdmin({ query: q, actor }), 200);
     return json({ error: "q or id is required" }, 400);
   } catch (e) { return map(e); }
 }

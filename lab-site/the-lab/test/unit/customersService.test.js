@@ -55,6 +55,26 @@ test("update: allow-listed fields only, requires customerId + a field, audits", 
   expect(auditLog).toHaveBeenCalledWith("admin.square.customer.update", expect.objectContaining({ target: "cus_1", fields: ["givenName"], outcome: "success" }));
 });
 
+test("reads are audited (AC-8a): search + view emit audit with actor, no PII values", async () => {
+  await searchCustomersAdmin({ query: "ada@x.com", actor: ADMIN });
+  expect(auditLog).toHaveBeenCalledWith("admin.square.customer.search", expect.objectContaining({ actor: "admin-1", count: 1 }));
+  await getCustomerAdmin("cus_1", ADMIN);
+  const viewCall = auditLog.mock.calls.find(c => c[0] === "admin.square.customer.view");
+  expect(viewCall[1]).toEqual(expect.objectContaining({ actor: "admin-1", target: "cus_1" }));
+  expect(JSON.stringify(viewCall[1])).not.toContain("ada@x.com"); // no PII value in the audit
+});
+
+test("write validation (AC-8a): bad email / phone / over-long note → 400, no Square call", async () => {
+  await expect(createCustomerAdmin({ emailAddress: "not-an-email", actor: ADMIN })).rejects.toThrow(/valid email/);
+  await expect(createCustomerAdmin({ phoneNumber: "abc", actor: ADMIN })).rejects.toThrow(/valid phone/);
+  await expect(updateCustomerAdmin({ customerId: "cus_1", note: "x".repeat(501), actor: ADMIN })).rejects.toThrow(/note is too long/);
+  expect(sq.createCustomer).not.toHaveBeenCalled();
+  expect(sq.updateCustomer).not.toHaveBeenCalled();
+  // a valid email passes
+  await createCustomerAdmin({ emailAddress: "ok@x.com", actor: ADMIN });
+  expect(sq.createCustomer).toHaveBeenCalledWith({ emailAddress: "ok@x.com" });
+});
+
 test("card disable: ownership-guarded — foreign card rejected; owned card disabled + audited", async () => {
   await expect(disableCustomerCard({ customerId: "cus_1", cardId: "card_OTHER", actor: ADMIN })).rejects.toThrow(/does not belong/);
   expect(sq.disableCard).not.toHaveBeenCalled();
