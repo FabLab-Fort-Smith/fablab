@@ -220,6 +220,42 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
         finally { setLoading(false); }
     };
 
+    // --- Account lifecycle (AC-4): unlink provider, force reset, GDPR export/purge ---
+    const lifecycleCall = async (label, url, opts) => {
+        const res = await fetch(url, opts);
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(d.error || `${label} failed`);
+        return d;
+    };
+    const handleUnlink = async (provider) => {
+        if (!confirm(`Unlink ${provider} from this member?`)) return;
+        try {
+            await lifecycleCall('Unlink', '/api/v1/admin/members/unlink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userID: user.userID, provider }) });
+            alert(`${provider} unlinked.`);
+            onUpdate({ ...user, ...(provider === 'google' ? { googleId: '' } : { discordId: '', discordHandle: '' }) });
+        } catch (e) { alert(e.message); }
+    };
+    const handleForceReset = async () => {
+        if (!confirm('Send a password-reset email to this member?')) return;
+        try {
+            await lifecycleCall('Reset', '/api/v1/admin/members/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userID: user.userID }) });
+            alert('Password reset email sent.');
+        } catch (e) { alert(e.message); }
+    };
+    const handleExport = () => {
+        window.open(`/api/v1/admin/members/export?userID=${encodeURIComponent(user.userID)}`, '_blank', 'noopener');
+    };
+    const handlePurge = async () => {
+        const typed = window.prompt(`IRREVERSIBLE GDPR purge — erases this member and cascades across ALL their data (transactions anonymized, activity deleted).\n\nType the userID to confirm:\n${user.userID}`);
+        if (typed !== user.userID) { if (typed !== null) alert('userID did not match — purge cancelled.'); return; }
+        try {
+            await lifecycleCall('Purge', '/api/v1/admin/members/purge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userID: user.userID, confirm: user.userID }) });
+            alert('Member purged.');
+            onClose();
+            if (typeof onDelete === 'function') onDelete(user.userID);
+        } catch (e) { alert(e.message); }
+    };
+
     const handleAwardStake = async () => {
         setAwardLoading(true);
         try {
@@ -567,6 +603,18 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                             <option value="co-op">co-op</option>
                                         </select>
                                     </div>
+                                </div>
+
+                                <div style={{ border: '1px solid var(--bd)', padding: '14px 16px' }}>
+                                    <div style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 10 }}>ACCOUNT_LIFECYCLE</div>
+                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                        {user.googleId && <button className="btn btn--sm" style={{ fontSize: 10 }} onClick={() => handleUnlink('google')}>$ unlink google</button>}
+                                        {user.discordId && <button className="btn btn--sm" style={{ fontSize: 10 }} onClick={() => handleUnlink('discord')}>$ unlink discord</button>}
+                                        <button className="btn btn--sm" style={{ fontSize: 10 }} onClick={handleForceReset}>$ send password reset</button>
+                                        <button className="btn btn--sm" style={{ fontSize: 10 }} onClick={handleExport}>$ export data (GDPR)</button>
+                                        <button className="btn btn--sm" style={{ fontSize: 10, color: 'var(--red)', borderColor: 'var(--red)' }} onClick={handlePurge}>$ GDPR purge</button>
+                                    </div>
+                                    <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 8 }}>purge is irreversible — erases the member and cascades across all their data.</div>
                                 </div>
 
                                 <div style={{ border: '1px solid var(--bd)', padding: '14px 16px' }}>
