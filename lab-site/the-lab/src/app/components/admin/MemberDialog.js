@@ -181,16 +181,42 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
     const handleSave = async () => {
         setLoading(true);
         try {
+            // General profile fields via the standard update. Role + membership status are the two
+            // privilege/access-sensitive changes — they go through dedicated, validated, AUDITED
+            // endpoints (AC-3) instead of the broad PUT, and are applied last so they're authoritative.
+            const roleChanged = formData.role !== user.role;
+            const newStatus = formData.membership?.status;
+            const statusChanged = newStatus && newStatus !== user.membership?.status;
+            const { status: _omitStatus, ...membershipRest } = formData.membership || {};
+
             const res = await fetch(`/api/v1/users?userID=${user.userID}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ firstName: formData.firstName, lastName: formData.lastName, membership: formData.membership, role: formData.role, boardPosition: formData.boardPosition, squareID: formData.squareID, badges: formData.badges }),
+                body: JSON.stringify({ firstName: formData.firstName, lastName: formData.lastName, membership: membershipRest, boardPosition: formData.boardPosition, squareID: formData.squareID, badges: formData.badges }),
             });
-            if (!res.ok) throw new Error('Failed');
-            const d = await res.json();
-            onUpdate(d.user);
+            if (!res.ok) throw new Error('Failed to update member');
+            let d = await res.json();
+
+            if (roleChanged) {
+                const rr = await fetch('/api/v1/admin/members/role', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userID: user.userID, role: formData.role }),
+                });
+                if (!rr.ok) throw new Error((await rr.json().catch(() => ({}))).error || 'Role change failed');
+            }
+            if (statusChanged) {
+                const sr = await fetch('/api/v1/admin/members/status', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userID: user.userID, status: newStatus }),
+                });
+                if (!sr.ok) throw new Error((await sr.json().catch(() => ({}))).error || 'Status change failed');
+            }
+
+            // Reflect the sensitive changes locally (their responses aren't the full user doc).
+            const merged = { ...d.user, role: formData.role, membership: { ...d.user?.membership, status: newStatus } };
+            onUpdate(merged);
             onClose();
-        } catch { alert('Failed to update user'); }
+        } catch (e) { alert(e.message || 'Failed to update user'); }
         finally { setLoading(false); }
     };
 
