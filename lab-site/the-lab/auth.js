@@ -9,6 +9,7 @@ import AuthService from '@/app/api/auth/[...nextauth]/service'; // Email encrypt
 import DiscordService from '@/lib/discord';
 import TransactionService from '@/app/api/v1/transactions/service';
 import { maskId } from '@/lib/redact'; // redact identifiers in logs (CLAUDE.md §5/§9, #133)
+import { revalidateToken, deidentifyInvalidated } from '@/lib/sessionRevocation'; // session revocation (AC-8a)
 
 const baseURL = `${process.env.NEXT_PUBLIC_URL}`;
 
@@ -421,38 +422,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     console.error("Grace period check failed:", e);
                 }
             }
-            // Revocation on refresh: if the account was deleted / GDPR-purged / merged away, invalidate
-            // the session so a still-valid JWT can't keep acting as the removed member (SEC #184
-            // carry-in). Throttled (≤ once / 15 min / session) to avoid a DB hit on every request; also
-            // refreshes the role so a demotion propagates to a live session within the window.
-            try {
-                if (token.userID && !token.invalidated) {
-                    const now = Date.now();
-                    if (!token.checkedAt || now - token.checkedAt > 15 * 60 * 1000) {
-                        const exists = await UsersService.getUserByQuery({ userID: token.userID });
-                        if (!exists) {
-                            token.invalidated = true;
-                            const goneRef = maskId(token.userID);
-                            console.log(`🔒 Session invalidated for ${goneRef} — account no longer exists`);
-                        } else {
-                            token.checkedAt = now;
-                            token.role = exists.role;
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error("Session revocation check failed:", e);
-            }
+            // Revocation on refresh: invalidate a session whose account was deleted / GDPR-purged /
+            // merged away, and propagate a role demotion. Throttled + fail-open; logic lives in the
+            // unit-tested @/lib/sessionRevocation (SEC #184/#188 carry-in).
+            await revalidateToken(token, {
+                getUser: (userID) => UsersService.getUserByQuery({ userID }),
+                log: (m) => console.log(m),
+                maskId,
+            });
 
             return token;
         },
         async session({ session, token }) {
-            if (token?.invalidated) {
-                // Account gone — return a de-identified session so every server-side role/ownership
-                // check fails closed (role/userID undefined → not admin → 401).
-                session.user = { invalidated: true };
-                return session;
-            }
+            // Account gone → de-identified session so every server-side role/ownership check fails
+            // closed (role/userID undefined → not admin → 401) without throwing.
+            if (deidentifyInvalidated(session, token)) return session;
             if (token) {
                 session.user.userID = token.userID;
                 session.user.name = token.name;
