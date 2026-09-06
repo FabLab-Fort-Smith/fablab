@@ -20,7 +20,8 @@ export async function POST(request) {
   } catch (e) {
     if (e instanceof LifecycleValidationError) return json({ error: e.message }, 400);
     if (e instanceof MemberNotFoundError) return json({ error: e.message }, 404);
-    console.error("admin member reset-password failed:", e?.message);
+    // Log only the error message (never the member's credentials/PII).
+    console.error("admin member force-reset route failed:", e?.message);
     return json({ error: "Password reset failed" }, 500);
   }
 }
