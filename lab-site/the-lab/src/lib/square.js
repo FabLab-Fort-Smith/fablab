@@ -327,6 +327,16 @@ export async function listCards({ customerId, cursor } = {}) {
   return result; // { cards, cursor }
 }
 
+// AC-5: disable (deactivate) a card on file. Square has no hard card delete — disable is the erase.
+export async function disableCard(cardId) {
+  if (USE_V44) {
+    const c = await v44();
+    return c.cards.disable({ cardId });
+  }
+  const { result } = await v39.cardsApi.disableCard(cardId);
+  return result; // { card }
+}
+
 // ---- Orders --------------------------------------------------------------
 
 export async function getOrder(orderId) {
