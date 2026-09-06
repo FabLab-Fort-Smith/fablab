@@ -41,7 +41,9 @@ export async function linkCustomer({ userID, squareCustomerId, actor } = {}) {
     throw new SquareMemberValidationError("squareCustomerId is required");
   }
   const before = await loadMember(userID, actor);
-  await UserService.updateUser({ userID }, { membership: { squareCustomerId } }, actor);
+  // Write the canonical location AND clear the two legacy top-level fields, so resolveCustomerId has a
+  // single source of truth and can't diverge from a stale legacy value (SEC #185 F-3).
+  await UserService.updateUser({ userID }, { membership: { squareCustomerId }, squareCustomerId: "", squareID: "" }, actor);
   auditLog("admin.member.square.link", {
     actor: actor?.userID || "admin", target: userID, squareCustomerId,
     previous: resolveCustomerId(before), outcome: "success",

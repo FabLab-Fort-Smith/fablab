@@ -73,3 +73,9 @@ test("sync route: now admin-gated (was unauthenticated) — non-admin 401, admin
   expect(res.status).toBe(200);
   expect(auditLog).toHaveBeenCalledWith("admin.member.square.sync", expect.objectContaining({ squareID: "cus_1", outcome: "success" }));
 });
+
+test("sync route: rejects non-string squareID/userID (operator-injection guard, SEC #185 F-2)", async () => {
+  expect((await post(SYNC, "http://l/sync", { squareID: { $ne: null } })).status).toBe(400);
+  expect((await post(SYNC, "http://l/sync", { squareID: "cus_1", userID: { $ne: null } })).status).toBe(400);
+  expect(SubscriptionService.syncSubscription).not.toHaveBeenCalled();
+});

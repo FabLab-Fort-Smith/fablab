@@ -13,9 +13,16 @@ export async function POST(req) {
 
         const { squareID, userID } = await req.json();
 
-        if (!squareID) {
+        // Type-check inputs (parity with the AC-5 member↔Square routes; reject operator-object injection).
+        if (typeof squareID !== "string" || !squareID.trim()) {
             return new Response(
                 JSON.stringify({ error: "squareID is required." }),
+                { status: 400 }
+            );
+        }
+        if (userID != null && typeof userID !== "string") {
+            return new Response(
+                JSON.stringify({ error: "userID must be a string." }),
                 { status: 400 }
             );
         }

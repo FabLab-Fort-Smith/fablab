@@ -33,7 +33,7 @@ beforeEach(() => {
 test("link: sets membership.squareCustomerId + audits with previous", async () => {
   const r = await linkCustomer({ userID: "u1", squareCustomerId: "cus_new", actor: ADMIN });
   expect(r).toEqual({ userID: "u1", squareCustomerId: "cus_new" });
-  expect(UserService.updateUser).toHaveBeenCalledWith({ userID: "u1" }, { membership: { squareCustomerId: "cus_new" } }, ADMIN);
+  expect(UserService.updateUser).toHaveBeenCalledWith({ userID: "u1" }, { membership: { squareCustomerId: "cus_new" }, squareCustomerId: "", squareID: "" }, ADMIN);
   expect(auditLog).toHaveBeenCalledWith("admin.member.square.link", expect.objectContaining({ target: "u1", squareCustomerId: "cus_new", previous: "cus_1", outcome: "success" }));
 });
 
