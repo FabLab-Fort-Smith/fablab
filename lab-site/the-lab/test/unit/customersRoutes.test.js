@@ -31,7 +31,7 @@ test("non-admin → 401 on GET/POST/PUT/card-disable, service not called", async
 test("GET: ?id → detail, ?q → search, neither → 400", async () => {
   getCustomerAdmin.mockResolvedValueOnce({ customer: { id: "cus_1" }, cards: [] });
   expect((await get("?id=cus_1")).status).toBe(200);
-  expect(getCustomerAdmin).toHaveBeenCalledWith("cus_1");
+  expect(getCustomerAdmin).toHaveBeenCalledWith("cus_1", { userID: "admin-1", role: "admin" });
   searchCustomersAdmin.mockResolvedValueOnce({ customers: [] });
   expect((await get("?q=ada@x.com")).status).toBe(200);
   expect((await get("")).status).toBe(400);

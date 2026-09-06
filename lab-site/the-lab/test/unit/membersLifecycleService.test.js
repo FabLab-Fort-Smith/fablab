@@ -141,14 +141,23 @@ test("purge/unlink/reset/export reject a non-string userID (NoSQL operator injec
 
 // ---- exportMember --------------------------------------------------------
 
-test("export: strips credentials, includes profile + related, audits", async () => {
-  UserService.getUserByQuery.mockResolvedValueOnce(member({ password: "$2b$secret", verificationToken: "tok", passwordResetTokenHash: "h" }));
+test("export: strips credentials (pattern-based — even novel token/secret fields), includes profile + related, audits", async () => {
+  UserService.getUserByQuery.mockResolvedValueOnce(member({
+    password: "$2b$secret", verificationToken: "tok", passwordResetTokenHash: "h",
+    oauthAccessToken: "OAUTHSECRET", mfaSecret: "MFASECRET", apiKey: "APIKEYVAL",
+  }));
   db.connect.mockResolvedValue(fakeInstance());
   const out = await exportMember({ userID: "u1", actor: ADMIN });
   const blob = JSON.stringify(out);
   expect(out.profile).not.toHaveProperty("password");
   expect(out.profile).not.toHaveProperty("verificationToken");
   expect(out.profile).not.toHaveProperty("passwordResetTokenHash");
+  // Fields NOT in any hardcoded denylist are still scrubbed by the pattern stripper (SEC #184 L-1).
+  expect(out.profile).not.toHaveProperty("oauthAccessToken");
+  expect(out.profile).not.toHaveProperty("mfaSecret");
+  expect(out.profile).not.toHaveProperty("apiKey");
+  expect(blob).not.toContain("OAUTHSECRET");
+  expect(blob).not.toContain("MFASECRET");
   expect(blob).not.toContain("$2b$secret");
   expect(out.profile.email).toBe("u1@x.com"); // subject PII included (decrypted for admin)
   expect(out.related.notifications).toBeDefined();

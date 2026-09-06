@@ -54,6 +54,15 @@ export class MemberNotFoundError extends Error {
   constructor(message = "member not found") { super(message); this.name = "MemberNotFoundError"; this.status = 404; }
 }
 
+// Keys scrubbed from a GDPR export — pattern-based, so a newly-added secret-ish field (OAuth token,
+// MFA secret, a new hash) is removed by default instead of leaking until someone updates a denylist.
+const SENSITIVE_KEY_RE = /password|secret|token|hash|salt|otp|mfa|api[_-]?key|credential/i;
+function stripSensitiveExport(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj || {})) if (!SENSITIVE_KEY_RE.test(k)) out[k] = v;
+  return out;
+}
+
 async function loadMember(userID, actor) {
   const user = await UserService.getUserByQuery({ userID }, actor);
   if (!user || !user.userID) throw new MemberNotFoundError();
@@ -162,8 +171,11 @@ export async function exportMember({ userID, actor } = {}) {
   if (typeof userID !== "string" || !userID.trim()) throw new LifecycleValidationError("userID is required");
   const member = await loadMember(userID, actor);
 
-  // Strip credential/token material from the profile snapshot; email/phone are already decrypted for admin.
-  const { password, passwordResetTokenHash, passwordResetExpires, verificationToken, ...profile } = member;
+  // Strip credential/token material from the profile snapshot. A single pattern-based stripper (not a
+  // fixed denylist) so a future sensitive field — an OAuth access/refresh token, an MFA secret, a new
+  // hash — is scrubbed by default rather than silently exported (SEC #184 L-1). email/phone are
+  // already decrypted for the subject's own right-of-access.
+  const profile = stripSensitiveExport(member);
 
   const instance = await db.connect();
   const related = {};

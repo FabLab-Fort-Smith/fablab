@@ -50,7 +50,7 @@ export async function GET() {
         }));
         return NextResponse.json(discounts);
     } catch (err) {
-        return NextResponse.json({ error: err?.errors?.[0]?.detail || "Failed to fetch discounts." }, { status: 500 });
+        console.error("admin coupons op failed:", err?.errors?.[0]?.detail || err?.message); return NextResponse.json({ error: "Failed to fetch discounts." }, { status: 500 });
     }
 }
 
@@ -79,7 +79,7 @@ export async function POST(req) {
         auditLog("admin.catalog.coupon.create", { actor: session.user?.userID || "admin", target: o.id, name: o.discountData?.name, outcome: "success" });
         return NextResponse.json(couponView(o), { status: 201 });
     } catch (err) {
-        return NextResponse.json({ error: err?.errors?.[0]?.detail || "Failed to create discount." }, { status: 500 });
+        console.error("admin coupons op failed:", err?.errors?.[0]?.detail || err?.message); return NextResponse.json({ error: "Failed to create discount." }, { status: 500 });
     }
 }
 
@@ -115,7 +115,7 @@ export async function PUT(req) {
         auditLog("admin.catalog.coupon.update", { actor: session.user?.userID || "admin", target: o.id, name: o.discountData?.name, outcome: "success" });
         return NextResponse.json(couponView(o), { status: 200 });
     } catch (err) {
-        return NextResponse.json({ error: err?.errors?.[0]?.detail || "Failed to update discount." }, { status: 500 });
+        console.error("admin coupons op failed:", err?.errors?.[0]?.detail || err?.message); return NextResponse.json({ error: "Failed to update discount." }, { status: 500 });
     }
 }
 
@@ -129,6 +129,6 @@ export async function DELETE(req) {
         auditLog("admin.catalog.coupon.delete", { actor: session.user?.userID || "admin", target: id, outcome: "success" });
         return NextResponse.json({ success: true });
     } catch (err) {
-        return NextResponse.json({ error: err?.errors?.[0]?.detail || "Failed to delete discount." }, { status: 500 });
+        console.error("admin coupons op failed:", err?.errors?.[0]?.detail || err?.message); return NextResponse.json({ error: "Failed to delete discount." }, { status: 500 });
     }
 }

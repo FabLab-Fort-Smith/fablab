@@ -321,16 +321,19 @@ export async function PUT(request) {
 
     if (restore) {
       await unsetHiddenPlanId(planId);
+      auditLog("admin.catalog.plan.restore", { actor: session.user.userID, target: planId, outcome: "success" });
       return NextResponse.json({ success: true, restored: true }, { status: 200 });
     }
 
     if (markLegacy) {
       await setLegacyPlanId(planId);
+      auditLog("admin.catalog.plan.legacy", { actor: session.user.userID, target: planId, legacy: true, outcome: "success" });
       return NextResponse.json({ success: true, legacy: true }, { status: 200 });
     }
 
     if (unmarkLegacy) {
       await unsetLegacyPlanId(planId);
+      auditLog("admin.catalog.plan.legacy", { actor: session.user.userID, target: planId, legacy: false, outcome: "success" });
       return NextResponse.json({ success: true, legacy: false }, { status: 200 });
     }
 
@@ -353,14 +356,16 @@ export async function PUT(request) {
         if (upsertResult.errors?.length) {
           // Square blocked removal — hide it locally instead
           await setHiddenVariationId(removeVariationId);
+          auditLog("admin.catalog.plan.variation.remove", { actor: session.user.userID, target: planId, variationId: removeVariationId, mode: "hidden", outcome: "success" });
           return NextResponse.json({ success: true, hidden: true, note: "Square blocked deletion (subscription history). Variation hidden from member selection." }, { status: 200 });
         }
+        auditLog("admin.catalog.plan.variation.remove", { actor: session.user.userID, target: planId, variationId: removeVariationId, mode: "removed", outcome: "success" });
         return NextResponse.json({ success: true, variationRemoved: true }, { status: 200 });
       } catch (squareErr) {
-        const msg = squareErr?.errors?.[0]?.detail || squareErr?.message || "";
-        console.warn("⚠️ Square blocked variation removal, hiding locally:", msg);
+        console.warn("⚠️ Square blocked variation removal, hiding locally:", squareErr?.errors?.[0]?.detail || squareErr?.message);
         // Fall back to hiding locally (same pattern as archived plans)
         await setHiddenVariationId(removeVariationId);
+        auditLog("admin.catalog.plan.variation.remove", { actor: session.user.userID, target: planId, variationId: removeVariationId, mode: "hidden", outcome: "success" });
         return NextResponse.json({ success: true, hidden: true, note: "Square blocked deletion (subscription history). Variation hidden from member selection." }, { status: 200 });
       }
     }
@@ -434,9 +439,10 @@ export async function PUT(request) {
       return NextResponse.json({ error: msg }, { status: 400 });
     }
   } catch (error) {
-    const msg = error?.errors?.[0]?.detail || error?.message || "Failed to update plan.";
-    console.error("❌ Error updating plan:", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // Internal (non-Square-business-rule) failure — log the detail server-side, return a generic 500
+    // so Square/internal error text isn't leaked to the client (SEC #186 carry-in).
+    console.error("❌ Error updating plan:", error?.errors?.[0]?.detail || error?.message);
+    return NextResponse.json({ error: "Failed to update plan." }, { status: 500 });
   }
 }
 
@@ -474,9 +480,8 @@ export async function PATCH(request) {
     auditLog("admin.catalog.plan.subscription", { actor: session.user.userID, action, subscriptionId, outcome: "success" });
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
-    const msg = error?.errors?.[0]?.detail || "Failed to update subscription.";
-    console.error("❌ Subscription action error:", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("❌ Subscription action error:", error?.errors?.[0]?.detail || error?.message);
+    return NextResponse.json({ error: "Failed to update subscription." }, { status: 500 });
   }
 }
 

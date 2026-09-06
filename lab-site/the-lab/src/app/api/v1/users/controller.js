@@ -189,6 +189,18 @@ export default class UserController {
                 );
             }
 
+            // Audit privilege/access-sensitive changes made through the broad admin PUT so this path
+            // isn't an unaudited alternative to the dedicated AC-3 role/status endpoints (SEC #183 carry-in).
+            if (isAdminUser) {
+                // Use the persisted user's id (never the lookup `query`, which may be an email/phone —
+                // no PII in retained audit) and the persisted value (truthful trail). (SEC #188 L-1/L-2)
+                const targetID = updatedUser.userID || query;
+                if (Object.prototype.hasOwnProperty.call(updateData, "role"))
+                    auditLog("admin.member.role.change", { actor: session.user.userID, target: targetID, after: updatedUser.role, source: "users.PUT", outcome: "success" });
+                if (updateData.membership && Object.prototype.hasOwnProperty.call(updateData.membership, "status"))
+                    auditLog("admin.member.status.change", { actor: session.user.userID, target: targetID, after: updatedUser.membership?.status, source: "users.PUT", outcome: "success" });
+            }
+
             return new Response(
                 JSON.stringify({ message: "User updated successfully", user: updatedUser }),
                 { status: 200 }
