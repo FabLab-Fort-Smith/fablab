@@ -316,6 +316,16 @@ export async function searchCustomers(body) {
   return result; // { customers, cursor }
 }
 
+// AC-7: update a customer's profile fields.
+export async function updateCustomer(customerId, body) {
+  if (USE_V44) {
+    const c = await v44();
+    return c.customers.update({ customerId, ...body });
+  }
+  const { result } = await v39.customersApi.updateCustomer(customerId, body);
+  return result; // { customer }
+}
+
 // ---- Cards ---------------------------------------------------------------
 
 export async function listCards({ customerId, cursor } = {}) {
