@@ -10,6 +10,21 @@ async function requireAdmin() {
     return session;
 }
 
+// Validate discount inputs before they reach Square (SEC #186 F-1): reject float/negative/out-of-range
+// rather than relying on Square-side rejection or throwing in BigInt(). Returns an error string or null.
+function validateDiscount(type, percentage, amountCents) {
+    if (type === "FIXED_PERCENTAGE") {
+        const p = Number(percentage);
+        if (!Number.isFinite(p) || p <= 0 || p > 100) return "percentage must be a number in (0, 100].";
+        return null;
+    }
+    if (type === "FIXED_AMOUNT") {
+        if (!Number.isInteger(amountCents) || amountCents <= 0) return "amountCents must be a positive integer (minor units).";
+        return null;
+    }
+    return "discountType must be FIXED_PERCENTAGE or FIXED_AMOUNT.";
+}
+
 const couponView = (o) => ({
     id: o.id,
     name: o.discountData?.name,
@@ -45,15 +60,14 @@ export async function POST(req) {
     const { name, discountType, percentage, amountCents, currency = "USD" } = await req.json();
     if (!name || !discountType) return NextResponse.json({ error: "name and discountType required." }, { status: 400 });
 
+    const invalid = validateDiscount(discountType, percentage, amountCents);
+    if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
+
     const discountData = { name: name.toUpperCase().trim(), discountType };
     if (discountType === "FIXED_PERCENTAGE") {
-        if (!percentage) return NextResponse.json({ error: "percentage required." }, { status: 400 });
         discountData.percentage = String(percentage);
-    } else if (discountType === "FIXED_AMOUNT") {
-        if (!amountCents) return NextResponse.json({ error: "amountCents required." }, { status: 400 });
-        discountData.amountMoney = { amount: BigInt(amountCents), currency };
     } else {
-        return NextResponse.json({ error: "discountType must be FIXED_PERCENTAGE or FIXED_AMOUNT." }, { status: 400 });
+        discountData.amountMoney = { amount: BigInt(amountCents), currency };
     }
 
     try {
@@ -82,18 +96,16 @@ export async function PUT(req) {
             return NextResponse.json({ error: "coupon not found." }, { status: 404 });
         }
         const type = discountType || current.discountData?.discountType;
+        const pct = type === "FIXED_PERCENTAGE" ? (percentage ?? current.discountData?.percentage) : undefined;
+        const cents = type === "FIXED_AMOUNT"
+            ? (amountCents ?? (current.discountData?.amountMoney ? Number(current.discountData.amountMoney.amount) : undefined))
+            : undefined;
+        const invalid = validateDiscount(type, pct, cents);
+        if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
+
         const discountData = { name: ((name ?? current.discountData?.name) || "").toUpperCase().trim(), discountType: type };
-        if (type === "FIXED_PERCENTAGE") {
-            const pct = percentage ?? current.discountData?.percentage;
-            if (!pct) return NextResponse.json({ error: "percentage required." }, { status: 400 });
-            discountData.percentage = String(pct);
-        } else if (type === "FIXED_AMOUNT") {
-            const cents = amountCents ?? (current.discountData?.amountMoney ? Number(current.discountData.amountMoney.amount) : null);
-            if (!cents) return NextResponse.json({ error: "amountCents required." }, { status: 400 });
-            discountData.amountMoney = { amount: BigInt(cents), currency };
-        } else {
-            return NextResponse.json({ error: "discountType must be FIXED_PERCENTAGE or FIXED_AMOUNT." }, { status: 400 });
-        }
+        if (type === "FIXED_PERCENTAGE") discountData.percentage = String(pct);
+        else discountData.amountMoney = { amount: BigInt(cents), currency };
 
         const result = await upsertCatalogObject({
             idempotencyKey: uuidv4(),

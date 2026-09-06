@@ -140,9 +140,12 @@ export async function updateItem({ id, name, description, variations, actor } = 
   return item;
 }
 
-/** Delete a catalog item. */
+/** Delete a catalog item. Type-guarded so a mistyped id can't delete a DISCOUNT/SUBSCRIPTION_PLAN
+ * through the items endpoint (SEC #186 F-2). */
 export async function deleteItem({ id, actor } = {}) {
   if (typeof id !== "string" || !id.trim()) throw new CatalogValidationError("id is required");
+  const current = (await getCatalogObject(id))?.object;
+  if (!current || current.type !== "ITEM") throw new CatalogNotFoundError();
   await deleteCatalogObject(id);
   auditLog("admin.catalog.item.delete", { actor: actor?.userID || "admin", target: id, outcome: "success" });
   return { id, deleted: true };

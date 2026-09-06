@@ -70,9 +70,16 @@ test("update: unknown / non-ITEM object → CatalogNotFoundError, no upsert", as
   expect(sq.upsertCatalogObject).not.toHaveBeenCalled();
 });
 
-test("delete: calls Square + audits; blank id rejected", async () => {
+test("delete: type-guarded — deletes an ITEM + audits; blank id rejected", async () => {
+  sq.getCatalogObject.mockResolvedValueOnce({ object: itemObj() });
   await deleteItem({ id: "item_1", actor: ADMIN });
   expect(sq.deleteCatalogObject).toHaveBeenCalledWith("item_1");
   expect(auditLog).toHaveBeenCalledWith("admin.catalog.item.delete", expect.objectContaining({ target: "item_1", outcome: "success" }));
   await expect(deleteItem({ id: "", actor: ADMIN })).rejects.toBeInstanceOf(CatalogValidationError);
+});
+
+test("delete: refuses to delete a non-ITEM (cross-type guard, SEC #186 F-2)", async () => {
+  sq.getCatalogObject.mockResolvedValueOnce({ object: { type: "DISCOUNT", id: "d1" } });
+  await expect(deleteItem({ id: "d1", actor: ADMIN })).rejects.toBeInstanceOf(CatalogNotFoundError);
+  expect(sq.deleteCatalogObject).not.toHaveBeenCalled();
 });

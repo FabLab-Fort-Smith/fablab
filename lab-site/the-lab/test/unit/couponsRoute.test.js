@@ -46,6 +46,17 @@ test("PUT: missing id → 400", async () => {
   expect((await PUT(req("PUT", { percentage: 5 }))).status).toBe(400);
 });
 
+test("validation (SEC #186 F-1): rejects out-of-range percentage / non-positive amount, no upsert", async () => {
+  // POST: percentage > 100, negative amount, float amount
+  expect((await POST(req("POST", { name: "X", discountType: "FIXED_PERCENTAGE", percentage: 150 }))).status).toBe(400);
+  expect((await POST(req("POST", { name: "X", discountType: "FIXED_AMOUNT", amountCents: -5 }))).status).toBe(400);
+  expect((await POST(req("POST", { name: "X", discountType: "FIXED_AMOUNT", amountCents: 10.5 }))).status).toBe(400);
+  // PUT: bad percentage on an existing discount
+  sq.getCatalogObject.mockResolvedValueOnce({ object: { type: "DISCOUNT", id: "d1", version: 1, discountData: { discountType: "FIXED_PERCENTAGE", percentage: "10" } } });
+  expect((await PUT(req("PUT", { id: "d1", percentage: 0 }))).status).toBe(400);
+  expect(sq.upsertCatalogObject).not.toHaveBeenCalled();
+});
+
 test("DELETE → audit", async () => {
   sq.deleteCatalogObject.mockResolvedValueOnce({});
   const res = await DELETE(req("DELETE", { id: "d1" }));
