@@ -6,6 +6,7 @@ import {
   getOrder,
 } from "@/lib/square";
 import { db } from "@/lib/database";
+import { auditLog } from "@/lib/audit";
 import { v4 as uuidv4 } from "uuid";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -298,6 +299,7 @@ export async function POST(request) {
       },
     });
 
+    auditLog("admin.catalog.plan.create", { actor: session.user.userID, target: result.catalogObject?.id, name, outcome: "success" });
     return NextResponse.json({ success: true, planId: result.catalogObject?.id }, { status: 201 });
   } catch (error) {
     console.error("❌ Error creating plan:", error);
@@ -424,6 +426,7 @@ export async function PUT(request) {
           },
         },
       });
+      auditLog("admin.catalog.plan.update", { actor: session.user.userID, target: result.catalogObject?.id, outcome: "success" });
       return NextResponse.json({ success: true, planId: result.catalogObject?.id }, { status: 200 });
     } catch (squareErr) {
       const msg = squareErr?.errors?.[0]?.detail || squareErr?.message || "Square rejected the update.";
@@ -462,11 +465,13 @@ export async function PATCH(request) {
       // Square queues the swap for the next billing cycle — find the pending action's effective date
       const pendingAction = (swapResult.subscription?.actions || []).find(a => a.type === "SWAP_PLAN");
       const effectiveDate = pendingAction?.effectiveDate || swapResult.subscription?.chargedThroughDate || null;
+      auditLog("admin.catalog.plan.subscription", { actor: session.user.userID, action, subscriptionId, pending: true, outcome: "success" });
       return NextResponse.json({ success: true, pending: true, effectiveDate }, { status: 200 });
     } else {
       return NextResponse.json({ error: "Invalid action. Use pause, resume, cancel, or migrate." }, { status: 400 });
     }
 
+    auditLog("admin.catalog.plan.subscription", { actor: session.user.userID, action, subscriptionId, outcome: "success" });
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
     const msg = error?.errors?.[0]?.detail || "Failed to update subscription.";
@@ -510,11 +515,13 @@ export async function DELETE(request) {
       if (result.errors?.length)
         throw Object.assign(new Error(result.errors[0]?.detail), { errors: result.errors });
       await unsetHiddenPlanId(planId);
+      auditLog("admin.catalog.plan.delete", { actor: session.user.userID, target: planId, cancelledCount, mode: "deleted", outcome: "success" });
       return NextResponse.json({ success: true, deleted: true, cancelledCount }, { status: 200 });
     } catch (squareErr) {
       const reason = squareErr?.errors?.[0]?.detail || squareErr?.message;
       console.warn("⚠️ Square blocked delete, hiding locally:", reason);
       await setHiddenPlanId(planId);
+      auditLog("admin.catalog.plan.delete", { actor: session.user.userID, target: planId, cancelledCount, mode: "hidden", outcome: "success" });
       return NextResponse.json({
         success: true, hidden: true, cancelledCount,
         note: "Plan has active subscribers and cannot be removed from Square. Hidden from member selection.",
