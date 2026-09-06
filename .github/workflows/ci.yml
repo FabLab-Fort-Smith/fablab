@@ -112,10 +112,32 @@ jobs:
         run: npm run lint
       - name: Test (coverage gate enforced in jest.config — master §4)
         run: npm run test:ci
+      - name: Door PKI script tests (shellcheck + openssl + node; no VPS)
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck vps/pki/*.sh vps/keepalived/*.sh
+          bash vps/pki/door-ca.test.sh
       - name: Build
         run: npm run build
       - name: SCA (dependency audit — block on high/critical)
         run: npm audit --audit-level=high
+
+  edge-firmware:
+    name: Edge firmware tests (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: lab-site/the-lab/vps/firmware/pi-zero
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - name: Install edge test deps
+        run: python -m pip install -r edge/tests/requirements-dev.txt
+      - name: Test the edge offline-decision core (cross-language parity + fail-secure matrix)
+        run: PYTHONPATH=. python -m pytest edge/tests/ -q
 
   runbook-site:
     name: Runbook site (build + tests)

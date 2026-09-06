@@ -1,0 +1,41 @@
+# Active/standby VIP for the on-site door broker (door-controller-wifi.md §13 S5). Install on BOTH
+# Proxmox broker hosts as /etc/keepalived/keepalived.conf; the edges dial the VIP:8443 (Link-A), so a
+# failover moves the address, not the edge config. Placeholders (CHANGE_ME / example IPs) only — never
+# commit a real auth_pass or VIP.
+#
+# SECURITY (F2): VRRP `auth_type PASS` is NOT a security boundary — it's plaintext, ≤8 chars, on the
+# wire; it only prevents accidental cross-talk. A hostile node on the broker LAN can send higher-priority
+# adverts to hijack/blackhole the VIP. The real control is an ISOLATED, trusted broker LAN segment (L2).
+#
+# PREEMPTION (F3): `nopreempt` only suppresses a takeback when the instance STARTS in `state BACKUP`.
+# To avoid the primary grabbing the VIP on boot (flapping), set BOTH hosts `state BACKUP` and let
+# `priority` alone decide (primary higher). (Shown below as BACKUP on both; set priority per host.)
+
+# Health check: is the LOCAL broker actually serving? A non-zero exit puts this node into FAULT and
+# releases the VIP to the peer (so the VIP only ever sits on a broker that answers).
+vrrp_script chk_broker {
+    script "/etc/keepalived/check-broker.sh"
+    interval 2
+    timeout 3
+    fall 2
+    rise 2
+}
+
+vrrp_instance door_broker {
+    state BACKUP                 # BOTH hosts: BACKUP (F3) — priority decides, no boot-time takeback
+    interface eth0              # the LAN interface the VIP lives on
+    virtual_router_id 51        # must match on both hosts; unique on the LAN segment
+    priority 100                # PRIMARY host: e.g. 150 (higher wins); standby: 100
+    advert_int 1
+    nopreempt                   # don't grab the VIP back on recovery — avoids failover flapping
+    authentication {
+        auth_type PASS
+        auth_pass CHANGE_ME     # shared VRRP peer secret (both hosts identical) — from the vault
+    }
+    virtual_ipaddress {
+        10.0.0.10/24            # the broker VIP the edges connect to (example)
+    }
+    track_script {
+        chk_broker              # FAULT → release the VIP if the local broker isn't healthy
+    }
+}

@@ -43,6 +43,9 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
     const [awardLoading, setAwardLoading] = useState(false);
     const [plans, setPlans] = useState(null);
     const [plansLoading, setPlansLoading] = useState(false);
+    const [cards, setCards] = useState(null);        // AC-5: member's saved Square cards
+    const [availablePlans, setAvailablePlans] = useState([]); // AC-5: plan variations for swap
+    const [swapSel, setSwapSel] = useState({});      // { [subId]: planVariationId }
     const [editingStartDate, setEditingStartDate] = useState({}); // { [subId]: 'YYYY-MM-DD' }
 
     useEffect(() => {
@@ -61,6 +64,36 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
             setPlans(d);
         } catch { setPlans({ error: 'Failed to load' }); }
         finally { setPlansLoading(false); }
+        // AC-5: saved cards + available plan variations (for swap), best-effort.
+        fetch(`/api/v1/admin/members/square/cards?userID=${user.userID}`).then(r => r.json()).then(setCards).catch(() => setCards({ error: 'Failed to load cards' }));
+        if (!availablePlans.length) fetch('/api/v1/plans').then(r => r.json()).then(d => setAvailablePlans(Array.isArray(d) ? d : (d.plans || []))).catch(() => {});
+    };
+
+    // AC-5: admin subscription lifecycle + card disable, via the audited member↔Square endpoints.
+    const handleSubAction = async (subscriptionId, action, planVariationId) => {
+        const label = { cancel: 'Cancel', pause: 'Pause', resume: 'Resume', swap: 'Swap the plan for' }[action];
+        if (!confirm(`${label} this subscription?`)) return;
+        try {
+            const res = await fetch('/api/v1/admin/members/square/subscription', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userID: user.userID, subscriptionId, action, ...(planVariationId ? { planVariationId } : {}) }),
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || `${action} failed`);
+            fetchPlans();
+        } catch (e) { alert(e.message); }
+    };
+    const handleDisableCard = async (cardId) => {
+        if (!confirm('Disable this saved card? The member will need to re-add it to pay.')) return;
+        try {
+            const res = await fetch('/api/v1/admin/members/square/cards/disable', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userID: user.userID, cardId }),
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'disable failed');
+            fetchPlans();
+        } catch (e) { alert(e.message); }
     };
 
     useEffect(() => {
@@ -181,17 +214,79 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
     const handleSave = async () => {
         setLoading(true);
         try {
+            // General profile fields via the standard update. Role + membership status are the two
+            // privilege/access-sensitive changes — they go through dedicated, validated, AUDITED
+            // endpoints (AC-3) instead of the broad PUT, and are applied last so they're authoritative.
+            const roleChanged = formData.role !== user.role;
+            const newStatus = formData.membership?.status;
+            const statusChanged = newStatus && newStatus !== user.membership?.status;
+            const { status: _omitStatus, ...membershipRest } = formData.membership || {};
+
             const res = await fetch(`/api/v1/users?userID=${user.userID}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ firstName: formData.firstName, lastName: formData.lastName, membership: formData.membership, role: formData.role, boardPosition: formData.boardPosition, squareID: formData.squareID, badges: formData.badges }),
+                body: JSON.stringify({ firstName: formData.firstName, lastName: formData.lastName, membership: membershipRest, boardPosition: formData.boardPosition, squareID: formData.squareID, badges: formData.badges }),
             });
-            if (!res.ok) throw new Error('Failed');
-            const d = await res.json();
-            onUpdate(d.user);
+            if (!res.ok) throw new Error('Failed to update member');
+            let d = await res.json();
+
+            if (roleChanged) {
+                const rr = await fetch('/api/v1/admin/members/role', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userID: user.userID, role: formData.role }),
+                });
+                if (!rr.ok) throw new Error((await rr.json().catch(() => ({}))).error || 'Role change failed');
+            }
+            if (statusChanged) {
+                const sr = await fetch('/api/v1/admin/members/status', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userID: user.userID, status: newStatus }),
+                });
+                if (!sr.ok) throw new Error((await sr.json().catch(() => ({}))).error || 'Status change failed');
+            }
+
+            // Reflect the sensitive changes locally (their responses aren't the full user doc).
+            const merged = { ...d.user, role: formData.role, membership: { ...d.user?.membership, status: newStatus } };
+            onUpdate(merged);
             onClose();
-        } catch { alert('Failed to update user'); }
+        } catch (e) { alert(e.message || 'Failed to update user'); }
         finally { setLoading(false); }
+    };
+
+    // --- Account lifecycle (AC-4): unlink provider, force reset, GDPR export/purge ---
+    const lifecycleCall = async (label, url, opts) => {
+        const res = await fetch(url, opts);
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(d.error || `${label} failed`);
+        return d;
+    };
+    const handleUnlink = async (provider) => {
+        if (!confirm(`Unlink ${provider} from this member?`)) return;
+        try {
+            await lifecycleCall('Unlink', '/api/v1/admin/members/unlink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userID: user.userID, provider }) });
+            alert(`${provider} unlinked.`);
+            onUpdate({ ...user, ...(provider === 'google' ? { googleId: '' } : { discordId: '', discordHandle: '' }) });
+        } catch (e) { alert(e.message); }
+    };
+    const handleForceReset = async () => {
+        if (!confirm('Send a password-reset email to this member?')) return;
+        try {
+            await lifecycleCall('Reset', '/api/v1/admin/members/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userID: user.userID }) });
+            alert('Password reset email sent.');
+        } catch (e) { alert(e.message); }
+    };
+    const handleExport = () => {
+        window.open(`/api/v1/admin/members/export?userID=${encodeURIComponent(user.userID)}`, '_blank', 'noopener');
+    };
+    const handlePurge = async () => {
+        const typed = window.prompt(`IRREVERSIBLE GDPR purge — erases this member and cascades across ALL their data (transactions anonymized, activity deleted).\n\nType the userID to confirm:\n${user.userID}`);
+        if (typed !== user.userID) { if (typed !== null) alert('userID did not match — purge cancelled.'); return; }
+        try {
+            await lifecycleCall('Purge', '/api/v1/admin/members/purge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userID: user.userID, confirm: user.userID }) });
+            alert('Member purged.');
+            onClose();
+            if (typeof onDelete === 'function') onDelete(user.userID);
+        } catch (e) { alert(e.message); }
     };
 
     const handleAwardStake = async () => {
@@ -544,6 +639,18 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                 </div>
 
                                 <div style={{ border: '1px solid var(--bd)', padding: '14px 16px' }}>
+                                    <div style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 10 }}>ACCOUNT_LIFECYCLE</div>
+                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                        {user.googleId && <button className="btn btn--sm" style={{ fontSize: 10 }} onClick={() => handleUnlink('google')}>$ unlink google</button>}
+                                        {user.discordId && <button className="btn btn--sm" style={{ fontSize: 10 }} onClick={() => handleUnlink('discord')}>$ unlink discord</button>}
+                                        <button className="btn btn--sm" style={{ fontSize: 10 }} onClick={handleForceReset}>$ send password reset</button>
+                                        <button className="btn btn--sm" style={{ fontSize: 10 }} onClick={handleExport}>$ export data (GDPR)</button>
+                                        <button className="btn btn--sm" style={{ fontSize: 10, color: 'var(--red)', borderColor: 'var(--red)' }} onClick={handlePurge}>$ GDPR purge</button>
+                                    </div>
+                                    <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 8 }}>purge is irreversible — erases the member and cascades across all their data.</div>
+                                </div>
+
+                                <div style={{ border: '1px solid var(--bd)', padding: '14px 16px' }}>
                                     <div style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 10 }}>EMAIL_VERIFICATION</div>
                                     <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                                         <span className="pill" style={{ fontSize: 10, color: formData.status === 'verified' ? 'var(--green)' : 'var(--amber)', border: `1px solid ${formData.status === 'verified' ? 'var(--green)' : 'var(--amber)'}` }}>
@@ -698,11 +805,54 @@ export default function MemberDialog({ open, onClose, user, onUpdate }) {
                                                             {s.pausedUntilDate && <div><span style={{ color: 'var(--text-dim)' }}>paused until: </span><span style={{ color: 'var(--text-mid)' }}>{s.pausedUntilDate}</span></div>}
                                                             <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--text-dim)' }}>id: </span><span style={{ color: 'var(--text-dim)', fontSize: 9 }}>{s.id}</span></div>
                                                         </div>
+                                                        {/* AC-5: subscription lifecycle actions */}
+                                                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 10, borderTop: '1px solid var(--bd)', paddingTop: 8 }}>
+                                                            {(s.status === 'ACTIVE' || s.status === 'PENDING') && (
+                                                                <button className="btn btn--sm" style={{ fontSize: 9 }} onClick={() => handleSubAction(s.id, 'pause')}>$ pause</button>
+                                                            )}
+                                                            {s.status === 'PAUSED' && (
+                                                                <button className="btn btn--sm" style={{ fontSize: 9 }} onClick={() => handleSubAction(s.id, 'resume')}>$ resume</button>
+                                                            )}
+                                                            {s.status !== 'CANCELED' && s.status !== 'DEACTIVATED' && (
+                                                                <button className="btn btn--sm" style={{ fontSize: 9, color: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => handleSubAction(s.id, 'cancel')}>$ cancel</button>
+                                                            )}
+                                                            {availablePlans.length > 0 && s.status !== 'CANCELED' && s.status !== 'DEACTIVATED' && (
+                                                                <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                                                    <select value={swapSel[s.id] || ''} onChange={e => setSwapSel(p => ({ ...p, [s.id]: e.target.value }))}
+                                                                        style={{ fontFamily: 'var(--mono)', fontSize: 9, background: 'var(--bg-1)', color: 'var(--text)', border: '1px solid var(--bd)', padding: '2px 4px' }}>
+                                                                        <option value="">swap to…</option>
+                                                                        {availablePlans.map(pl => (pl.variations?.length
+                                                                            ? pl.variations.map(v => <option key={v.id} value={v.id}>{pl.name} — {v.name || v.cadence}</option>)
+                                                                            : <option key={pl.id} value={pl.id}>{pl.name}</option>))}
+                                                                    </select>
+                                                                    {swapSel[s.id] && <button className="btn btn--sm" style={{ fontSize: 9 }} onClick={() => handleSubAction(s.id, 'swap', swapSel[s.id])}>$ swap</button>}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 );
                                             })}
                                         </div>
                                     </>
+                                )}
+
+                                {/* AC-5: saved cards on file */}
+                                {plans && !plans.error && (
+                                    <div style={{ marginTop: 18 }}>
+                                        <div style={{ fontSize: 9, letterSpacing: '0.14em', color: 'var(--text-dim)', marginBottom: 8 }}>SAVED_CARDS</div>
+                                        {cards?.error && <div style={{ color: 'var(--red)', fontSize: 11 }}>{cards.error}</div>}
+                                        {cards && !cards.error && cards.cards?.length === 0 && <div style={{ color: 'var(--text-dim)', fontSize: 11, fontFamily: 'var(--mono)' }}>no cards on file</div>}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                            {(cards?.cards || []).map(c => (
+                                                <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--bd)', padding: '6px 10px', fontFamily: 'var(--mono)', fontSize: 11 }}>
+                                                    <span style={{ color: c.enabled ? 'var(--text)' : 'var(--text-dim)' }}>
+                                                        {c.brand || 'card'} •••• {c.last4 || '????'}{c.expMonth ? ` (${c.expMonth}/${c.expYear})` : ''}{c.enabled ? '' : ' — disabled'}
+                                                    </span>
+                                                    {c.enabled && <button className="btn btn--sm" style={{ fontSize: 9, color: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => handleDisableCard(c.id)}>$ disable</button>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 )}
 
                                 {!plans && !plansLoading && (

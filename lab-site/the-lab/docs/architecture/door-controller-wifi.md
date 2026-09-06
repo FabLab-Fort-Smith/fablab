@@ -1,0 +1,657 @@
+---
+title: Tiered door access — cloud authority · on-site HA broker · autonomous edge nodes
+status: current
+audience: developers, operators, reviewers
+owners: app dev
+last_reviewed: 2026-08-23
+related:
+  - access-control-iot.md
+  - door-access-controller.md
+  - ota-updates.md
+---
+
+# Tiered door access — cloud authority · on-site HA broker · autonomous edge nodes
+
+> **Status: CURRENT (accepted design — design-first, no firmware/infra written yet).** Threat-modeled
+> before code per CLAUDE §3 / master §3. **SEC review converged (3 rounds → APPROVE)** and the owner has
+> accepted the design + the §11 decisions (2026-08-23). Implementation follows the §13 slice plan; the
+> remaining hardening (F7 build, F9 secure element, F10/F11 wording) is tracked as issues.
+
+## 1. Context & confirmed decisions
+
+A door unit today is a **Pico W brain + Pi Zero W reader wired over UART** (`pico/main.py`
+`ZeroLink`, `pi-zero/link.py`, `protocol.md` "Link 2"). This design replaces that with a **three-tier**
+access system.
+
+Confirmed direction (2026-08-23, latest supersedes earlier):
+
+- **Freeze the Pico.** No further Pico work; doors migrate off it.
+- **Three tiers:** a **cloud** authority (existing `socket-server` on Coolify), an **on-site broker**
+  running as a **container on Proxmox** (the local authority), and a **per-door edge node** (Pi Zero W:
+  NFC reader **+** the door strike relay).
+- **Hybrid defense-in-depth.** Every tier degrades gracefully to the one below it, and the **edge node
+  itself** caches a signed allowlist so a single door keeps working even if it loses the broker. Four
+  levels, always fail-secure (§2, §8).
+- **The reader↔decision link is WiFi** (was UART) — a new trust boundary (§3). Card PII rides the LAN
+  → TLS + mutual auth mandatory.
+- **On-site broker is a container, not a board.** A container has no GPIO, so the **strike moves to the
+  edge node** (this reverses the earlier "strike on the broker" — a consequence of containerizing the
+  brain). The broker reuses the `socket-server` stack: it is effectively an on-site instance of that
+  service.
+- **HA for the broker.** ≥2 broker containers behind a keepalived **VIP**; Proxmox HA restarts/migrates
+  a failed one; edge fallback covers the failover gap (§6).
+
+**Firmware footprint shrinks to one role** — the **edge node** (`pi-zero` OTA image). The broker is
+infra (deployed like any container), not firmware. The Pico stays frozen.
+
+## 2. Tiers, transport & the degradation ladder
+
+```
+TIER 0  CLOUD  socket-server (Coolify)         source of truth: member DB, policy, audit aggregation;
+   ⇅  Link B: WSS (WAN) — broker authenticates as a service      SIGNS + pushes the allowlist
+TIER 1  ON-SITE BROKER  container(s) on Proxmox (HA behind a VIP)   LOCAL AUTHORITY: routes edge nodes;
+   ⇅  Link A: mTLS (LAN)                                            online→proxy to cloud, offline→cached
+                                                                    signed allowlist; distributes per-door
+                                                                    signed envelopes. NO relay.
+TIER 2  EDGE NODE per door  Pi Zero W = NFC reader + strike relay   fail-secure actuator + LOCAL FALLBACK:
+                                                                    caches its door's signed allowlist,
+                                                                    decides alone if it loses the broker.
+```
+
+**Degradation ladder (hybrid defense-in-depth)** — the decision is made as high as reachable, and
+every rung is fail-secure:
+
+1. **Normal:** edge → broker → **cloud** authorizes (authoritative + audited). Broker pulses nothing;
+   it returns the grant, the **edge** pulses its own strike.
+2. **WAN/cloud down:** edge → broker → the **broker's cached signed allowlist** decides (offline `mode`),
+   returns the grant to the edge.
+3. **Broker/LAN unreachable to a door** (switch, cable, host, or all brokers down): the **edge decides
+   from its own cached signed allowlist** and actuates locally — the door stays usable in isolation.
+4. **No valid/unexpired allowlist anywhere reachable → locked.** Fail-secure.
+
+Each offline decision (rungs 2–3) is logged locally and **store-and-forward synced to the cloud audit**
+on recovery (non-repudiation across outages, §8).
+
+### Offline-match & signing model (SEC review F1–F3, F5)
+
+The naive "reuse `buildSignedAllowlist` as-is" does not survive review — these corrections define how an
+offline tier actually matches a card and trusts a snapshot (round-1 F1–F3/F5 + round-2 refinements):
+
+- **Per-door signed envelopes, not slices (F2).** `buildSignedAllowlist` today emits **one** payload with
+  **one** Ed25519 signature — a per-door "slice" of it is not independently verifiable. The cloud instead
+  signs a **separate envelope per door** (`{ doorId, version, issuedAt, expiresAt, entries[] }`, one
+  signature each), and the **verifier asserts `payload.doorId` == the door it is deciding** (a valid
+  door-A envelope must not satisfy a door-B decision — matters at the broker, which verifies many doors
+  under one key). (Alternative on record: one Merkle root signed once + per-door inclusion proofs — more
+  moving parts; per-door envelopes are the default.)
+- **Per-recipient index keys, never a global one (F1 + round-2 broker fix).** Entries key on
+  `credHash = HMAC(indexKey, code)` (today `cardCrypto.blindIndex` with the **system-wide**
+  `DOOR_CARD_INDEX_KEY`). Shipping that master to every SD-card edge = a global enumeration/forgery key.
+  So the cloud re-keys each door's envelope with a key derived **per recipient**:
+  `HKDF(ikm = DOOR_CARD_INDEX_KEY, info = "dooraccess/index/v1|" + recipientId, len = 32)` — an
+  **`edgeIndexKey`** (recipient = `edgeDeviceId`) for the edge's own rung-3 copy, **and** a distinct
+  **`brokerIndexKey`** (recipient = `brokerId`) for the broker's rung-2 copy. Each recipient holds only
+  **its own** derived key. *This closes the round-2 gap:* the broker matches with its own `brokerIndexKey`
+  and **never holds any edge's key**, so a broker compromise doesn't yield per-door edge keys. (Rejected
+  alternative: the edge sends a locally-computed `credHash` to the broker — breaks the online-proxy path,
+  which needs the raw `cred` at the cloud to authorize.) The cloud must **decrypt each `codeEnc` at build
+  time** to recompute the HMAC per recipient — an O(doors × members × recipients) cost, and a transient
+  cloud-side plaintext exposure. Zeroization must be **real**: `cardCrypto.decryptCode` returns an
+  immutable JS **String** (unwipable) — the build path uses a mutable-**Buffer** variant
+  (`decryptToBuffer`), computes all recipient HMACs, then `buf.fill(0)`, and never materializes the code
+  as a String (`topic-resource-management`). Requires a **card-code entropy floor** — see the decision in §5/§11.
+- **A new nested canonicalizer, not the OTA one (F3).** The OTA verify (`otacrypto.canonical`) is
+  **flat-only** (raises on arrays/nested). The allowlist is deeply nested → a **new** canonical-JSON
+  serializer byte-matching the JS signer (`allowlistCrypto.canonical` = `JSON.stringify(sortKeys(v))`).
+  Pin the byte-match rules (classic bypass traps): **integers only** (forbid float / `NaN` / `Infinity`);
+  **no `undefined`** (JS drops it / arrays→`null`); **explicit `null`**; **parse-then-canonicalize** so
+  duplicate keys can't diverge; the signature is over `canonical(payload)` only, in a `{payload, sig, alg}`
+  envelope. Ships with **cross-language golden-vector tests** (§12). Verify key stays distinct
+  (`DOOR_ALLOWLIST_VERIFY_KEY` ≠ `DOOR_FW_VERIFY_KEY`).
+  **Python (S4) contract to byte-match `JSON.stringify(sortKeys(v))`:**
+  `json.dumps(obj, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")` — all four
+  settings are mandatory. Additional constraints: **keys must be ASCII** (JS `sort` orders by UTF-16
+  code unit, Python `sort_keys` by code point — they agree only for ASCII; all payload field names are
+  fixed ASCII, so never admit user-defined keys); **`ensure_ascii=False`** (JS does not `\uXXXX`-escape
+  non-ASCII *values* like `doorId`); reject **integers |n|>2^53** (lossy round-trip) and the keys
+  `__proto__`/`constructor`/`prototype`; **parse-then-canonicalize** and reject duplicate keys on verify.
+- **Anti-rollback on a MONOTONIC version (F5 + round-2 fix).** TTL alone lets a writable-cache attacker
+  replay an older-but-unexpired envelope. Each tier persists the newest `version` and **rejects any older
+  envelope**. **The builder must emit a strictly-monotonic `version`** (a persisted counter / `max(prev)+1`)
+  — today it emits a constant `version: 1`, which makes anti-rollback a **no-op**, and `issuedAt` alone is
+  unsafe (wall-clock, non-monotonic across a cloud restart). This is a must-fix in `buildSignedAllowlist`.
+  The high-water mark is kept **per-`doorId`** (the multi-door broker caches many doors — one global
+  counter would false-reject a legitimately-lower door or hide a rollback); a null high-water (first
+  envelope) accepts + persists; use a wide integer (no wraparound).
+- **The "newest seen" floor lives on the edge SD (F4/F5 caveat).** Both the anti-rollback high-water mark
+  and the F4 monotonic time floor persist on attacker-writable storage → they defend **drift and logical/
+  remote rollback, not a physical SD-tamper attacker**. That residual is accepted **only** because the edge
+  is mounted secure-side (§3a) and a secure element is the tracked upgrade (F9).
+
+**Why containerize the broker:** HA/failover (your redundancy ask), no GPIO/wiring ceiling, one place to
+patch/deploy/observe the brain, and it reuses the `socket-server` code. The cost — the Proxmox host + LAN
+become a shared failure domain — is bought back by rung 3 (edge autonomy) + HA + UPS/redundant switch.
+
+## 3. Trust boundaries & STRIDE
+
+Boundaries, most-changed first. **Link A (edge ⇄ broker)** is NEW (replaces a trusted UART wire).
+**Link B (broker ⇄ cloud)** is the existing authenticated device/service boundary
+(`access-control-iot.md`). Two **new local trust** paths appear (broker *and* edge deciding from cached
+signed data), plus the **Proxmox host + HA** as infrastructure to harden.
+
+### 3a. Edge ⇄ broker (new LAN boundary)
+
+| STRIDE | Threat | Mitigation |
+|---|---|---|
+| **S**poofing | Rogue LAN box poses as the broker (issue fake grants → open the strike) or as an edge (inject scans). | **mTLS** via a small **internal CA** (§5): the edge only accepts commands over a broker cert the CA signed; the broker only accepts edges it signed. Plus a per-edge secret (constant-time). No public PKI on the LAN → pin the CA root. |
+| **T**amper / **R**eplay | Replay a captured grant/unlock to re-open a door. | TLS integrity; each `scan`/grant carries a fresh `requestId` + monotonic nonce bound to the edge session; the edge rejects duplicates in a window. A replayed grant can't pulse twice. |
+| **I**nfo disclosure | Card code (PII) sniffed on WiFi. | mTLS on Link A; raw `cred` never logged/displayed on any tier. |
+| **D**enial of service | Flood the broker / an edge with scans or connections. | Per-connection auth gate + scan rate-limit + bounded connections. Any error/timeout → **locked**. |
+| **E**levation | An edge coerces a grant it wasn't given; a compromised edge self-fires its relay. | The edge submits only a `cred`; the **broker/cloud** decides. Rung 3 aside, the relay energizes only on a validated decision (broker grant, or the edge's own signature-verified allowlist hit) — never on an unauthenticated local command. Physically mount the edge on the **secure side** of the door. |
+
+### 3b. Edge offline decision — rung 3 (new local trust in cached data)
+
+| STRIDE | Threat | Mitigation |
+|---|---|---|
+| **T**ampering (signature) | Forged/edited envelope, or a valid envelope from **another door**, grants access when isolated. | Per-door envelope is **Ed25519-signed by the cloud**, verified with `DOOR_ALLOWLIST_VERIFY_KEY` via the **new nested canonicalizer** (byte-match rules per §2), NOT the flat OTA `otacrypto.canonical` (F3). **Also assert `payload.doorId` == this door** (cross-door replay guard, F2). Golden-vector tested. Invalid → locked. |
+| **Offline match** (F1) | Matching a scan offline needs a keyed HMAC of the code — a system-wide `DOOR_CARD_INDEX_KEY` on every SD-card node would be a global-enumeration/forgery key. | The cloud re-keys each envelope **per recipient** — `edgeIndexKey`/`brokerIndexKey = HKDF(DOOR_CARD_INDEX_KEY, "…|"+recipientId)` (§2); each node holds only its own, so a stolen node ⇒ **its door only** and the broker never holds edge keys. Bounded by a **card-code entropy floor** (§5 decision) — note NFC-UID codes can't meet it (accepted-risk). |
+| **Replay / stale + rollback** (F5) | A stale or rolled-back envelope re-enables a revoked card offline. | `issuedAt`/`expiresAt` → **TTL** (edge TTL may exceed the broker's); **plus anti-rollback on a strictly-monotonic `version`** (§2 — the builder's constant `version:1` must become a real counter, else this is inert): reject any envelope older than the newest persisted. Refresh on every broker contact. |
+| **Clock trust** (F4) | The Pi Zero W has **no battery-backed RTC**; on the exact rung-3 case (power-loss → boot, no NTP) the clock is wrong — a **backwards** clock makes an expired/revoked snapshot look valid; window checks go wrong too. | Add a **hardware RTC** to the edge BOM; persist a **monotonic last-known-good time floor** and reject any wall-clock earlier than it (anti clock-rollback); an **unsynced/implausible clock → treat as ambiguity → LOCKED** (added to the fail-secure invariant). |
+| **I**nfo disclosure | Cached envelope leaks member data at rest on the SD card. | Envelope carries **no PII / raw codes** — only per-edge keyed hashes + door/window entries. Note `credHash` is still a **stable pseudonymous** identifier (personal data) → store access-scoped, restrictive perms; per-door envelopes minimize what any one edge holds. |
+
+### 3c. Broker offline decision — rung 2
+
+Same as 3b, one tier up: the broker verifies (same nested canonicalizer + `DOOR_ALLOWLIST_VERIFY_KEY`),
+asserts `doorId`, TTL-checks, and **anti-rollback-checks** the per-door envelopes it caches. It matches
+scans with its **own `brokerIndexKey`** (its rung-2 envelope copy is re-keyed for `brokerId`, §2) and
+**holds no edge index keys** — so a broker compromise yields at most its own re-keyed door set, not any
+edge's key. Identical guarantees to the edge; shorter TTL (refreshes from the cloud more often). A
+containerized broker has a real NTP clock, so the F4 RTC concern is edge-specific; it still applies the
+monotonic-version anti-rollback (F5).
+
+### 3d. Broker ⇄ cloud (existing boundary — extended)
+
+The broker authenticates to the cloud `socket-server` as a service/device (a broker credential, akin to
+`DEVICE_SECRETS`), `wss://`/TLS, constant-time, fail-closed, audited. The cloud pushes the signed
+allowlist and handles online scans + audit over this uplink.
+
+### 3e. Proxmox host + HA (new infrastructure boundary)
+
+| Concern | Control |
+|---|---|
+| Host compromise → all doors | CIS-hardened Proxmox host; dedicated/segmented **management network**; least-privilege; the broker container runs non-root, read-only rootfs, minimal caps (`@rules/std-cis.md`, `topic-container-k8s`). |
+| Supply chain | Broker image pinned by digest, **signed + SBOM'd**, deployed as code (`@rules/std-supplychain.md`); no secrets baked into the image. |
+| Broker key material | The broker holds a **`brokerIndexKey`** (a card-index key over its whole door set) + `DOOR_ALLOWLIST_VERIFY_KEY` + cloud creds → protect at rest (least-priv mount / injected secret, not image/config-in-VCS); its compromise is the site-wide-NFC accepted-risk (§5). |
+| HA integrity / split-brain | keepalived VIP, single active holder; edges reconnect to the VIP; **no two brokers grant the same door concurrently** (§6). |
+| Availability | ≥2 broker containers + Proxmox HA/live-migrate; **UPS + redundant switch** for the host and LAN; rung 3 covers the gap. Backup/restore the broker config + registry. |
+
+### 3f. Store-and-forward audit (F6 — new local trust in buffered records)
+
+Offline decisions (rungs 2–3) are logged locally and replayed to the cloud audit on reconnect. That
+buffer is a new boundary — without integrity it breaks non-repudiation (CLAUDE §9, `topic-logging-observability`).
+
+| STRIDE | Threat | Mitigation |
+|---|---|---|
+| **R**epudiation / **T**ampering | A compromised edge edits or drops buffered unlock records to hide an entry. | Append-only, **sequence-numbered + hash-chained** buffer. **Honest bound:** a key-holding compromised edge can rewrite a *self-consistent* chain over records **not yet forwarded** — so the achievable guarantees are (a) **drop-detection** via seq gaps, and (b) **immutability of already-forwarded records** *iff* the **cloud anchors server-side** (persists each edge's last-seen `seq` + chain-tip and **enforces monotonic `seq` on ingest**). The cloud **alerts on a sequence gap** (tamper/loss signal, not silence). |
+| **D**enial / loss | Buffer overflow silently drops audit. | Bounded + **persistent across reboot**; on overflow **block-and-alert, never silent-drop**. |
+| Replay / dup / **re-provision** | Re-sent records double-count; a reflashed edge restarts `seq` at 0 → collides with old `(edgeId, seq)` keys (dropped as dups) or trips a false gap. | Cloud **dedups + orders by `(edgeId, bootEpoch, seq)`** — a **boot-epoch / chain-genesis nonce** in the dedup key + chain baseline distinguishes a legit re-provision from a replay. The epoch reset is a **cloud-authorized / admin-acknowledged handshake**, not a value the edge asserts unilaterally (else a compromised edge dodges dedup with a fresh epoch). (A long *offline* backlog is contiguous → no gap, no noise.) |
+| **I**nfo disclosure | Buffered `credHash + doorId + timestamps` = an access-pattern record. | Same at-rest scoping as the envelope (§3b); `credHash` is pseudonymous personal data. |
+
+**Fail-secure invariant (all tiers):** the strike (on the edge) is de-energized/locked at rest; it pulses
+only on a validated grant — cloud, broker cache, or the edge's own signature-verified allowlist hit. Any
+timeout, transport/auth error, expired **or rolled-back** allowlist, **unsynced/implausible clock (F4)**,
+split-brain, or ambiguity → **locked**.
+
+## 4. Protocol (`protocol.md` rewrite)
+
+- **Retire UART "Link 2".**
+- **Link A — edge ⇄ broker (mTLS/TCP on the LAN, newline-JSON):** edge → `hello{edgeId}` (mTLS client
+  cert + per-edge secret), `scan{cred, requestId, nonce}`, `ping`, status/telemetry; broker →
+  `result{requestId, granted, reason, mode}`, `status{online}`, **per-door signed-envelope push**; edge →
+  hash-chained `audit{seq, ...}` records for backfill (§3f). `cred` is PII — never logged.
+- **Link B — broker ⇄ cloud (WSS):** broker → `auth`(service), `scan`(proxy), `ping`, aggregated
+  `audit{edgeId, bootEpoch, seq, ...}` + telemetry, OTA status relay; cloud → `scan_result`, **per-door
+  signed-envelope push** (re-keyed **per recipient** — an edge-keyed + a broker-keyed copy, §2). Unchanged shape otherwise.
+- **Decision flow (per the ladder, §2):** edge `scan` → broker: cloud reachable? proxy for the
+  authoritative, audited result; else broker cache. Broker unreachable to the edge? the edge decides from
+  **its own cached envelope** (verify sig + TTL + anti-rollback, match via its `edgeIndexKey`). Grant →
+  **edge pulses the strike** → `result` to the reader UI. No grant → locked.
+
+## 5. Identity, secrets & registry
+
+- **Internal CA + mTLS (resolves the old cert question).** A tiny internal CA signs the **broker**
+  server/client cert and each **edge** cert; both ends pin the CA root. Mutual auth on Link A; CA is
+  offline-capable (on the LAN, not the cloud).
+- **Edge-cert revocation (F7 — mechanism now, build deferred).** Because an edge is an autonomous
+  authority holding a cert key + `edgeIndexKey` on a swappable SD, a stolen edge is a standing capability
+  until CA-root rotation (which burns the whole fleet). Design the interim control **now**: **short-lived
+  edge certs** + a broker-side **`edgeId` deny-list** enforced on every mTLS handshake + **refuse to
+  re-provision envelopes to a burned `edgeId`**. Blast radius is one door + TTL-bounded, so *implementing*
+  it may follow the first rollout, but the design commits to the mechanism.
+- **Broker ↔ cloud:** a per-broker service credential (akin to `DEVICE_SECRETS`); WSS.
+- **Edge identity:** per-edge cert (from the CA) + a per-edge secret. Carries `DOOR_ALLOWLIST_VERIFY_KEY`
+  (public, distinct from the OTA `DOOR_FW_VERIFY_KEY`) to verify its own envelope (rung 3), and its **own**
+  `edgeIndexKey = HKDF(ikm=DOOR_CARD_INDEX_KEY, info="dooraccess/index/v1|"+edgeDeviceId)` for offline
+  matching (F1) — door-scoped, **never** the master. No cloud credential on the edge. SD-card key material
+  is store access-scoped (secure element = the F9 upgrade). A **stolen edge SD = durable one-door
+  compromise until CA rotation** (the F7×F9 residual — accepted given one-door blast radius + secure-side mount).
+- **Door registry:** `doorId → { edgeDeviceId, brokerId }`. Each edge **is** one door; the broker maps
+  `edgeDeviceId → doorId` server-side (never client-supplied). The cloud signs a **per-door envelope** (F2)
+  and re-keys it **per recipient** — an **edge-keyed** copy (`edgeIndexKey`) for the edge and a
+  **broker-keyed** copy (`brokerIndexKey = HKDF(…"|"+brokerId)`) for the broker's rung-2 match (§2), so no
+  node holds another's index key. Admin UI lists doors + edge/broker + last status.
+- **Card-code entropy floor (F1/R3 decision).** A recipient index key only bounds a *leaked* key's damage
+  if the code space is large: floor = a **system-issued ≥128-bit CSPRNG token** for QR/app credentials
+  (not merely "long" — a 32-char `aaaa…` is low-entropy and rejected), enforced by **rejecting
+  below-floor / non-system-issued codes at `service.js` enroll**. **4-byte NFC-UIDs cannot meet it** — for
+  NFC-UID creds a leaked *edge* key clones cards **for that one door**, and a leaked *broker* key
+  (`brokerIndexKey`, and a broker serves the whole site — §9) allows NFC enumeration/cloning
+  **site-wide**. This is an **accepted risk**, bounded by: the hardened, non-root, read-only, signed
+  broker container (§3e) being far harder to exfiltrate than a pullable edge SD; secure-side edge mount;
+  F7 revocation; short TTL. Prefer high-entropy QR/app creds where door risk warrants.
+- **Config:** **edge (`pi-zero` image):** broker VIP host, edge cert+key, pinned CA root, per-edge secret,
+  `DOOR_ALLOWLIST_VERIFY_KEY`, **`edgeIndexKey`**, `edge_allowlist_ttl`, **hardware RTC** (F4), NFC + relay
+  pins. **broker container:** cloud uplink creds, CA-signed cert, CA root, `DOOR_ALLOWLIST_VERIFY_KEY`,
+  **`brokerIndexKey`**, `broker_allowlist_ttl`, `edgeId` deny-list, registry, HA/VIP config. Master
+  `DOOR_CARD_INDEX_KEY` stays **cloud-only**. WiFi is OS-managed on the Pi Zero.
+
+## 6. High availability & failover
+
+- **Topology:** ≥2 broker containers on Proxmox behind a keepalived **VIP**; edges connect to the VIP.
+  **Active/standby** by default (only the VIP holder serves) — simplest, no split-brain. Active/active is
+  possible (state is light + cloud-sourced) but not needed initially.
+- **State is easy to replicate:** the registry + signed allowlist come from the cloud and are
+  read-mostly; a standby just needs the latest cloud-pushed snapshot. No door state to lose on failover.
+- **One logical broker identity across the HA set:** the ≥2 containers **share a single `brokerId` /
+  `brokerIndexKey`** (same trust tier) → the cloud emits **one** broker-keyed envelope copy per door, so
+  the envelope count stays `doors × members × 2` (edge + broker), not ×(container count). Don't mint
+  per-container broker keys.
+- **Failover:** VIP moves to the standby; Proxmox HA restarts/live-migrates a dead container. During the
+  brief failover, **rung 3 (edge local decision) keeps doors working** — the outage is invisible at the door.
+- **Split-brain guard:** single VIP holder ⇒ one authority at a time; a partitioned ex-active loses the
+  VIP and stops serving. Edges only ever talk to the VIP.
+
+## 7. Component impact
+
+| Component | Change |
+|---|---|
+| **edge node** (`pi-zero` image) | The whole firmware fleet. NFC read + **strike relay GPIO** + mTLS client to the broker VIP + **local per-door-envelope cache: nested-canonical Ed25519 verify (F3) + TTL + anti-rollback (F5) + `edgeIndexKey` HMAC match (F1)** (rung 3) + **hardware-RTC time source + monotonic clock floor (F4)** + fail-secure supervisor loop (reconnect/backoff, heartbeat, `WatchdogSec`, OTA commit/poll) + **hash-chained store-and-forward audit buffer (F6)**. |
+| **broker container** (new infra) | On-site instance of the `socket-server` stack: mTLS listener (Link A) + cloud uplink (Link B) + cached decision with the same verify + anti-rollback (rung 2) + **per-door signed-envelope distribution, re-keyed per edge** + registry/routing + relays hash-chained audit up. Proxmox (HA). **No relay.** |
+| `pico` firmware | **FROZEN.** No changes; doors migrate to the edge-node unit. |
+| cloud `socket-server.js` | Authenticate brokers (service creds); **build + Ed25519-sign per-door envelopes with a strictly-monotonic `version`, each re-keyed per recipient (edge + broker HKDF copies)** and push; keep the online authorize path; **aggregate audit with a server-side anchor** — persist each edge's last-seen `seq`+chain-tip, enforce monotonic `seq` on ingest, **dedup by `(edgeId, bootEpoch, seq)`, alert on gaps**. |
+| door-access addon | Extend `buildSignedAllowlist`: one-monolithic-signature → **per-door signed envelopes**; add a **strictly-monotonic `version`** source (today it's a constant `version:1` — anti-rollback is inert until fixed); a **per-recipient HKDF re-key** of `credHash` (decrypt+**zeroize** `codeEnc` at build time); a JS **nested canonicalizer** + golden vectors; and **reject below-entropy-floor codes at enroll** (R3). Registry gains `edgeDeviceId`/`brokerId`; admin UI shows tier + last status. |
+| Proxmox / infra | New host to provision + CIS-harden; broker image signed/SBOM'd, deployed as code; VIP/HA; UPS + redundant switch; backup/restore of broker config + registry (`@rules/topic-iac-cloud`, `std-cis`, `std-supplychain`). |
+| `protocol.md` | Rewrite: retire Link 2; add Link A (edge⇄broker) + Link B (broker⇄cloud) + the ladder. |
+| OTA | **Edge nodes only** (single `pi-zero` image/role; anti-rollback; staged/pinned rollout; status telemetry). Brokers deploy via the container path, not OTA. |
+| Tests | edge unit (mTLS, fail-secure relay, **local offline decision** verify+TTL+revoked-rejected+expired-rejected); broker (cache decision, **per-door envelope distribution**, `brokerIndexKey` match, cloud proxy); the **4-rung degradation ladder** end-to-end; **HA failover** (kill active broker → doors keep working via rung 3, VIP moves); audit backfill; abuse (unauth edge, forged/expired allowlist, replayed grant, split-brain double-grant) — plus the round-2 tests in §12. |
+
+## 8. Offline behavior & audit continuity
+
+- **Rung 1 → 4 ladder (§2)** gives graceful degradation with fail-secure at the bottom. The edge cache
+  (rung 3) is the defense-in-depth win: a door survives WAN loss **and** on-site broker/host/LAN loss.
+- **Audit continuity (F6):** online decisions audit at the cloud as today. Offline decisions (rungs 2–3)
+  go to a **hash-chained, sequence-numbered** local buffer (bounded, persistent across reboot,
+  block-and-alert on overflow) and **store-and-forward** to the cloud on reconnect, where they are
+  chain-verified, **deduped by `(edgeId, seq)`**, and a **sequence gap raises an alert** — so a dropped or
+  tampered record is detected, not silent. Every unlock stays accountable across an outage.
+- **Revocation gap** is bounded by the two TTLs (broker + edge) **and** by envelope **anti-rollback (F5)** —
+  an older-but-unexpired envelope is rejected, so a since-revoked card can't be replayed back in. Edge TTL
+  enforcement depends on a trustworthy clock — see the **RTC + monotonic floor (F4)**; an unsynced clock
+  fails **locked**, never open.
+
+## 9. Scale
+
+Centralizing the brain removes the wiring/GPIO ceiling that a board-broker had: **one broker container
+serves the whole site**, edges are strictly 1:door, and adding a door = provisioning one edge node +
+a registry entry. Redundancy comes from **HA brokers** (§6), not from spreading brains across boards.
+Very large sites can shard edges across multiple broker containers by zone, still behind HA.
+
+## 10. Migration / cut-over plan
+
+1. Stand up the Proxmox host + broker container (deploy the on-site `socket-server` tier), wire it to the
+   cloud (allowlist sync + upstream authorize); bring up HA (≥2 containers + VIP). Freeze the Pico.
+2. Stand up the internal CA; issue the broker cert + edge certs.
+3. Provision an edge node (Pi Zero, reader + relay): edge cert + per-edge secret + pinned CA root +
+   allowlist verify-key + broker VIP host; register `doorId → { edgeDeviceId, brokerId }`.
+4. **Parallel-run one door through the whole ladder:** online authoritative + audited → pull the WAN
+   (rung 2, broker cache) → partition the edge from the broker (rung 3, edge decides) → kill everything
+   (rung 4, fail-secure locked). Confirm audit backfill on recovery.
+5. **HA drill:** kill the active broker → VIP failover; confirm doors keep working (rung 3 covers the
+   blip) and resume via the standby.
+6. Roll out door-by-door; retire the Pico units. Reversible (re-flash / rebind / re-point the VIP).
+
+## 11. Decisions (resolved 2026-08-23)
+
+The open questions are now decided by the owner. Values below are binding for implementation; revisit
+only on a material design change.
+
+1. **HA mode → active/standby via a keepalived VIP.** Only the VIP holder serves; the standby takes the
+   cloud-pushed snapshot; Proxmox HA restarts/migrates. No split-brain to reason about. Active/active is
+   not adopted (unneeded — state is light + cloud-sourced).
+2. **Allowlist TTLs → broker 24h, edge 72h.** Edge is the last-resort tier and tolerates a longer gap;
+   both refresh on every uplink recovery. Revocation gap is bounded by these + anti-rollback.
+3. **Proxmox host → dedicated to access control.** Smallest blast radius + independent patch cadence;
+   segmented management network; backup/DR of the broker config + registry. Not shared with other
+   on-site workloads.
+4. **Provisioning & rotation → a scripted internal-CA issuance workflow.** A provisioning helper mints
+   each edge's short-lived cert + per-edge secret + `edgeIndexKey`, and the broker's cert + `brokerIndexKey`,
+   from the on-site CA. **Master `DOOR_CARD_INDEX_KEY` rotation ⇒ a full-fleet envelope re-key** (all
+   recipient copies re-issued) — a documented, staged procedure, not an ad-hoc step.
+5. **Audit buffer → size for the worst tolerated outage + fail loud.** Bound each edge/broker buffer to
+   **≥ 7 days** of expected unlock records (comfortably over the 72h edge TTL), persistent across reboot;
+   **block-and-alert on overflow, never silent-drop** (§3f). Tune the number to measured scan volume.
+6. **Edge hardware → Pi Zero W + a relay HAT with a battery-backed RTC** (e.g. DS3231-class) (F4).
+   SD-card key material access-scoped now; **secure element = the tracked F9 upgrade**.
+7. **Entropy floor → system-issued ≥128-bit CSPRNG token for QR/app credentials, enforced at enroll**
+   (§5). **NFC-UID credentials are an accepted risk** (leaked edge key → clone that one door; leaked
+   broker key → site-wide) — bounded by the hardened broker container + secure-side mount + F7 + short TTL.
+8. **F7 revocation → the deny-list enforcement ships in the first production rollout** (not deferred past
+   GA); the mechanism (broker-side `edgeId` deny-list + short-lived certs + refuse-re-provision) is in §5.
+   Until it ships in a given environment, the interim control is the one-door blast radius + short TTL.
+
+_(Resolved: freeze Pico; three tiers — cloud / on-site HA broker container / edge node; **strike on the
+edge**; hybrid defense-in-depth 4-rung ladder; edge dials the broker VIP over mTLS; **internal CA + mTLS**
+for Link A; one edge firmware role. **SEC review F1–F6 folded in:** per-door signed envelopes (F2),
+per-edge HKDF index keys (F1), a new nested canonicalizer + golden vectors (F3), edge RTC + monotonic
+clock floor (F4), envelope anti-rollback (F5), hash-chained store-and-forward audit (F6). **Round-2
+refinements folded:** broker-keyed rung-2 envelope (F1 broker gap), strictly-monotonic `version` (F5
+no-op), `doorId`-binding check (F2), cloud server-side audit anchor + boot-epoch (F6), canonicalizer
+byte-rules (F3), HKDF label + decrypt-zeroize (F1), entropy-floor **decision** (§5), and the **F7
+revocation mechanism promoted to the design** (build deferred). Still-deferred *builds/wording*: F7
+enforcement rollout, F8 wording, F9 secure element, F10 tamper alerting, F11 privacy note.)_
+
+## 12. Definition of done (when we build)
+
+§3 threat model realized across all boundaries; mTLS via the internal CA on Link A, `wss://` on Link B (no
+plaintext); per-edge + per-broker auth, constant-time, fail-closed; the **4-rung degradation ladder proven
+by test** (cloud → broker cache → edge cache → locked); offline allowlist verify + TTL proven at **both**
+the broker and the edge; fail-secure relay proven; **HA failover proven** (kill active broker, doors keep
+working, no split-brain double-grant); **audit backfill** proven; readers never log `cred`; Proxmox host
+CIS-hardened + broker image signed/SBOM'd + deployed as code; `protocol.md` updated; abuse tests green
+(unauth edge, forged/expired allowlist, replayed grant, split-brain); `pi-zero` edge image builds + OTAs
+cleanly; docs + this design promoted `status: current`; SEC review of §3 (Link A, both offline-decision
+tiers, §3f audit, the Proxmox host + HA).
+
+**Plus the SEC-review abuse tests (F1–F6):**
+1. **Canonical golden vectors (F3):** sign N nested payloads in JS; the Python edge verifier accepts the
+   exact bytes and **rejects** a single-byte mutation, a reordered array, and a unicode-escaping variant.
+2. **Clock-rollback (F4):** edge clock set backwards → an expired envelope is **rejected**; an unsynced/
+   implausible clock → **locked**.
+3. **Envelope anti-rollback (F5):** an envelope older than the persisted `version` is **rejected** even if
+   unexpired; a revoked card in a prior valid-within-TTL envelope → **denied**.
+4. **Stolen-edge blast radius (F1):** a compromised edge cannot produce a valid match for a **different**
+   door, cannot forge a broker/cloud grant, and a leaked `edgeIndexKey` does not enable enumeration on
+   other nodes (and not at all above the card-code entropy floor).
+5. **Per-door envelope (F2):** an edge rejects any payload/slice not covered by a valid per-door signature;
+   a truncated/edited envelope fails verification.
+6. **Audit tamper/gap (F6):** edit or drop a buffered record → the cloud detects the hash-chain/sequence
+   break and alerts; duplicates dedup by `(edgeId, bootEpoch, seq)`; out-of-order arrivals are ordered.
+
+**Plus the round-2 tests:**
+7. **Cross-door envelope replay (F2):** a validly-signed door-A envelope presented for a door-B decision
+   at the **broker** → rejected on `doorId` mismatch (not just signature).
+8. **Broker rung-2 key isolation (F1):** the broker matches only with its own `brokerIndexKey` and holds
+   no edge index key — a scan for a door whose key it shouldn't hold can't be matched.
+9. **Monotonic-version enforcement (F5), per-door:** two consecutive builds carry strictly increasing
+   per-`doorId` `version`; an equal-or-lower `version` → rejected even if `issuedAt` is newer; at the
+   multi-door broker, a lower version on door A does **not** false-reject door B (per-door high-water).
+10. **Server-side audit anchor (F6):** after the cloud ingests `seq ≤ N` for an edge, a later chain that
+    rewrites any record `≤ N` → detected/alerted (proves anchoring, not just self-consistent chaining).
+11. **Re-provision seq reset (F6):** a reflashed edge starting `seq` at 0 with a new `bootEpoch` is **not**
+    dedup-dropped and does **not** raise a false gap — **and** the epoch reset is refused unless
+    cloud-authorized (an edge-asserted fresh epoch alone is rejected).
+12. **Entropy-floor enforcement (F1/R3):** enrolling a below-floor **or non-system-issued** code (incl. a
+    long-but-low-entropy `aaaa…`) is rejected at `service.js` enroll; NFC-UID inputs per the §5 accepted-risk.
+13. **Decrypted-code zeroization (F1):** the per-recipient build path decrypts to a **mutable Buffer**,
+    `fill(0)`s it after the HMACs, and never materializes the code as a String (assert the Buffer path).
+14. **HA envelope-copy count (F6/HA):** with N broker containers sharing one `brokerId`, the cloud emits
+    exactly **2** envelope copies per door (edge + broker), not N+1.
+
+## 13. Implementation slice plan
+
+Ordered, independently-reviewable slices (mirrors the OTA slice model). Each ships its §12 tests + a
+SEC touch where it crosses a boundary; nothing device-facing lands before the signing changes (S1).
+
+1. **S1 — Cloud/addon signing (no device impact).** Extend `buildSignedAllowlist`: per-door signed
+   envelopes + strictly-monotonic per-`doorId` `version` + per-recipient HKDF re-key (Buffer decrypt →
+   HMAC → `fill(0)`) + the new JS **nested canonicalizer** with golden vectors; enforce the entropy
+   floor at `enrollCard`. Keep the old monolithic path behind a flag until consumers migrate.
+2. **S2 — On-site broker.** Sub-sliced during build:
+   - **S2a ✅** rung-2 decision core: `brokerAccess` (verify + `doorId` + TTL + `brokerIndexKey` match +
+     windows) + `brokerStore` (persistent per-door cache, atomic anti-rollback, path-safe).
+   - **S2b-1 ✅** `brokerService`: the rung 1→2 ladder (`handleScan`, never fails open) + `ingestEnvelope`.
+   - **S2b prep ✅** `brokerConfig`: fail-closed load/validate of the runtime config.
+   - **S2b-2 → folded into S2c** (transport needs live peers): the mTLS **Link-A** listener, the **Link-B**
+     WSS uplink client, and the cloud-side envelope sender are built + integration-tested with the container.
+   - **S2c-1 ✅** broker runtime (`broker-server.js`): mTLS Link-A listener (doorId from client-cert CN)
+     + Link-B WSS uplink client (cloud cert validated + pinned, bearer post-TLS) + bounded framing/replay.
+   - **S2c-2 ✅** *cloud side* of Link-B (`vps/lib/brokerUplink.js` + `socket-server.js`): the broker's
+     dial-out endpoint (`/broker`, path-routed off the device WS). Constant-time **bearer** → brokerId
+     (deny-by-default), **authn-before-act**, **owned-door scope** (BOLA) on both `authz` and the envelope
+     relay, per-broker **rate limit**. `authz` proxies to the shared `authorizeScan` (online-first,
+     fail-secure). Envelope relay: the app POSTs signed envelopes to
+     `POST /api/v2/broker/:brokerId/envelopes` (apiAuth) → scoped to owned doors → pushed down the live
+     uplink (503 if the broker isn't connected). Env: `BROKER_UPLINK_SECRETS` (JSON `{brokerId:secret}`),
+     `BROKER_DOOR_MAP` (JSON `{brokerId:[doorId]}`). The scan `code` is never logged/echoed.
+   - **S2c-2b ✅** *app side* (`Service.refreshBrokerEnvelopes` + `pushBrokerEnvelopes`): for each broker
+     in `BROKER_DOOR_MAP`, build one `buildDoorEnvelope` per owned door **re-keyed to that broker**
+     (`recipientId = brokerId` → its own `brokerIndexKey`; master `DOOR_CARD_INDEX_KEY` never leaves the
+     cloud) and POST them to the relay. Fanned out from `_repushBestEffort`, so every existing change
+     trigger (door/policy/card/membership) now also refreshes the brokers. Fail-secure: skips if the
+     signing key isn't set; a not-connected broker (503) is noted, not fatal (it re-syncs on reconnect);
+     one broker's failure never aborts the others.
+   - **S2c-2c ✅** reconnect resync: on a broker's Link-B (re)connect the socket-server fires
+     `onConnect(brokerId)` → `brokerResync` (per-broker cooldown, fire-and-forget) → POSTs the app's
+     `/api/internal/broker-resync` (INTERNAL_API_SECRET bearer) → `Service.refreshBrokerEnvelopes({brokerId})`
+     (single-broker scope; unknown broker = no-op) → builds + pushes that broker's envelopes down the
+     now-live uplink. Best-effort (a failed resync just falls back to the next change/TTL — never blocks
+     the uplink); the brokerId is the socket-server-authenticated one; the app still re-scopes to a
+     configured broker so a bad value can't fan out.
+   - **S2c-3 ✅** broker container packaging + hardening: `vps/Dockerfile.broker` (multi-stage, non-root,
+     entrypoint `broker-server.js`) + `vps/docker-compose.broker.yml` for the **Proxmox** host (Link-A
+     bound to `BROKER_LAN_IP` only; read-only rootfs, `cap_drop: ALL`, `no-new-privileges`; envelope
+     cache on a named volume; required-env `:?` guards) + `vps/.env.broker.example` + README deploy
+     section. **#4** `brokerConfig` fails closed on a group/other-accessible `BROKER_TLS_KEY` (require
+     0600). **#6** a **loopback-only** (`127.0.0.1`) health endpoint (`brokerHealth`, default port 9090,
+     never published) drives the container `HEALTHCHECK`; Link-A stays the only LAN surface. The scan
+     `code`/keys/bearer never appear in the health payload.
+   - **Decisions (locked 2026-08-24):** (a) broker mTLS material is loaded from **file paths**
+     (`BROKER_TLS_CERT`/`BROKER_TLS_KEY`/`BROKER_CA_ROOT`, internal-CA-issued, mounted — never in the
+     image); (b) **the app builds** per-broker×door envelopes (`buildDoorEnvelope`, re-keyed with the
+     target `brokerIndexKey`) and pushes to the **cloud** socket-server, which **relays them down each
+     broker's WSS uplink** (mirrors the existing `pushAllowlist`); (c) **Link-B is `wss://` with
+     verified-TLS-server-auth + a broker bearer** (`CLOUD_UPLINK_URL` + `BROKER_UPLINK_SECRET`) — this
+     is NOT mTLS. `brokerConfig` enforces only the `wss://` *scheme*; **S2c must enforce cloud cert
+     validation** (`rejectUnauthorized: true` + pin the cloud CA — never disable it), send the bearer
+     only post-TLS, and compare it constant-time. That server-auth is the load-bearing part — an online
+     grant has no signature backstop, so a MITM on an unvalidated uplink could forge grants (the
+     dominant rung-1 control, #151). Upgrading Link-B to full mTLS (reuse the broker's cert) is a
+     stronger option, not a blocker.
+3. **S3 — Internal CA + provisioning.** Sub-sliced during build; tooling lives in `lab-site/the-lab/vps/pki/`.
+   - **S3a ✅** internal CA + issuance (`vps/pki/door-ca.sh` + `derive-index-key.mjs`): `init-ca`,
+     `issue-broker` (Ed25519 server cert + `brokerIndexKey` + uplink bearer), `issue-edge` (client cert +
+     `edgeIndexKey`, appends the `doorId → {edgeDeviceId, brokerId}` registry). Index keys are derived by
+     **reusing the cloud's `recipientIndexKey`** (byte-parity, no HKDF reimpl — golden-vector tested);
+     openssl mints X.509 only. All private keys `0600` under `umask 077`, never overwritten; the master
+     `DOOR_CARD_INDEX_KEY` is env-only. New CI step shellchecks `vps/pki/*.sh` + runs `door-ca.test.sh`
+     (real openssl+node). Outputs wire straight into the S2c-3 broker compose + the cloud
+     `BROKER_UPLINK_SECRETS`/`BROKER_DOOR_MAP` (see `vps/pki/README.md`).
+   - **S3b ✅** broker-side `edgeId` **deny-list** (F7): `vps/lib/brokerDenylist.js` (mtime-gated reload,
+     fail-safe — missing=no revocations, malformed=keep-last-good+alert) + `brokerConfig.edgeDenylistPath`
+     (`BROKER_EDGE_DENYLIST`, optional) + the Link-A listener refuses a deny-listed CN (`edge.denied`
+     audit, socket dropped before any door processing) even though its cert chains to the CA. Revocation
+     takes effect on the edge's next connection — no CA re-issue, no broker restart. JSON-array or
+     newline CN file; mounted at `/certs/edge-denylist.json` in the broker compose.
+   - **S3c ✅** master-rotation → fleet-re-key **runbook** (`docs/runbooks/door-fleet-rekey.md`): rotate
+     `DOOR_CARD_INDEX_KEY`, re-derive every broker/edge index key (`derive-index-key.mjs`), switch the
+     cloud to new-keyed envelopes, re-provision recipients — **online-covered** (offline fails secure
+     during the gap; a single-master/no-key-version design has an inherent offline window, so rotate with
+     the uplink healthy). Documents the urgent-compromise variant, verification, fail-secure rollback, and
+     the future zero-gap enhancement (key-version tag + old/new overlap). Cert rotation stays separate
+     (S3a `door-ca.sh` + S3b deny-list).
+4. **S4 — Edge firmware (`pi-zero` edge role).** Sub-sliced during build.
+   - **S4a ✅** the rung-3 **offline-decision core** (`vps/firmware/pi-zero/edge/`, Python/`cryptography`):
+     `canonical` (byte-parity with the JS signer, F3), `crypto` (Ed25519 `verify_envelope`, `cred_hash`
+     re-keyed HMAC, `derive_index_key`), `windows` (port of broker `inWindow`), `decide_offline`
+     (deny-by-default: verify → `doorId`-bind F2 → anti-rollback `version>hwm` F5 → TTL → `edgeIndexKey`
+     credHash match → window, + a **clock-floor** gate F4 — unsynced clock denies). Cross-language parity
+     locked to **JS golden vectors** (`edge/tests/goldens.json`, generated by the real cloud JS) + full
+     fail-secure matrix; new `edge-firmware` CI job runs pytest. Pure/hardware-free.
+   - **S4b-a ✅** the edge **runtime security cores** (filesystem-backed, hardware-free): `store.py`
+     `EnvelopeStore` (atomic anti-rollback — verify + `version>hwm` under a per-door lock, temp+replace,
+     file-as-truth; mirrors broker `setEnvelope` F-1/F-2, feeds `decide_offline`'s `high_water`),
+     `audit.py` `AuditLog` (hash-chained store-and-forward, per-boot `seq`+`bootEpoch`, `verify_chain`
+     tamper-evidence, `pending`/`ack` cursor, no PII — F6), `clock.py` `TimeSource` (persisted monotonic
+     floor — F4; backwards/unset/non-finite clock → not synced/deny, floor never lowered). 16 pytest
+     (37 total in the edge suite). Closes the S4a #151 carry-forwards (atomic hwm, finite/trusted clock).
+   - **S4b-2 ✅** the runtime **composition** (`runtime.py` `EdgeRuntime.handle_scan` + `protocol.py`):
+     scan → decide → actuate → audit over injected collaborators. Edge ladder = ask the broker over the
+     mTLS uplink first, honor its **answer incl. DENY** (authoritative, no offline second-chance), fall to
+     rung-3 `decide_offline` **only when the broker is unreachable**; never fail open (no grant ⇒ no
+     pulse); code never logged/audited. `new_boot_epoch()` = CSPRNG per-boot UUID (obligation). Client
+     Link-A framing (`build_scan_msg` requestId+nonce; `parse_result` deny-by-default). 12 tests
+     (53 edge-suite): online-grant/deny-authoritative, offline-on-unreachable/exception, no-envelope,
+     wrong-code, unsynced-clock, relay-failure-logged, no-PII.
+   - **S4b-3** (next): the concrete **hardware/transport adapters + entry point** — NFC reader, strike-relay
+     GPIO, the mTLS socket `uplink` (using `protocol.py`), fail-secure supervisor (reconnect/backoff,
+     heartbeat, `WatchdogSec`, OTA poll/commit), `run_edge.py` main, audit compaction/rotation +
+     append-failure policy, systemd unit. Pin `cryptography` exact+hash on device; never log the code.
+     Bench one edge.
+5. **S5 — HA.** Second broker container + keepalived **VIP**, shared `brokerId`; failover drill (kill
+   active → doors keep working via rung 3, VIP moves, no split-brain double-grant).
+   - **S5-a ✅** cloud multi-member registry (`brokerUplink.makeBrokerRegistry` — brokerId → SET of member
+     connections): the cloud tracks BOTH the active + standby uplinks (they share one brokerId, §9) and
+     `relayEnvelopes` pushes every envelope to **all** live members, so the standby's rung-2 cache never
+     goes stale (a revocation reaches both). Close removes only the dropped member. 12 tests
+     (712 unit-suite): both-members-tracked, relay-to-all, closed-member-skipped, one-close-leaves-other.
+   - **S5-b ✅** infra + drill: `vps/keepalived/keepalived.conf.example` (active/standby VRRP VIP,
+     `nopreempt`) + `check-broker.sh` (track_script → FAULT releases the VIP when the local broker's
+     loopback health fails) + `docker-compose.broker.yml` HA deploy notes (same creds on both hosts) +
+     `docs/runbooks/door-broker-ha-failover.md` (drill: standby serves, edge rung-3 covers the blip, no
+     split-brain double-grant, `nopreempt` rejoin-as-standby). Bench-drill on two hosts before relying on it.
+6. **S6 — Cloud audit anchor + admin UI.** Server-side seq/chain-tip **anchor** + dedup/gap-alert; the
+   door-access admin UI shows tier + last status + the `edgeDeviceId`/`brokerId` bindings.
+   - **S6-a ✅** the audit-anchor core (`src/plugins/door-access-controller/auditAnchor.js`,
+     jest-testable): `ingestAuditBatch` recomputes each record's hash with the SAME canonical+SHA-256
+     contract as the edge (`audit.py`, cross-language byte-parity — golden-locked), verifies internal
+     linkage, then checks continuity vs a per-edge **anchor** `{bootEpoch,lastSeq,chainTip}` the cloud
+     controls (an edge can't rewrite it): dedup `(edgeId,bootEpoch,seq)`, and **alert** on GAP, chain-
+     FORK/bad-hash/broken-link/mixed-boot (TAMPER), TAIL_TRUNCATION (edge tip regressed below the anchor),
+     or BOOT_TRANSITION (reflash). **Fail-closed anchor discipline** (SEC review): the anchor advances
+     ONLY to a hash+link-verified, strictly-forward tip that links to the cloud's `chainTip` — any
+     tamper/fork/gap/tail-truncation alerts, accepts nothing, and leaves the trusted anchor untouched
+     (never rewound, never advanced across a gap). **Per-boot retention** keeps `(edgeId,bootEpoch)`
+     anchors so a reflash doesn't wipe a prior boot's final anchor and an old-boot replay is checked
+     against its retained anchor. Closes the S4b-a **F6** + S5 tail-truncation deferrals. 13 tests incl.
+     JS↔Py golden parity + the fail-closed matrix. (Distinguishing a genuine reflash from a spoofed new
+     boot, and authenticating the anchor genesis, need **S6-b** edge auth — BOOT_TRANSITION is a
+     security alert to correlate with an authorized reflash.)
+   - **S6-b1 ✅** the cloud ingest side — `Service.ingestEdgeAudit` runs the fail-closed
+     `ingestAuditBatch` check against a Mongo per-edge anchor (`Model.getAuditAnchor`/`casAuditAnchor`,
+     optimistic-concurrency CAS + retry, no lost update), boundary-validates the batch (safe `edgeId`,
+     `MAX_AUDIT_BATCH=1000` cap, per-record type check), and routes every tamper/gap/fork/truncation
+     alert to `auditLog` at its severity (alerts carry seq/reason only, never a scan code). Reached
+     via the internal `POST /api/internal/broker-audit` route (same `INTERNAL_API_SECRET` bearer as
+     `broker-resync`; 400/409/200). 16 tests (ingest boundary + CAS-retry + alert-routing matrix;
+     route auth/400/409/200/500-no-leak).
+   - **S6-b-a ✅** the **edge-auth gate** (#151): each edge holds a dedicated Ed25519 **audit-signing**
+     key and signs its batch (`canonical({edgeId,records})`, firmware `crypto.sign_audit_batch`); the
+     cloud verifies it (`edgeAuditSig.verifyEdgeBatchSig`) against the edge's **registered** public key
+     (`Model.getEdgeSigningKey`/`registerEdgeSigningKey`, coll `doorAccessEdgeKeys`) **before** the anchor
+     check — so a relaying broker (or the internal bearer alone) can neither forge nor suppress an edge's
+     audit, and the records are non-repudiable. Fail-closed: an **unregistered** edge or a bad/missing
+     signature → rejected + alerted, nothing read or persisted (registration is out-of-band admin/genesis,
+     **not** TOFU). JS↔Py signature byte-parity via a golden vector (Py signs → JS verifies the exact
+     bytes). +9 tests. (Genesis/reflash key provisioning + the admin register path = S6-b-a2.)
+   - **S6-b-a2 ✅** key **provisioning + registration** (genesis/reflash binding): edge
+     `crypto.generate_audit_keypair` + the `edge.provision_audit_key` CLI generate the device keypair
+     (private key written 0600, only the **public** key printed; refuses silent overwrite — a reflash is
+     deliberate); the admin registers it via the gated `edgeKey.register` action
+     (`Service.adminRegisterEdgeKey`, admin-only, validates a real Ed25519 SPKI, audits genesis vs.
+     **rotation** by key **fingerprint** — never the raw key), with `edgeKey.list` /
+     `Service.adminListEdgeKeys` surfacing registered edges (id + fingerprint + updatedAt only). +11
+     tests. **An edge can now be registered** so the transport slice below has a live, authenticated path.
+   - **S6-b-b ✅** the **broker audit relay** (Link-A accept + Link-B relay): `brokerProtocol` handles an
+     edge `{t:"audit", batchId, records, signature}` — the broker attaches the connection's **cert-CN
+     `edgeId`** (never the message's), caps the batch (≤1000, CWE-400), relays it up Link-B opaquely
+     (`relayAudit` → `{t:"audit", id, edgeId, records, signature}`, correlated like `authz`/`authz_result`)
+     and returns the cloud's verdict as `{t:"audit_ack", batchId, status}`. The broker holds **no audit
+     state** and never inspects/logs `records` (may be Restricted) or verifies the signature (no edge
+     pubkeys — the cloud does both). **Design note — deliberately NO broker up-queue:** the *edge* is the
+     durable store-and-forward buffer (`audit.py` ack-cursor), so end-to-end acking keeps the broker a
+     stateless pass-through — `deferred` (cloud down/timeout/uplink-drain) means the edge keeps the
+     records and retries; only an explicit cloud `accepted`/`rejected` advances it. Fail-secure: a bogus
+     verdict coerces to `deferred`, never a false accept. +7 tests. (The cloud `audit` receive branch +
+     the app fetch caller are S6-b-c — until then every relay resolves `deferred`.)
+   - **S6-b-c1 ✅** the **cloud receive** half: `makeUplinkConnection` gains an `audit` branch — an
+     AUTHENTICATED broker's `{t:"audit", id, edgeId, records, signature}` is forwarded to the app via a
+     new `brokerAudit.makeRequestBrokerAudit` fetch caller (mirrors `brokerResync.js`: `POST
+     /api/internal/broker-audit`, `INTERNAL_API_SECRET` bearer, timeout) and the verdict relayed back as
+     `{t:"audit_result", id, status}`. HTTP→verdict: 200→`accepted`, 400→`rejected` (bad-sig/unregistered/
+     malformed — retry won't help), 409/5xx/network/timeout/not-configured→`deferred` (edge keeps +
+     retries). Deny-by-default (audit before auth → `deferred`), fail-secure (throw/bogus → `deferred`,
+     never a false accept); the socket-server never inspects/logs `records` (Restricted) or verifies the
+     signature (the app does, S6-b-a). **Also folds the S6-b-b Lows**: the broker's audit relay is now
+     **non-blocking** (never head-of-line-blocks a following `scan` — L1) and its in-flight relays are
+     **capped** (`MAX_INFLIGHT_AUDIT=64` → over-cap `deferred`, CWE-400 — L2). +9 tests.
+   - **S6-b-c2 ✅** the **edge flush** — `protocol.build_audit_msg(edge_id, signing_key, records)` builds
+     the signed `{t:"audit", batchId, records, signature}` line (edgeId NOT in the message — the broker
+     attaches its cert id; it IS bound into the signature; `batchId` = `bootEpoch:firstSeq-lastSeq`,
+     deterministic per window) + `parse_audit_ack` (fail-secure: unknown status → None). `EdgeRuntime`
+     gains `edge_id`/`audit_signing_key` and `flush_audit()`: read `audit.pending()` → sign → `uplink.
+     send_audit(line)` → advance the cursor (`audit.ack`) **only** on an `accepted` whose `batchId`
+     matches; keep the records on `deferred`/`rejected`/unreachable/stale-ack/unprovisioned (NEVER drop
+     unuploaded audit; `rejected` = registration/sig problem → log + don't hot-loop). Idempotent (cloud
+     dedups by `(edgeId,bootEpoch,seq)`), safe on a timer; records carry no PII. +9 tests. **The audit
+     loop is now closed end to end** (edge → broker → cloud → anchor). The concrete `send_audit` transport
+     + the timer that calls `flush_audit` are the S4b-3 supervisor (bench-tested on a Pi).
+   - **S6-b2 ✅** the door-access **admin UI — edge audit keys**: the admin page
+     (`dashboard/admin/door-access-controller`) gains an "Edge audit keys" section that lists registered
+     edges (id + key **fingerprint** + registered-at, from `adminOverview.edges` — never the raw key) and
+     a register/rotate form wired to the `edgeKey.register` action (with a confirm on rotation). Closes
+     the S6-b-a2 "admin register path/UI" obligation. WCAG: `aria-labelledby` section, `scope="col"`
+     headers, labeled inputs (`Field` + a labeled textarea), the existing `role="status"` `aria-live`
+     region for outcomes, native focusable controls. +1 test. (Automated a11y via ESLint
+     `next/core-web-vitals` jsx-a11y; a manual keyboard/SR pass is a pre-ship check.)
+   - **S6-b3 ✅** the **edge status / binding** dashboard. The telemetry is derived from what already
+     flows through audit ingest: `Service.ingestEdgeAudit` stamps a best-effort `doorAccessEdgeStatus` doc
+     (`lastSeenAt`, `lastBrokerId`, `bootEpoch`, `lastSeq`, `lastMode`) on each **authenticated** batch —
+     `brokerId` is threaded from the authed Link-B connection (socket-server → `brokerAudit` → route →
+     service) as the edge↔broker binding. NON-security (display only, never gates a decision), no PII
+     (`lastMode` is the decision path, not the code), and a status-write failure never fails the ingest.
+     `adminOverview.edges` merges it in and the admin UI shows Last seen / Via broker / Last mode columns
+     (scrollable). +7 tests. (A true "tier" label and offline/degraded detection beyond `lastMode` would
+     need heartbeats — out of scope; `lastSeenAt` staleness is the liveness signal for now.)
+7. **S7 — Parallel-run + cut-over (§10).** Run the full 4-rung ladder + HA drill on one door, then roll
+   out door-by-door; retire the Pico units (reversible).
+   - **S7 (non-hardware) ✅** the executable **cut-over runbook** — `docs/runbooks/door-wifi-cutover.md`
+     covers §10's six steps (broker HA standup, CA + cert issuance, edge provisioning + audit-key
+     registration, the 4-rung parallel-run gate, the HA drill, door-by-door rollout + Pico retire) with
+     real commands (`door-ca.sh`, `provision_audit_key`, admin UI, broker health, denylist) and a
+     per-door rollback (re-flash / rebind / re-point the VIP). The physical rollout itself is on-site +
+     human-gated (`@rules/workflow-gated-actions.md`); the runbook's "Last validated" is stamped at the
+     first game-day (step 4 is the drill).
+
+## Changelog
+| Date | Change | Author |
+|------|--------|--------|
+| 2026-08-25 | **S4b-3 (non-hardware core) ✅ edge supervisor scheduling policy: `edge/supervisor.py` — pure `next_backoff_ms` (capped exp reconnect backoff, overflow-safe), `due_for_flush` (fail-safe on a bad clock), and `plan_tick` (disconnected→reconnect+backoff, connected→flush iff pending+due, sleep-until-due floored to min so it never busy-spins). Decides scheduling only — no I/O, no access decision, no crypto. +9 tests. The blocking loop + NFC/GPIO/mTLS-socket adapters that wire it remain S4b-3 bench (hardware).** | app dev |
+| 2026-08-23 | Initial proposed design (brokered via cloud) | app dev |
+| 2026-08-23 | Revised for offline-VPS-down + keep-Pico | app dev |
+| 2026-08-23 | Freeze Pico, two Pi Zero W (broker+reader), strike on broker, reader dials broker | app dev |
+| 2026-08-23 | Add §8 multi-door (one broker board backs a door cluster) | app dev |
+| 2026-08-23 | **Retopology: three tiers — cloud / on-site HA broker CONTAINER (Proxmox) / edge nodes; strike moves to the edge; hybrid defense-in-depth 4-rung ladder; mTLS internal CA; broker HA; firmware = one edge role** | app dev |
+| 2026-08-23 | **Fold SEC-review F1–F6: per-door signed envelopes (F2), per-edge HKDF index keys (F1), new nested canonicalizer + golden vectors (F3), edge RTC + monotonic clock floor (F4), envelope anti-rollback (F5), hash-chained store-and-forward audit + §3f (F6). F7–F11 deferred to tracked issues.** | app dev |
+| 2026-08-23 | **Fold SEC re-review (round 2): broker-keyed rung-2 envelope (F1 broker gap), strictly-monotonic `version` (F5 no-op fix), `doorId`-binding (F2), cloud server-side audit anchor + boot-epoch (F6), canonicalizer byte-rules (F3), entropy-floor decision (§5), F7 revocation mechanism promoted; fixed the §7 "slice" contradiction; +7 tests.** | app dev |
+| 2026-08-23 | **Round-3 SEC re-review → APPROVE (converged). Fold 6 Low items: Buffer-not-String zeroization, broker-key site-wide blast-radius honesty + §3e protection, per-`doorId` anti-rollback high-water, CSPRNG-issued entropy floor, cloud-authorized bootEpoch reset, HA shares one `brokerId` (2 envelope copies). +tests 9/11/12/13 tightened, +test 14.** | app dev |
+| 2026-08-23 | **Owner-accepted: promote `status: current`; §11 open questions → binding decisions (active/standby HA, 24h/72h TTLs, dedicated Proxmox host, scripted CA provisioning + master-rotation re-key, ≥7-day audit buffer, Pi Zero W + RTC HAT, ≥128-bit CSPRNG floor + NFC accepted-risk, F7 ships in first rollout); add §13 implementation slice plan (S1–S7).** | app dev |
+| 2026-08-24 | **Build progress + S2 sub-slicing: S1/S2a/S2b-1 landed; add the `brokerConfig` fail-closed loader (S2b prep). Lock S2 transport decisions — cert material by file path, app-builds→cloud-relays envelopes, `wss://` mutually-authed Link-B — and fold the S2b-2 transport (mTLS Link-A listener + Link-B uplink + cloud sender) into S2c so it's built + integration-tested with the container.** | app dev |
+| 2026-08-25 | **S7 (non-hardware) ✅ cut-over runbook: `docs/runbooks/door-wifi-cutover.md` — executable §10 procedure (broker HA, CA/cert issuance, edge provision + audit-key register, 4-rung parallel-run gate, HA drill, door-by-door rollout + Pico retire) with real commands + per-door rollback (re-flash/rebind/re-point VIP). Physical rollout is on-site + human-gated; runbook stamped at first game-day.** | app dev |
+| 2026-08-25 | **S6-b3 ✅ edge status/binding dashboard: `ingestEdgeAudit` stamps a best-effort `doorAccessEdgeStatus` doc (lastSeenAt/lastBrokerId/bootEpoch/lastSeq/lastMode) on each AUTHENTICATED batch; `brokerId` threaded from the authed Link-B conn (socket-server→brokerAudit→route→service) = edge↔broker binding. Non-security/display-only, no PII, status-write failure never fails ingest. `adminOverview.edges` merges it; admin UI adds Last seen/Via broker/Last mode columns. +7 tests. Heartbeat-based tier/offline detection out of scope (lastSeenAt staleness = liveness for now).** | app dev |
+| 2026-08-25 | **S6-b2 ✅ admin UI — edge audit keys: admin page gains an "Edge audit keys" section (list registered edges = id+fingerprint+registered-at from `adminOverview.edges`, never the raw key) + a register/rotate form → `edgeKey.register` (confirm on rotation). Closes the S6-b-a2 admin-register UI obligation. WCAG: aria-labelledby/scope=col/labeled inputs/aria-live status; ESLint jsx-a11y clean. +1 test. Tier/last-status/edge↔broker-binding dashboard split out as S6-b3 (needs a status-ingest path — app stores no last-seen/tier; broker map is a file on the broker).** | app dev |
+| 2026-08-25 | **S6-b-c2 ✅ edge flush (audit loop CLOSED end-to-end): `protocol.build_audit_msg` (signed `{t:"audit",batchId,records,signature}`; edgeId bound in sig, not in msg; batchId=`bootEpoch:first-last`) + `parse_audit_ack` (fail-secure unknown→None). `EdgeRuntime.flush_audit()`: pending→sign→`uplink.send_audit`→`audit.ack` ONLY on accepted+matching-batchId; keep on deferred/rejected/unreachable/stale/unprovisioned (never drop; rejected→log, no hot-loop). Idempotent, no PII. +9 tests. send_audit transport + flush timer = S4b-3 supervisor.** | app dev |
+| 2026-08-25 | **S6-b-c1 ✅ cloud receive + fetch caller: `makeUplinkConnection` `audit` branch → `brokerAudit.makeRequestBrokerAudit` (POST `/api/internal/broker-audit`, bearer, timeout) → relays `{t:"audit_result",id,status}`. HTTP→verdict 200=accepted/400=rejected/409+5xx+net=deferred. Deny-by-default (pre-auth→deferred), fail-secure (throw/bogus→deferred); socket-server never inspects/logs records or verifies sig. Folds S6-b-b Lows: broker audit relay now NON-BLOCKING (no HOL-block on scans, L1) + in-flight cap `MAX_INFLIGHT_AUDIT=64` (L2, CWE-400). +9 tests.** | app dev |
+| 2026-08-25 | **S6-b-b ✅ broker audit relay: `brokerProtocol` `audit` case → broker attaches cert-CN `edgeId` (never the msg), caps ≤1000, relays opaquely up Link-B (`relayAudit`, `authz`-style correlation) → returns cloud verdict as `{t:"audit_ack",batchId,status}`. Deliberately NO broker up-queue — edge (`audit.py`) is the durable buffer; end-to-end ack, `deferred`=cloud-down→edge keeps+retries, bogus verdict→deferred (never false accept). Broker holds no audit state, never logs/verifies records. +7 tests.** | app dev |
+| 2026-08-25 | **S6-b-a2 ✅ key provisioning + registration (genesis/reflash binding): edge `generate_audit_keypair` + `edge.provision_audit_key` CLI (priv 0600, prints only pub, refuses silent overwrite); gated admin `edgeKey.register` (`Service.adminRegisterEdgeKey`, admin-only, validates Ed25519 SPKI, audits genesis vs rotation by fingerprint — never the raw key) + `edgeKey.list`/`adminListEdgeKeys` (id+fingerprint+updatedAt only). An edge can now be registered → transport slice has a live authenticated path. +11 tests.** | app dev |
+| 2026-08-25 | **S6-b-a ✅ edge-auth gate (#151): dedicated per-edge Ed25519 audit-signing key — edge signs `canonical({edgeId,records})` (`crypto.sign_audit_batch`), cloud verifies (`edgeAuditSig.verifyEdgeBatchSig`) against a REGISTERED pubkey (`Model.getEdgeSigningKey`/`registerEdgeSigningKey`, coll `doorAccessEdgeKeys`) BEFORE the anchor check → a relaying broker can't forge/suppress audit; non-repudiation. Fail-closed on unregistered-edge/bad-signature (no TOFU). JS↔Py golden signature parity. +9 tests. Genesis provisioning + admin register = S6-b-a2.** | app dev |
+| 2026-08-25 | **S6-b1 ✅ cloud audit ingest: `Service.ingestEdgeAudit` runs the fail-closed anchor check against a Mongo per-edge anchor (`getAuditAnchor`/`casAuditAnchor` optimistic-concurrency CAS + retry), boundary-validates the batch (safe `edgeId`, 1000-record cap, per-record type check), routes alerts to `auditLog` at severity (no scan code), reached via internal `POST /api/internal/broker-audit` (bearer; 400/409/200). +16 tests. S6-b remainder = transport wiring + S6-b2 admin UI.** | app dev |

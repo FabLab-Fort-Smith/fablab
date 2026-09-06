@@ -6,6 +6,7 @@ import {
   getOrder,
 } from "@/lib/square";
 import { db } from "@/lib/database";
+import { auditLog } from "@/lib/audit";
 import { v4 as uuidv4 } from "uuid";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -298,6 +299,7 @@ export async function POST(request) {
       },
     });
 
+    auditLog("admin.catalog.plan.create", { actor: session.user.userID, target: result.catalogObject?.id, name, outcome: "success" });
     return NextResponse.json({ success: true, planId: result.catalogObject?.id }, { status: 201 });
   } catch (error) {
     console.error("❌ Error creating plan:", error);
@@ -319,16 +321,19 @@ export async function PUT(request) {
 
     if (restore) {
       await unsetHiddenPlanId(planId);
+      auditLog("admin.catalog.plan.restore", { actor: session.user.userID, target: planId, outcome: "success" });
       return NextResponse.json({ success: true, restored: true }, { status: 200 });
     }
 
     if (markLegacy) {
       await setLegacyPlanId(planId);
+      auditLog("admin.catalog.plan.legacy", { actor: session.user.userID, target: planId, legacy: true, outcome: "success" });
       return NextResponse.json({ success: true, legacy: true }, { status: 200 });
     }
 
     if (unmarkLegacy) {
       await unsetLegacyPlanId(planId);
+      auditLog("admin.catalog.plan.legacy", { actor: session.user.userID, target: planId, legacy: false, outcome: "success" });
       return NextResponse.json({ success: true, legacy: false }, { status: 200 });
     }
 
@@ -351,14 +356,16 @@ export async function PUT(request) {
         if (upsertResult.errors?.length) {
           // Square blocked removal — hide it locally instead
           await setHiddenVariationId(removeVariationId);
+          auditLog("admin.catalog.plan.variation.remove", { actor: session.user.userID, target: planId, variationId: removeVariationId, mode: "hidden", outcome: "success" });
           return NextResponse.json({ success: true, hidden: true, note: "Square blocked deletion (subscription history). Variation hidden from member selection." }, { status: 200 });
         }
+        auditLog("admin.catalog.plan.variation.remove", { actor: session.user.userID, target: planId, variationId: removeVariationId, mode: "removed", outcome: "success" });
         return NextResponse.json({ success: true, variationRemoved: true }, { status: 200 });
       } catch (squareErr) {
-        const msg = squareErr?.errors?.[0]?.detail || squareErr?.message || "";
-        console.warn("⚠️ Square blocked variation removal, hiding locally:", msg);
+        console.warn("⚠️ Square blocked variation removal, hiding locally:", squareErr?.errors?.[0]?.detail || squareErr?.message);
         // Fall back to hiding locally (same pattern as archived plans)
         await setHiddenVariationId(removeVariationId);
+        auditLog("admin.catalog.plan.variation.remove", { actor: session.user.userID, target: planId, variationId: removeVariationId, mode: "hidden", outcome: "success" });
         return NextResponse.json({ success: true, hidden: true, note: "Square blocked deletion (subscription history). Variation hidden from member selection." }, { status: 200 });
       }
     }
@@ -424,6 +431,7 @@ export async function PUT(request) {
           },
         },
       });
+      auditLog("admin.catalog.plan.update", { actor: session.user.userID, target: result.catalogObject?.id, outcome: "success" });
       return NextResponse.json({ success: true, planId: result.catalogObject?.id }, { status: 200 });
     } catch (squareErr) {
       const msg = squareErr?.errors?.[0]?.detail || squareErr?.message || "Square rejected the update.";
@@ -431,9 +439,10 @@ export async function PUT(request) {
       return NextResponse.json({ error: msg }, { status: 400 });
     }
   } catch (error) {
-    const msg = error?.errors?.[0]?.detail || error?.message || "Failed to update plan.";
-    console.error("❌ Error updating plan:", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // Internal (non-Square-business-rule) failure — log the detail server-side, return a generic 500
+    // so Square/internal error text isn't leaked to the client (SEC #186 carry-in).
+    console.error("❌ Error updating plan:", error?.errors?.[0]?.detail || error?.message);
+    return NextResponse.json({ error: "Failed to update plan." }, { status: 500 });
   }
 }
 
@@ -462,16 +471,17 @@ export async function PATCH(request) {
       // Square queues the swap for the next billing cycle — find the pending action's effective date
       const pendingAction = (swapResult.subscription?.actions || []).find(a => a.type === "SWAP_PLAN");
       const effectiveDate = pendingAction?.effectiveDate || swapResult.subscription?.chargedThroughDate || null;
+      auditLog("admin.catalog.plan.subscription", { actor: session.user.userID, action, subscriptionId, pending: true, outcome: "success" });
       return NextResponse.json({ success: true, pending: true, effectiveDate }, { status: 200 });
     } else {
       return NextResponse.json({ error: "Invalid action. Use pause, resume, cancel, or migrate." }, { status: 400 });
     }
 
+    auditLog("admin.catalog.plan.subscription", { actor: session.user.userID, action, subscriptionId, outcome: "success" });
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
-    const msg = error?.errors?.[0]?.detail || "Failed to update subscription.";
-    console.error("❌ Subscription action error:", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("❌ Subscription action error:", error?.errors?.[0]?.detail || error?.message);
+    return NextResponse.json({ error: "Failed to update subscription." }, { status: 500 });
   }
 }
 
@@ -510,11 +520,13 @@ export async function DELETE(request) {
       if (result.errors?.length)
         throw Object.assign(new Error(result.errors[0]?.detail), { errors: result.errors });
       await unsetHiddenPlanId(planId);
+      auditLog("admin.catalog.plan.delete", { actor: session.user.userID, target: planId, cancelledCount, mode: "deleted", outcome: "success" });
       return NextResponse.json({ success: true, deleted: true, cancelledCount }, { status: 200 });
     } catch (squareErr) {
       const reason = squareErr?.errors?.[0]?.detail || squareErr?.message;
       console.warn("⚠️ Square blocked delete, hiding locally:", reason);
       await setHiddenPlanId(planId);
+      auditLog("admin.catalog.plan.delete", { actor: session.user.userID, target: planId, cancelledCount, mode: "hidden", outcome: "success" });
       return NextResponse.json({
         success: true, hidden: true, cancelledCount,
         note: "Plan has active subscribers and cannot be removed from Square. Hidden from member selection.",

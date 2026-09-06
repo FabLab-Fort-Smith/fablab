@@ -156,8 +156,7 @@ export async function PATCH(request) {
         console.log(`✅ Replaced subscription ${subscriptionId} → ${newSub.id} with startDate ${startDate}`);
         return NextResponse.json({ subscription: newSub, replacedId: subscriptionId });
     } catch (err) {
-        const detail = err?.errors?.[0]?.detail || err?.message || "Square API error";
-        console.error("Failed to replace subscription:", detail);
-        return NextResponse.json({ error: detail }, { status: 502 });
+        console.error("Failed to replace subscription:", err?.errors?.[0]?.detail || err?.message);
+        return NextResponse.json({ error: "Failed to replace subscription." }, { status: 502 });
     }
 }

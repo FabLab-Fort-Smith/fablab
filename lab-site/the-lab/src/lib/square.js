@@ -219,6 +219,74 @@ export async function getPayment(paymentId) {
   return result; // { payment }
 }
 
+// ---- Refunds -------------------------------------------------------------
+// AC-1: refund a captured payment (admin). `body` = { idempotencyKey, paymentId,
+// amountMoney:{amount,currency}, reason? }. amountMoney.amount is minor units
+// (bigint under v44, number under v39) — serialize responses with bigintReplacer.
+
+export async function refundPayment(body) {
+  if (USE_V44) {
+    const c = await v44();
+    // v44 requires bigint minor-units on input (matching its bigint output). Callers build amount as a
+    // JS number; coerce here so a v44 cutover doesn't throw (SEC #180 F-2).
+    const b = body?.amountMoney?.amount != null
+      ? { ...body, amountMoney: { ...body.amountMoney, amount: BigInt(body.amountMoney.amount) } }
+      : body;
+    return c.refunds.refundPayment(b);
+  }
+  const { result } = await v39.refundsApi.refundPayment(body);
+  return result; // { refund }
+}
+
+export async function getRefund(refundId) {
+  if (USE_V44) {
+    const c = await v44();
+    return c.refunds.get({ refundId });
+  }
+  const { result } = await v39.refundsApi.getPaymentRefund(refundId);
+  return result; // { refund }
+}
+
+export async function listRefunds({ beginTime, endTime, limit } = {}) {
+  if (USE_V44) {
+    const c = await v44();
+    return { refunds: firstPage(await c.refunds.list({ beginTime, endTime, limit, sortOrder: "DESC" })) };
+  }
+  const { result } = await v39.refundsApi.listPaymentRefunds(
+    beginTime,
+    endTime,
+    undefined, // sortOrder
+    undefined, // cursor
+    undefined, // locationId
+    undefined, // status
+    undefined, // sourceType
+    limit,
+  );
+  return result; // { refunds, cursor }
+}
+
+// ---- Disputes (read) -----------------------------------------------------
+// AC-2: admin read-only view of chargebacks/disputes. Amounts are bigint under
+// v44 — serialize responses with bigintReplacer.
+
+export async function listDisputes({ cursor, states } = {}) {
+  if (USE_V44) {
+    const c = await v44();
+    return { disputes: firstPage(await c.disputes.list({ cursor, states })) };
+  }
+  const { result } = await v39.disputesApi.listDisputes(cursor, states, undefined /* locationId */);
+  return result; // { disputes, cursor }
+}
+
+export async function getDispute(disputeId) {
+  if (USE_V44) {
+    const c = await v44();
+    return c.disputes.get({ disputeId });
+  }
+  const { result } = await v39.disputesApi.retrieveDispute(disputeId);
+  return result; // { dispute }
+}
+
 // ---- Customers -----------------------------------------------------------
 
 export async function createCustomer(body) {
@@ -248,15 +316,45 @@ export async function searchCustomers(body) {
   return result; // { customers, cursor }
 }
 
-// ---- Cards ---------------------------------------------------------------
-
-export async function listCards({ customerId, cursor } = {}) {
+// AC-7: update a customer's profile fields.
+export async function updateCustomer(customerId, body) {
   if (USE_V44) {
     const c = await v44();
-    return { cards: firstPage(await c.cards.list({ customerId, cursor, sortOrder: "DESC" })) };
+    return c.customers.update({ customerId, ...body });
   }
-  const { result } = await v39.cardsApi.listCards(cursor, customerId);
-  return result; // { cards, cursor }
+  const { result } = await v39.customersApi.updateCustomer(customerId, body);
+  return result; // { customer }
+}
+
+// ---- Cards ---------------------------------------------------------------
+
+// Returns ALL of a customer's cards. The v39 path loops the cursor so callers that gate on card
+// ownership (AC-5/AC-7) see the complete set rather than only the first page (SEC #185 F-1). A page
+// cap bounds the loop defensively. (v44 is validated before enablement; prod runs v39.)
+export async function listCards({ customerId } = {}) {
+  if (USE_V44) {
+    const c = await v44();
+    return { cards: firstPage(await c.cards.list({ customerId, sortOrder: "DESC" })) };
+  }
+  const cards = [];
+  let cursor;
+  let pages = 0;
+  do {
+    const { result } = await v39.cardsApi.listCards(cursor, customerId);
+    cards.push(...(result.cards || []));
+    cursor = result.cursor;
+  } while (cursor && ++pages < 50);
+  return { cards };
+}
+
+// AC-5: disable (deactivate) a card on file. Square has no hard card delete — disable is the erase.
+export async function disableCard(cardId) {
+  if (USE_V44) {
+    const c = await v44();
+    return c.cards.disable({ cardId });
+  }
+  const { result } = await v39.cardsApi.disableCard(cardId);
+  return result; // { card }
 }
 
 // ---- Orders --------------------------------------------------------------

@@ -1,0 +1,63 @@
+{
+  "edgeIndexKey_b64": "jOOqc2R0cpvx8RizC5etY6NKNAKXb/Qry70hHvlB8vU=",
+  "code": "CODEONE",
+  "credHash": "6256b4fc17c1875ce08614fedc4fc442827318f8dba10a6203ab3ab85787ce26",
+  "payload": {
+    "doorId": "front",
+    "version": 7,
+    "issuedAt": "2026-08-25T00:00:00.000Z",
+    "expiresAt": "2026-08-26T00:00:00.000Z",
+    "tz": "America/Chicago",
+    "entryCount": 1,
+    "entries": [
+      {
+        "credHash": "6256b4fc17c1875ce08614fedc4fc442827318f8dba10a6203ab3ab85787ce26",
+        "windows": [
+          {
+            "start": "08:00",
+            "end": "18:00",
+            "days": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "canonical": "{\"doorId\":\"front\",\"entries\":[{\"credHash\":\"6256b4fc17c1875ce08614fedc4fc442827318f8dba10a6203ab3ab85787ce26\",\"windows\":[{\"days\":[1,2,3,4,5],\"end\":\"18:00\",\"start\":\"08:00\"}]}],\"entryCount\":1,\"expiresAt\":\"2026-08-26T00:00:00.000Z\",\"issuedAt\":\"2026-08-25T00:00:00.000Z\",\"tz\":\"America/Chicago\",\"version\":7}",
+  "sig_b64": "ZqfQFb6B/lvhbc0O+XLTyVhpCtr8Zo/+JAnRDbSUlC+jOCss7uLdjAMS1zQipQuCIqzSpCqLHPmLtPMa+YJZCg==",
+  "verifyKey_spki_b64": "MCowBQYDK2VwAyEA9yV0n3T2hzKCEMDZrRWQDxSLHNTpMbNgY7zMt0QS+4Y=",
+  "probe": {
+    "z": 1,
+    "a": {
+      "cafe_é": 2,
+      "b": [
+        3,
+        {
+          "d": 4,
+          "c": 5
+        }
+      ]
+    },
+    "mixed": "café ☕",
+    "nested": {
+      "y": true,
+      "x": null
+    }
+  },
+  "probe_canonical": "{\"a\":{\"b\":[3,{\"c\":5,\"d\":4}],\"cafe_é\":2},\"mixed\":\"café ☕\",\"nested\":{\"x\":null,\"y\":true},\"z\":1}",
+  "auditSign": {
+    "priv_pkcs8_b64": "MC4CAQAwBQYDK2VwBCIEIALquWY/46emIDXcAicYHJaTlom9lvAzltTQhb00C+g0",
+    "pub_spki_b64": "MCowBQYDK2VwAyEA3xiHh6m1l34Uel0nPYxtRscqmJoWxEAMLna67JVfF+Q=",
+    "edgeId": "edge-1",
+    "records": [
+      { "prev": "", "bootEpoch": "b", "seq": 0, "ts": 1000, "event": { "doorId": "front", "granted": true, "reason": "granted", "mode": "offline" }, "hash": "H0" },
+      { "prev": "H0", "bootEpoch": "b", "seq": 1, "ts": 1001, "event": { "doorId": "front", "granted": false, "reason": "no-window", "mode": "offline" }, "hash": "H1" }
+    ],
+    "sig_b64": "a/HhnoAOMXx1DzXehOnYtHtYcfPFTzGMrNajJJjI8NBJ3wPq+GbPKSXZomovJHS0UOzSqG8S2SC3Ro8xu/BNBQ=="
+  }
+}

@@ -20,6 +20,8 @@ const ADMIN_LINKS = [
     { sym: '◉', label: 'membership plans', desc: 'manage square plans', path: '/dashboard/admin/plans', color: 'var(--cyan)' },
     { sym: '⟁', label: 'square txns', desc: 'payment history', path: '/dashboard/admin/square-transactions', color: 'var(--green)' },
     { sym: '%', label: 'coupons', desc: 'discount codes', path: '/dashboard/admin/coupons', color: 'var(--magenta)' },
+    { sym: '▤', label: 'products', desc: 'square catalog items', path: '/dashboard/admin/products', color: 'var(--green)' },
+    { sym: '☺', label: 'square customers', desc: 'search / edit + cards', path: '/dashboard/admin/customers', color: 'var(--cyan)' },
     { sym: '⧉', label: 'plugins', desc: 'enable / configure add-ons', path: '/dashboard/admin/plugins', color: 'var(--cyan)' },
 ];
 

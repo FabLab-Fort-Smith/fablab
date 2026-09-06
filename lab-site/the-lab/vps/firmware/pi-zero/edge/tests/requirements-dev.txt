@@ -1,0 +1,4 @@
+# Test-only deps for the edge core (CI runs pytest against edge/tests). The runtime dep
+# (cryptography) is in ../../requirements.txt.
+cryptography>=43,<44
+pytest>=8,<10
