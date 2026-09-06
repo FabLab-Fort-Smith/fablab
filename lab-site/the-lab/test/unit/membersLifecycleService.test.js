@@ -117,6 +117,28 @@ test("purge: unknown member → 404, no db work", async () => {
   expect(UserService.deleteUser).not.toHaveBeenCalled();
 });
 
+test("purge: mid-cascade failure audits outcome:partial (with completed counts) and rethrows", async () => {
+  const inst = fakeInstance();
+  // Make the transactions anonymize step throw — the delete phase has already completed by then.
+  inst.collection("transactions").updateMany.mockRejectedValue(new Error("mongo write failed"));
+  db.connect.mockResolvedValue(inst);
+  await expect(purgeMember({ userID: "u1", actor: ADMIN })).rejects.toThrow(/mongo write failed/);
+  // Irreversible op did NOT silently swallow: a partial audit was written with what completed.
+  expect(auditLog).toHaveBeenCalledWith("admin.member.purge", expect.objectContaining({ target: "u1", outcome: "partial", deleted: expect.objectContaining({ notifications: 2 }) }));
+  // The user doc was NOT deleted since the cascade aborted before it.
+  expect(UserService.deleteUser).not.toHaveBeenCalled();
+});
+
+test("purge/unlink/reset/export reject a non-string userID (NoSQL operator injection) with no db/query work", async () => {
+  const bad = { $ne: null };
+  await expect(purgeMember({ userID: bad, actor: ADMIN })).rejects.toBeInstanceOf(LifecycleValidationError);
+  await expect(unlinkProvider({ userID: bad, provider: "google", actor: ADMIN })).rejects.toBeInstanceOf(LifecycleValidationError);
+  await expect(forcePasswordReset({ userID: bad, actor: ADMIN })).rejects.toBeInstanceOf(LifecycleValidationError);
+  await expect(exportMember({ userID: bad, actor: ADMIN })).rejects.toBeInstanceOf(LifecycleValidationError);
+  expect(db.connect).not.toHaveBeenCalled();
+  expect(UserService.getUserByQuery).not.toHaveBeenCalled();
+});
+
 // ---- exportMember --------------------------------------------------------
 
 test("export: strips credentials, includes profile + related, audits", async () => {

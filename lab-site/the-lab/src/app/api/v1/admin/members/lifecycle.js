@@ -20,6 +20,15 @@ export const PROVIDERS = Object.freeze(["google", "discord"]);
 // Replaces a member's id on retained (anonymized) records so linkage is severed but the row survives.
 export const PURGE_TOMBSTONE = "deleted-member";
 
+// Erasure coverage (keep in sync when adding member-referencing collections):
+//   - Covered here: notifications, checkins, arcade_sessions, arcade_jackpot, holodeck_completions,
+//     portfolio, bounty_ideas (delete); transactions (which also stores DONATIONS — db.dbTransactions),
+//     bounties, bugs (anonymize).
+//   - Covered via the doc delete + MEMBER_DELETED: user doc, memberMailboxes, doorAccessCards.
+//   - Consciously OUT OF SCOPE: `announcements` (admin-authored, not the member's personal data);
+//     `contact_submissions` (keyed by plaintext email, not userID — separate scrub path); `repairs`
+//     (no direct member reference). Re-audit this list if a new collection stores a userID/email.
+
 /** Collections purged by DELETING every row that references the member (personal activity/content). */
 const PURGE_DELETE = Object.freeze([
   { name: "notifications", fields: ["userID"] },
@@ -104,28 +113,40 @@ export async function purgeMember({ userID, actor } = {}) {
   const deleted = {};
   const anonymized = {};
 
-  for (const c of PURGE_DELETE) {
-    const col = instance.collection(c.name);
-    const res = await col.deleteMany({ $or: c.fields.map((f) => ({ [f]: userID })) });
-    deleted[c.name] = res.deletedCount || 0;
-  }
-
-  for (const c of PURGE_ANONYMIZE) {
-    const col = instance.collection(c.name);
-    let count = 0;
-    // Null Discord PII on any row this member is part of (do this before tombstoning the id refs).
-    for (const pii of c.piiFields) {
-      await col.updateMany({ $or: c.idFields.map((f) => ({ [f]: userID })) }, { $set: { [pii]: null } });
+  // The cascade is not a single DB transaction (Mongo may be standalone, not a replica set). Every
+  // query is an idempotent equality delete/tombstone, so a purge that fails partway is SAFE TO RE-RUN.
+  // On failure we still audit what completed (outcome:"partial") so an irreversible op never fails
+  // silently without a record.
+  try {
+    for (const c of PURGE_DELETE) {
+      const col = instance.collection(c.name);
+      const res = await col.deleteMany({ $or: c.fields.map((f) => ({ [f]: userID })) });
+      deleted[c.name] = res.deletedCount || 0;
     }
-    for (const f of c.idFields) {
-      const res = await col.updateMany({ [f]: userID }, { $set: { [f]: PURGE_TOMBSTONE } });
-      count += res.modifiedCount || 0;
-    }
-    anonymized[c.name] = count;
-  }
 
-  // Hard-delete the user doc last — fires MEMBER_DELETED (mailbox + door-card plugin cleanup).
-  await UserService.deleteUser({ userID });
+    for (const c of PURGE_ANONYMIZE) {
+      const col = instance.collection(c.name);
+      let count = 0;
+      // Null Discord PII on any row this member is part of (do this before tombstoning the id refs).
+      for (const pii of c.piiFields) {
+        await col.updateMany({ $or: c.idFields.map((f) => ({ [f]: userID })) }, { $set: { [pii]: null } });
+      }
+      for (const f of c.idFields) {
+        const res = await col.updateMany({ [f]: userID }, { $set: { [f]: PURGE_TOMBSTONE } });
+        count += res.modifiedCount || 0;
+      }
+      anonymized[c.name] = count;
+    }
+
+    // Hard-delete the user doc last — fires MEMBER_DELETED (mailbox + door-card plugin cleanup).
+    await UserService.deleteUser({ userID });
+  } catch (err) {
+    auditLog("admin.member.purge", {
+      actor: actor?.userID || "admin", target: userID, deleted, anonymized,
+      outcome: "partial", error: err?.message,
+    });
+    throw err;
+  }
 
   auditLog("admin.member.purge", { actor: actor?.userID || "admin", target: userID, deleted, anonymized, outcome: "success" });
   return { userID, deleted, anonymized };
