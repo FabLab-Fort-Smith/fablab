@@ -26,16 +26,19 @@ export default function LabShell({ session, children }) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen((o) => !o);
-      } else if (e.key === 'Escape' && paletteOpen) {
-        setPaletteOpen(false);
+      } else if (e.key === 'Escape') {
+        if (paletteOpen) setPaletteOpen(false);
+        else if (sidebarOpen) setSidebarOpen(false); // keyboard close for the mobile drawer
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [paletteOpen]);
+  }, [paletteOpen, sidebarOpen]);
 
   return (
     <div className="lab-shell">
+      {/* Skip-link: first focusable element, jumps keyboard/AT users past the nav to the content. */}
+      <a href="#main-content" className="skip-link">Skip to main content</a>
       <Sidebar
         session={session}
         open={sidebarOpen}
@@ -43,9 +46,11 @@ export default function LabShell({ session, children }) {
         isMobile={isMobile}
       />
       {isMobile && (
+        // Decorative click-to-close backdrop; keyboard users close via the drawer's Close button or Escape.
         <div
           className={'lab-overlay' + (sidebarOpen ? ' open' : '')}
           onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
         />
       )}
       <div className="lab-main">
@@ -55,9 +60,9 @@ export default function LabShell({ session, children }) {
           onOpenPalette={openPalette}
         />
         <AuthMethodsNudge />
-        <div className="lab-content page-enter">
+        <main id="main-content" tabIndex={-1} className="lab-content page-enter">
           {children}
-        </div>
+        </main>
       </div>
       <CommandPalette open={paletteOpen} onClose={closePalette} />
     </div>
