@@ -6,18 +6,60 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-BACKUP_DIR="{{ backups_local_dir | default('/var/backups/fablab') }}"
-LOCAL_RETENTION_DAYS="{{ backups_local_retention_days | default(7) }}"
+# Shared plumbing: BACKUP_DIR, retention, /etc/fablab/backup.env, finalize_artifact().
+# shellcheck source=/dev/null
+. /usr/local/lib/fablab-backup-lib.sh
+
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"          # UTC, monotonic-safe naming (@rules/topic-numeric-correctness.md)
+
+# Mongo connection + the database list (roles/mongodb writes this): MONGO_BACKUP_DATABASES,
+# MONGO_ROOT_ENV, MONGO_BACKUP_NETWORK, MONGO_IMAGE. MONGODB_URI is still present for compatibility.
+# shellcheck source=/dev/null
+if [ -f /etc/fablab/mongo.env ]; then . /etc/fablab/mongo.env; fi
+
+# Per-database artifacts rather than one instance-wide blob: restore granularity matches the naming
+# schema (#107), a single database can be recovered without touching the others, and system
+# databases stay out of it. Falls back to the legacy single-URI behaviour if the list is absent.
+DATABASES="${MONGO_BACKUP_DATABASES:-}"
+if [ -n "$DATABASES" ]; then
+  # shellcheck source=/dev/null
+  . "${MONGO_ROOT_ENV:-/opt/fablab/mongodb/mongo.env}"
+  : "${MONGO_INITDB_ROOT_USERNAME:?root credentials required to dump every database}"
+  ROOT_URI="$(RU="$MONGO_INITDB_ROOT_USERNAME" RP="$MONGO_INITDB_ROOT_PASSWORD" \
+    CN="{{ mongodb_container_name | default('fablab-mongo') }}" python3 - <<'PY'
+import os, urllib.parse
+print("mongodb://%s:%s@%s:27017/?authSource=admin" % (
+    os.environ["RU"], urllib.parse.quote(os.environ["RP"], safe=""), os.environ["CN"]))
+PY
+)"
+  umask 077
+  mkdir -p "${BACKUP_DIR}"
+  rc=0
+  # IFS is $'\n\t' at the top of this script (no space), so `for DB in $DATABASES` would NOT split
+  # a space-separated list — it silently dumped with one bogus database name and still produced a
+  # non-empty archive that passed the size check. Split explicitly.
+  IFS=' ' read -r -a DB_ARRAY <<< "$DATABASES"
+  for DB in "${DB_ARRAY[@]}"; do
+    case "$DB" in ''|*[[:space:]]*) echo "ERROR: refusing suspicious database name '$DB'" >&2; rc=1; continue ;; esac
+    OUT="${BACKUP_DIR}/mongo-${DB}-${STAMP}.archive.gz"
+    # --db scopes the archive to ONE database. Without it a root URI dumps the whole instance, and
+    # restoring that splatters every other database (the bug fixed in #109).
+    docker run --rm --network "${MONGO_BACKUP_NETWORK:-fablab}" -e U="$ROOT_URI" -e D="$DB" \
+      "${MONGO_IMAGE:-mongo:8.0}" sh -c 'mongodump --uri="$U" --db="$D" --archive --gzip' > "${OUT}" 2>/dev/null || true
+    if [ ! -s "${OUT}" ]; then
+      echo "ERROR: dump of '${DB}' produced an empty archive" >&2; rm -f "${OUT}"; rc=1; continue
+    fi
+    finalize_artifact "${OUT}" "mongo-${DB}" "mongo-${DB}-*.archive.gz*" || rc=1
+  done
+  exit "$rc"
+fi
+
+# ---- legacy path: single database from MONGODB_URI (kept so an un-converged host still backs up) --
 OUT="${BACKUP_DIR}/mongo-${STAMP}.archive.gz"
 
 # Mongo connection (roles/mongodb writes this): MONGODB_URI + MONGO_BACKUP_NETWORK + MONGO_IMAGE.
 # shellcheck source=/dev/null
 if [ -f /etc/fablab/mongo.env ]; then . /etc/fablab/mongo.env; fi
-# Backup encryption + off-box config (roles/backups writes this, 0600): BACKUP_AGE_RECIPIENT,
-# RESTIC_REPOSITORY, RESTIC_PASSWORD, AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, RESTIC_KEEP_*.
-# shellcheck source=/dev/null
-if [ -f /etc/fablab/backup.env ]; then . /etc/fablab/backup.env; fi
 : "${MONGODB_URI:?MONGODB_URI must be set (roles/mongodb writes /etc/fablab/mongo.env)}"
 
 umask 077
@@ -29,42 +71,4 @@ docker run --rm --network "${MONGO_BACKUP_NETWORK:-fablab}" "${MONGO_IMAGE:-mong
   mongodump --uri="${MONGODB_URI}" --archive --gzip > "${OUT}"
 [ -s "${OUT}" ] || { echo "ERROR: dump produced an empty archive (check Mongo auth)"; rm -f "${OUT}"; exit 1; }
 
-# 2) Encrypt at rest BEFORE it leaves the box (age). The recipient is a PUBLIC key; the private
-#    identity stays OFFLINE with the maintainer, so this box cannot decrypt its own backups — a
-#    box compromise never exposes backup contents (master §5; key-to-encrypt != creds-to-access).
-ARTIFACT="${OUT}"
-if [ -n "${BACKUP_AGE_RECIPIENT:-}" ]; then
-  command -v age >/dev/null || { echo "ERROR: BACKUP_AGE_RECIPIENT set but 'age' is not installed"; exit 1; }
-  age -r "${BACKUP_AGE_RECIPIENT}" -o "${OUT}.age" "${OUT}"
-  shred -u "${OUT}" 2>/dev/null || rm -f "${OUT}"
-  ARTIFACT="${OUT}.age"
-  echo "encrypted (age): ${ARTIFACT}"
-else
-  echo "WARNING: BACKUP_AGE_RECIPIENT unset — this backup is NOT encrypted at rest on the box." >&2
-fi
-
-# 3) Ship OFF-BOX with restic (its own repo encryption + dedup + integrity + retention), so a VPS
-#    loss doesn't lose backups. restic reads RESTIC_REPOSITORY/RESTIC_PASSWORD + backend creds
-#    from the environment sourced above.
-if [ -n "${RESTIC_REPOSITORY:-}" ]; then
-  command -v restic >/dev/null || { echo "ERROR: RESTIC_REPOSITORY set but 'restic' is not installed"; exit 1; }
-  : "${RESTIC_PASSWORD:?RESTIC_PASSWORD must be set when RESTIC_REPOSITORY is set}"
-  export RESTIC_REPOSITORY RESTIC_PASSWORD
-  [ -n "${AWS_ACCESS_KEY_ID:-}" ] && export AWS_ACCESS_KEY_ID
-  [ -n "${AWS_SECRET_ACCESS_KEY:-}" ] && export AWS_SECRET_ACCESS_KEY
-  RHOST="${RESTIC_HOST:-$(hostname)}"
-  restic backup --host "${RHOST}" --tag mongo "${ARTIFACT}"
-  # Retention on the off-box repo (independent of local retention below).
-  restic forget --host "${RHOST}" --tag mongo --prune \
-    --keep-daily "${RESTIC_KEEP_DAILY:-7}" \
-    --keep-weekly "${RESTIC_KEEP_WEEKLY:-4}" \
-    --keep-monthly "${RESTIC_KEEP_MONTHLY:-6}"
-  echo "shipped off-box (restic): repo=${RESTIC_REPOSITORY} host=${RHOST}"
-else
-  echo "WARNING: RESTIC_REPOSITORY unset — backup is LOCAL-ONLY; a VPS loss loses it." >&2
-fi
-
-# 4) Local retention (keep encrypted or plaintext artifacts N days). Off-box retention is restic's.
-find "${BACKUP_DIR}" -name 'mongo-*.archive.gz*' -mtime +"${LOCAL_RETENTION_DAYS}" -delete
-
-echo "backup complete: ${ARTIFACT}"
+finalize_artifact "${OUT}" mongo 'mongo-*.archive.gz*'

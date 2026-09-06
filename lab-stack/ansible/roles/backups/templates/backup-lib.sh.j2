@@ -1,0 +1,69 @@
+# Managed by Ansible (lab-stack/ansible/roles/backups). Shared backup plumbing, sourced by every
+# /usr/local/sbin/fablab-backup-* script. NOT executable on its own.
+#
+# Why a library: the encrypt -> off-box -> prune sequence was previously inline in the mongo script.
+# Once there are three targets (mongo, object storage, Coolify) copying it would guarantee drift —
+# someone fixes retention or encryption in one place and the other two silently keep the old
+# behaviour. One implementation, one place to audit (@rules/workflow-data-lifecycle.md).
+
+BACKUP_DIR="{{ backups_local_dir | default('/var/backups/fablab') }}"
+LOCAL_RETENTION_DAYS="{{ backups_local_retention_days | default(7) }}"
+
+# Backup encryption + off-box config (rendered by roles/backups, 0600): BACKUP_AGE_RECIPIENT,
+# RESTIC_REPOSITORY, RESTIC_PASSWORD, AWS_*, RESTIC_KEEP_*.
+# shellcheck source=/dev/null
+if [ -f /etc/fablab/backup.env ]; then . /etc/fablab/backup.env; fi
+
+# finalize_artifact <plaintext-file> <restic-tag> <prune-glob>
+#
+# Encrypts the artifact at rest with age, ships it off-box with restic when configured, prunes
+# local copies, and prints what happened. Returns non-zero if the artifact is missing/empty so a
+# caller cannot "succeed" with nothing (fail closed — @rules/topic-error-handling.md).
+finalize_artifact() {
+  local out="$1" tag="$2" glob="$3" artifact="$1"
+
+  [ -s "$out" ] || { echo "ERROR: ${tag} produced an empty artifact — refusing to continue" >&2; rm -f "$out"; return 1; }
+
+  # 1) Encrypt at rest BEFORE it can leave the box. The recipient is a PUBLIC key; the private
+  #    identity lives only in the vault, so this box cannot decrypt its own backups — a box
+  #    compromise never exposes backup contents (master §5; key-to-encrypt != creds-to-access).
+  if [ -n "${BACKUP_AGE_RECIPIENT:-}" ]; then
+    command -v age >/dev/null || { echo "ERROR: BACKUP_AGE_RECIPIENT set but 'age' is not installed" >&2; return 1; }
+    age -r "${BACKUP_AGE_RECIPIENT}" -o "${out}.age" "$out"
+    shred -u "$out" 2>/dev/null || rm -f "$out"
+    artifact="${out}.age"
+    # Group-read so the off-box puller can fetch it (#90). This is ciphertext: the decryption
+    # identity lives only in the vault, never on this box or on the puller.
+    if getent group "{{ backups_pull_group | default('fablab-backup-read') }}" >/dev/null 2>&1; then
+      chgrp "{{ backups_pull_group | default('fablab-backup-read') }}" "${artifact}" && chmod 640 "${artifact}"
+    fi
+    echo "encrypted (age): ${artifact}"
+  else
+    echo "WARNING: BACKUP_AGE_RECIPIENT unset — ${tag} backup is NOT encrypted at rest on the box." >&2
+  fi
+
+  # 2) Off-box. Note the deliberate design: off-box is normally handled by a PULLER (see
+  #    docs/runbooks/backup-restore.md), so RESTIC_REPOSITORY being unset here is EXPECTED and the
+  #    warning below is informational, not a defect to "fix" by pushing from this box.
+  if [ -n "${RESTIC_REPOSITORY:-}" ]; then
+    command -v restic >/dev/null || { echo "ERROR: RESTIC_REPOSITORY set but 'restic' is not installed" >&2; return 1; }
+    : "${RESTIC_PASSWORD:?RESTIC_PASSWORD must be set when RESTIC_REPOSITORY is set}"
+    export RESTIC_REPOSITORY RESTIC_PASSWORD
+    [ -n "${AWS_ACCESS_KEY_ID:-}" ] && export AWS_ACCESS_KEY_ID
+    [ -n "${AWS_SECRET_ACCESS_KEY:-}" ] && export AWS_SECRET_ACCESS_KEY
+    local rhost="${RESTIC_HOST:-$(hostname)}"
+    restic backup --host "$rhost" --tag "$tag" "$artifact"
+    restic forget --host "$rhost" --tag "$tag" --prune \
+      --keep-daily "${RESTIC_KEEP_DAILY:-7}" \
+      --keep-weekly "${RESTIC_KEEP_WEEKLY:-4}" \
+      --keep-monthly "${RESTIC_KEEP_MONTHLY:-6}"
+    echo "shipped off-box (restic): repo=${RESTIC_REPOSITORY} host=${rhost} tag=${tag}"
+  else
+    echo "WARNING: RESTIC_REPOSITORY unset — ${tag} backup is LOCAL-ONLY; a VPS loss loses it." >&2
+  fi
+
+  # 3) Local retention. Off-box retention is restic's, above.
+  find "${BACKUP_DIR}" -maxdepth 1 -name "$glob" -mtime +"${LOCAL_RETENTION_DAYS}" -delete
+
+  echo "backup complete: ${artifact}"
+}

@@ -75,6 +75,13 @@ seaweedfs_app_actions:
 # object URLs and its CSP allows the S3 host). SeaweedFS expresses this as an identity named
 # `anonymous` with NO credentials. Granting only `Read` (never `List`) yields exactly:
 # anonymous GET 200, LIST 403, PUT 403, DELETE 403, and 403 on any other bucket — all verified.
+# A READ-ONLY identity for the backup job. A backup never needs Write or Delete, and giving it
+# the app key (or worse, admin) would mean a compromised backup cron could destroy the bucket.
+seaweedfs_backup_access_key: "fablab-backup"
+seaweedfs_backup_actions:
+  - "Read"
+  - "List"
+
 seaweedfs_anonymous_read: true
 
 # Object versioning: without it a leaked app credential can permanently erase objects; with it a

@@ -43,6 +43,13 @@ summary: Promote a validated change from staging (dev) to production (main -> ap
 > vault copy is `PROD_ENCRYPTION_KEY` in the Infrastructure collection.
 
 ## Steps — routine promotion
+> **Pre-release step (#107):** refresh staging from production first, so you are testing against
+> production-shaped data rather than drift:
+> ```bash
+> cd lab-stack && bash scripts/refresh-staging-from-production.sh --yes
+> ```
+> It anonymizes and **fails closed** — see `refresh-staging-from-production.md`.
+
 
 1. **Confirm the change is on `main` and green.** Production deploys from `main`; CI must be green
    on the merge commit (`@rules/workflow-cicd.md`).

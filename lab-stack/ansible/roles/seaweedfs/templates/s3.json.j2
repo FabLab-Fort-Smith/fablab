@@ -16,6 +16,13 @@
         { "accessKey": "{{ seaweedfs_app_access_key }}", "secretKey": "{{ seaweedfs_app_secret }}" }
       ],
       "actions": [{% for a in seaweedfs_app_actions %}"{{ a }}:{{ seaweedfs_bucket }}"{{ ", " if not loop.last }}{% endfor %}]
+    },
+    {
+      "name": "{{ seaweedfs_backup_access_key }}",
+      "credentials": [
+        { "accessKey": "{{ seaweedfs_backup_access_key }}", "secretKey": "{{ seaweedfs_backup_secret }}" }
+      ],
+      "actions": [{% for a in seaweedfs_backup_actions %}"{{ a }}:{{ seaweedfs_bucket }}"{{ ", " if not loop.last }}{% endfor %}]
     }{% if seaweedfs_anonymous_read %},
     {
       "name": "anonymous",

@@ -88,21 +88,97 @@
     - backups_restic_cat.rc | default(1) != 0
   no_log: true
 
-- name: Install backup script
+# Shared plumbing (encrypt -> off-box -> prune) lives in ONE place so the three backup jobs
+# cannot drift apart. Sourced, not executed: 0640 and no exec bit.
+- name: Install the shared backup library
   ansible.builtin.template:
-    src: backup-mongo.sh.j2
-    dest: /usr/local/sbin/fablab-backup-mongo
+    src: backup-lib.sh.j2
+    dest: /usr/local/lib/fablab-backup-lib.sh
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Install backup scripts
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
     owner: root
     group: root
     mode: "0700"
+  loop:
+    - { src: backup-mongo.sh.j2, dest: /usr/local/sbin/fablab-backup-mongo }
+    - { src: backup-objstore.sh.j2, dest: /usr/local/sbin/fablab-backup-objstore }
+    - { src: backup-coolify.sh.j2, dest: /usr/local/sbin/fablab-backup-coolify }
+  loop_control:
+    label: "{{ item.dest }}"
 
-- name: Schedule daily backup (dump -> age -> restic off-box)
+# Staggered by 20 minutes: three jobs starting together would contend for CPU/disk on a single
+# small VPS, and a slow mongodump would overlap the next job's dump.
+- name: Schedule the daily backups (dump -> age -> off-box/prune)
   ansible.builtin.cron:
-    name: fablab-mongo-backup
+    name: "{{ item.name }}"
     user: root
-    minute: "0"
+    minute: "{{ item.minute }}"
     hour: "{{ backups_schedule_hour }}"
-    job: "/usr/local/sbin/fablab-backup-mongo >> /var/log/fablab-backup.log 2>&1"
+    job: "{{ item.job }} >> /var/log/fablab-backup.log 2>&1"
+    state: "{{ 'present' if item.enabled | bool else 'absent' }}"
+  loop:
+    - name: fablab-mongo-backup
+      minute: "0"
+      job: /usr/local/sbin/fablab-backup-mongo
+      enabled: true
+    - name: fablab-objstore-backup
+      minute: "20"
+      job: /usr/local/sbin/fablab-backup-objstore
+      enabled: "{{ backups_objstore_enabled | default(true) }}"
+    - name: fablab-coolify-backup
+      minute: "40"
+      job: /usr/local/sbin/fablab-backup-coolify
+      enabled: "{{ backups_coolify_enabled | default(true) }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# --- off-box pull access: a read-only, key-restricted, ZT-only account (#90) -----------------
+- name: Ensure the artifact-read group exists
+  ansible.builtin.group:
+    name: "{{ backups_pull_group }}"
+    gid: "{{ backups_pull_gid }}"
+    system: true
+    state: present
+  when: backups_pull_enabled | bool and (backups_pull_pubkey | length > 0)
+
+- name: Create the pull account (no password; shell required for the forced command)
+  ansible.builtin.user:
+    name: "{{ backups_pull_user }}"
+    group: "{{ backups_pull_group }}"
+    home: "{{ backups_pull_home }}"
+    shell: /bin/sh
+    system: true
+    password: "!"          # locked: key-only, never a password login
+    create_home: true
+    state: present
+  when: backups_pull_enabled | bool and (backups_pull_pubkey | length > 0)
+
+# `restrict` disables port-forwarding, agent/X11 forwarding and PTY allocation; `from` pins the
+# source to the overlay; the forced command means this key can ONLY run a READ-ONLY rsync of the
+# backup directory — it cannot get a shell, write anything, or read anything else on the box.
+- name: Authorize the puller's key with a read-only forced command
+  ansible.posix.authorized_key:
+    user: "{{ backups_pull_user }}"
+    key: "{{ backups_pull_pubkey }}"
+    exclusive: true
+    key_options: 'restrict,from="{{ backups_pull_from }}",command="/usr/bin/rrsync -ro {{ backups_local_dir }}"'
+  when: backups_pull_enabled | bool and (backups_pull_pubkey | length > 0)
+
+# The directory is root-owned; the group only needs to traverse + read. Artifacts are age-encrypted,
+# so group-read exposes ciphertext only — the puller is never able to read plaintext backups.
+- name: Allow the artifact-read group to traverse the backup directory
+  ansible.builtin.file:
+    path: "{{ backups_local_dir }}"
+    state: directory
+    owner: root
+    group: "{{ backups_pull_group if (backups_pull_pubkey | length > 0) else 'root' }}"
+    mode: "{{ '0750' if (backups_pull_pubkey | length > 0) else '0700' }}"
 
 - name: Warn when backups are local-only (encryption/off-box not configured)
   ansible.builtin.debug:

@@ -39,6 +39,8 @@
       when: coolify_install | default(true)
     - role: backups     # encrypted MongoDB dumps + off-box copy + restore script
       when: backups_enabled | default(true)
+      tags: [backups]   # scope a backups-only converge (e.g. the off-box pull account) to avoid
+                        # re-running harden/sshd/ufw: `make converge-backups` — lower lockout risk
 
   post_tasks:
     - name: Reminder — manual follow-ups

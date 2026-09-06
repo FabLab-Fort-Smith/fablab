@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Managed by Ansible (lab-stack/ansible/roles/backups). Coolify configuration backup: a pg_dump of
+# its Postgres database plus /data/coolify (its source dir, .env and keys) -> encrypt (age) ->
+# off-box/prune via the shared library.
+#
+# WHY: without this, losing the VPS means rebuilding every application, environment variable and
+# deploy key by hand from memory. The app data itself is covered by the mongo + objstore jobs.
+#
+# ⚠ THIS ARTIFACT IS HIGHLY SENSITIVE: /data/coolify/source/.env holds Coolify's DB password and
+# app key, and the dir can hold deploy keys. It is only ever written age-encrypted when
+# BACKUP_AGE_RECIPIENT is set — which the library enforces by warning loudly if it is not.
+set -euo pipefail
+IFS=$'\n\t'
+
+# shellcheck source=/dev/null
+. /usr/local/lib/fablab-backup-lib.sh
+
+COOLIFY_DIR="{{ backups_coolify_dir | default('/data/coolify') }}"
+COOLIFY_DB_CONTAINER="{{ backups_coolify_db_container | default('coolify-db') }}"
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+OUT="${BACKUP_DIR}/coolify-${STAMP}.tar.gz"
+
+umask 077
+mkdir -p "${BACKUP_DIR}"
+[ -d "${COOLIFY_DIR}" ] || { echo "ERROR: ${COOLIFY_DIR} not found — is Coolify installed?" >&2; exit 1; }
+
+WORK="$(mktemp -d /tmp/coolify-backup-XXXXXX)"
+trap 'rm -rf "${WORK}"' EXIT
+
+# Postgres credentials live in Coolify's own .env (root-readable). Read them here rather than
+# duplicating them into another file — one source of truth, and nothing extra to rotate.
+DB_USER="$(sed -n 's/^DB_USERNAME=//p' "${COOLIFY_DIR}/source/.env" 2>/dev/null | head -1 | tr -d '"'"'"'')"
+DB_PASS="$(sed -n 's/^DB_PASSWORD=//p' "${COOLIFY_DIR}/source/.env" 2>/dev/null | head -1 | tr -d '"'"'"'')"
+DB_NAME="$(sed -n 's/^DB_DATABASE=//p' "${COOLIFY_DIR}/source/.env" 2>/dev/null | head -1 | tr -d '"'"'"'')"
+DB_USER="${DB_USER:-coolify}"; DB_NAME="${DB_NAME:-coolify}"
+: "${DB_PASS:?could not read DB_PASSWORD from ${COOLIFY_DIR}/source/.env}"
+
+# pg_dump inside the running container; the password goes via the environment, never argv.
+docker exec -e PGPASSWORD="${DB_PASS}" "${COOLIFY_DB_CONTAINER}" \
+  pg_dump -U "${DB_USER}" -d "${DB_NAME}" --clean --if-exists > "${WORK}/coolify-db.sql"
+[ -s "${WORK}/coolify-db.sql" ] || { echo "ERROR: pg_dump produced an empty file" >&2; exit 1; }
+echo "pg_dump: $(wc -l < "${WORK}/coolify-db.sql") lines from ${DB_NAME}"
+
+# The config/source tree (includes .env and any deploy keys).
+tar -czf "${WORK}/coolify-data.tar.gz" -C "$(dirname "${COOLIFY_DIR}")" "$(basename "${COOLIFY_DIR}")"
+
+tar -czf "${OUT}" -C "${WORK}" coolify-db.sql coolify-data.tar.gz
+finalize_artifact "${OUT}" coolify 'coolify-*.tar.gz*'

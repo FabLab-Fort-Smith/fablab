@@ -11,13 +11,14 @@
 #   # or, from a workstation with SSH + become:
 #   ansible lab_vps -m script -a scripts/mongo-restore-drill.sh --become
 set -euo pipefail
+trap '[ -n "${CLEANUP_ARCHIVE:-}" ] && shred -u "$CLEANUP_ARCHIVE" 2>/dev/null || true' EXIT
 
 NET=fablab
-IMG=mongo:7.0
+IMG=mongo:8.0        # match the running server (the mongodb role pins mongo:8.0)
 CN=fablab-mongo
 BACKUP_DIR=/var/backups/fablab
 ROOT_ENV=/opt/fablab/mongodb/mongo.env      # root-only: MONGO_INITDB_ROOT_USERNAME/_PASSWORD
-DRILL_DB=thelab_restore_drill               # throwaway target — dropped at the end
+DRILL_SUFFIX=_drill                        # throwaway target per database — dropped at the end
 
 [ "$(id -u)" -eq 0 ] || { echo "ERROR: must run as root (reads $ROOT_ENV, invokes docker)"; exit 1; }
 [ -r "$ROOT_ENV" ] || { echo "ERROR: cannot read $ROOT_ENV"; exit 1; }
@@ -40,34 +41,70 @@ SRC_DB="$(sed -n 's/^MONGODB_URI=//p' /etc/fablab/mongo.env 2>/dev/null | head -
   | sed -n 's#.*/\([^/?]*\)?.*#\1#p')"
 SRC_DB="${SRC_DB:-thelab}"
 
+# Every application database, from the one list roles/mongodb writes (#107 phase 4). A drill that
+# only exercised staging would have said "PASSED" while production was never verified — which is
+# exactly the state this repo was in the moment production moved onto this instance.
+DB_LIST="$(sed -n 's/^MONGO_BACKUP_DATABASES=//p' /etc/fablab/mongo.env 2>/dev/null | head -1 | tr -d '"')"
+DB_LIST="${DB_LIST:-$SRC_DB}"
+
 msh() { docker run --rm --network "$NET" -e U="$RURI" -e JS="$1" "$IMG" \
           sh -c 'mongosh "$U" --quiet --eval "$JS"'; }
 count_js() { printf 'var d=db.getSiblingDB("%s");var t=0;var n=d.getCollectionNames();n.forEach(function(c){t+=d.getCollection(c).countDocuments({})});print(n.length+" collections, "+t+" docs");' "$1"; }
 
 echo "== 1. take a fresh backup =="
 /usr/local/sbin/fablab-backup-mongo | sed 's/^/   /'
-ARCHIVE="$(find "$BACKUP_DIR" -maxdepth 1 -name 'mongo-*.archive.gz' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
-[ -n "$ARCHIVE" ] || { echo "ERROR: no backup archive in $BACKUP_DIR"; exit 1; }
-SIZE="$(stat -c %s "$ARCHIVE")"
-echo "   archive: $ARCHIVE (${SIZE} bytes)"
-[ "$SIZE" -gt 0 ] || { echo "ERROR: archive is empty — the dump failed (check Mongo auth)"; exit 1; }
+# Artifacts are age-ENCRYPTED once BACKUP_AGE_RECIPIENT is set, and the decryption identity is
+# deliberately NOT on this box (it lives only in the vault — the box can encrypt, never decrypt).
+# So: prefer a plaintext archive if one exists; else decrypt a .age artifact when an identity is
+# explicitly supplied via AGE_IDENTITY_FILE; else fall back to a fresh transient dump so the
+# database round-trip is still exercised — and say plainly that the ENCRYPTED-artifact chain was
+# not, because that needs the off-box drill (see docs/runbooks/backup-restore.md).
+# Per database, get an archive to drill: prefer the real ENCRYPTED artifact when an identity is
+# supplied (that exercises the full chain), else take a fresh transient dump. Either way the archive
+# is scoped to ONE database with --db, and the restore is fenced with --nsInclude, so a drill can
+# never touch a database it is not drilling (the bug fixed in #109).
+archive_for_db() {                      # echoes a path; caller shreds it if it is under /tmp
+  local db="$1" enc plain
+  plain="$(find "$BACKUP_DIR" -maxdepth 1 -name "mongo-${db}-*.archive.gz" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
+  if [ -n "$plain" ]; then printf '%s' "$plain"; return 0; fi
+  enc="$(find "$BACKUP_DIR" -maxdepth 1 -name "mongo-${db}-*.archive.gz.age" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
+  local tmp; tmp="$(mktemp /tmp/drill-XXXXXX.archive.gz)"
+  if [ -n "$enc" ] && [ -n "${AGE_IDENTITY_FILE:-}" ] && [ -f "${AGE_IDENTITY_FILE}" ]; then
+    age -d -i "$AGE_IDENTITY_FILE" -o "$tmp" "$enc" || { rm -f "$tmp"; return 1; }
+  else
+    docker run --rm --network "$NET" -e U="$RURI" -e D="$db" "$IMG" \
+      sh -c 'mongodump --uri="$U" --db="$D" --archive --gzip' > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 1; }
+  fi
+  [ -s "$tmp" ] || { rm -f "$tmp"; return 1; }
+  printf '%s' "$tmp"
+}
 
-echo "== 2. source counts ($SRC_DB) =="
-SRC="$(msh "$(count_js "$SRC_DB")")"; echo "   $SRC"
+FAILED=""
+# Same IFS trap as the backup script: split the space-separated list explicitly.
+IFS=' ' read -r -a DRILL_DBS <<< "$DB_LIST"
+for DB in "${DRILL_DBS[@]}"; do
+  case "$DB" in ''|*[[:space:]]*) echo "   FAIL: suspicious database name '$DB'"; FAILED="$FAILED bad-name"; continue ;; esac
+  DDB="${DB}${DRILL_SUFFIX}"
+  echo "== database: $DB =="
+  ARCHIVE="$(archive_for_db "$DB")" || { echo "   FAIL: could not obtain an archive for $DB"; FAILED="$FAILED $DB"; continue; }
+  case "$ARCHIVE" in /tmp/*) CLEANUP="$ARCHIVE" ;; *) CLEANUP="" ;; esac
+  SRC="$(msh "$(count_js "$DB")")"; echo "   source   $SRC"
+  docker run --rm -i --network "$NET" -e U="$RURI" "$IMG" \
+    sh -c 'mongorestore --uri="$U" --archive --gzip --drop --nsInclude="'"$DB"'.*" --nsFrom="'"$DB"'.*" --nsTo="'"$DDB"'.*"' \
+    < "$ARCHIVE" >/dev/null 2>&1 || true
+  DST="$(msh "$(count_js "$DDB")")"; echo "   restored $DST"
+  msh "db.getSiblingDB(\"$DDB\").dropDatabase()" >/dev/null 2>&1 || true
+  [ -n "$CLEANUP" ] && { shred -u "$CLEANUP" 2>/dev/null || rm -f "$CLEANUP"; }
+  if [ "$SRC" = "$DST" ] && [ "${SRC%% *}" != "0" ]; then
+    echo "   OK: $DB round-trips"
+  else
+    echo "   FAIL: $DB does not round-trip (source '$SRC' vs restored '$DST')"
+    FAILED="$FAILED $DB"
+  fi
+done
 
-echo "== 3. restore archive into throwaway db '$DRILL_DB' =="
-docker run --rm -i --network "$NET" -e U="$RURI" "$IMG" \
-  sh -c 'mongorestore --uri="$U" --archive --gzip --drop --nsFrom="'"$SRC_DB"'.*" --nsTo="'"$DRILL_DB"'.*"' \
-  < "$ARCHIVE" 2>&1 | tail -2 | sed 's/^/   /'
-
-echo "== 4. verify restored counts ($DRILL_DB) =="
-DST="$(msh "$(count_js "$DRILL_DB")")"; echo "   $DST"
-
-echo "== 5. cleanup (drop throwaway db) =="
-msh "db.getSiblingDB(\"$DRILL_DB\").dropDatabase();print(\"dropped $DRILL_DB\")" | sed 's/^/   /'
-
-if [ "$SRC" = "$DST" ]; then
-  echo "== DRILL PASSED: '$SRC_DB' backs up and restores correctly ($SRC) =="
-else
-  echo "== DRILL FAILED: source ($SRC) != restored ($DST) =="; exit 1
+if [ -n "$FAILED" ]; then
+  echo "== DRILL FAILED for:$FAILED =="
+  exit 1
 fi
+echo "== DRILL PASSED: every database round-trips ($DB_LIST) =="

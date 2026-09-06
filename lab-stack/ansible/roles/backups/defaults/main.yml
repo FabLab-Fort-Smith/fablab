@@ -15,3 +15,26 @@ backups_install_tools: true
 backups_restic_keep_daily: 7
 backups_restic_keep_weekly: 4
 backups_restic_keep_monthly: 6
+
+# Extra backup targets (issue #90). Each is a separate cron job so one failing target cannot stop
+# the others, and each can be disabled independently.
+backups_objstore_enabled: true          # SeaweedFS bucket objects, via the S3 API (read-only creds)
+backups_coolify_enabled: true           # Coolify's Postgres DB + /data/coolify (config, keys)
+backups_coolify_dir: "/data/coolify"
+backups_coolify_db_container: "coolify-db"
+
+# --- off-box PULL access (#90) ---------------------------------------------------------------
+# The off-box copy is PULL-based: prod-backup (10.121.16.1 on the ZeroTier net) connects IN and
+# copies age-encrypted artifacts. The VPS therefore holds NO credential into the lab, and a
+# compromise of this box cannot delete backup history — the reason push was rejected.
+#
+# Inert until backups_pull_pubkey is set (from BACKUP_PULL_PUBKEY in ../.env): with no key, no
+# account and no access are created.
+backups_pull_enabled: true
+backups_pull_user: "backup-pull"
+backups_pull_group: "fablab-backup-read"     # reads the artifacts; owns nothing
+backups_pull_gid: 3001
+backups_pull_home: "/var/lib/fablab-backup-pull"
+# Only from the ZeroTier subnet. Tighten to the single host if it ever gets a static reservation.
+backups_pull_from: "10.121.16.0/24"
+backups_pull_pubkey: "{{ lookup('ansible.builtin.env', 'BACKUP_PULL_PUBKEY') | default('', true) }}"
