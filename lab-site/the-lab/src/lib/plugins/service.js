@@ -5,6 +5,7 @@
 
 import { isAdmin } from "@/app/api/v1/users/access";
 import { validateConfig, defaultConfig, redactConfig } from "./manifest.schema";
+import { encryptSecretConfig } from "./secretCrypto";
 import * as registry from "./registry";
 import PluginStateModel from "./model";
 import { auditLog } from "@/lib/audit";
@@ -100,18 +101,28 @@ export async function setEnabled(pluginId, enabled, actor) {
 export async function setConfig(pluginId, patch, actor) {
   if (!isAdmin(actor)) throw forbidden();
   const entry = resolveEntry(pluginId);
+  // `current` is the stored config with secrets AS CIPHERTEXT (the model persists
+  // and returns raw envelopes; secrets are only decrypted at point of use in the
+  // registry). Keeping it ciphertext here is what preserves a blank-patch: an
+  // omitted secret carries the existing envelope through validate → encrypt
+  // unchanged (never cleared, never re-exposed).
   const current = (await PluginStateModel.getState(entry.manifest.id))?.config || {};
   const { ok, errors, value } = validateConfig(entry.manifest.configSchema || {}, patch, current);
   if (!ok) throw badRequest(`Invalid config: ${errors.join("; ")}`);
-  await PluginStateModel.setConfig(entry.manifest.id, value, actor?.userID ?? null);
+  // Encrypt-at-rest (CWE-311): every `type:"secret"` field is stored as an
+  // AES-256-GCM envelope. A just-entered plaintext secret is encrypted; a passed-
+  // through envelope (blank patch) is left byte-for-byte unchanged.
+  const stored = encryptSecretConfig(entry.manifest.configSchema || {}, value);
+  await PluginStateModel.setConfig(entry.manifest.id, stored, actor?.userID ?? null);
   await registry.applyConfig(entry.manifest.id);
   auditLog("plugin.config.updated", {
     actor: { userID: actor?.userID ?? null, role: actor?.role ?? null },
     target: entry.manifest.id,
     fields: Object.keys(entry.manifest.configSchema || {}).filter((k) => k in (patch || {})), // names only, no values
   });
-  // Never echo secret values back (AD-1).
-  const { config, secretsSet } = redactConfig(entry.manifest.configSchema || {}, value);
+  // Never echo secret values back (AD-1): redact the STORED shape so the response
+  // can never carry a plaintext value or its ciphertext.
+  const { config, secretsSet } = redactConfig(entry.manifest.configSchema || {}, stored);
   return { id: entry.manifest.id, config, secretsSet };
 }
 

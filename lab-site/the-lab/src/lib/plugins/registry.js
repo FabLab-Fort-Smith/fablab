@@ -7,10 +7,37 @@
 
 import { PLUGINS } from "@/plugins";
 import { defineManifest, defaultConfig } from "./manifest.schema";
+import { decryptSecretConfig, isEncrypted } from "./secretCrypto";
 import { makeContext } from "./context";
 import { offPlugin, emitHook } from "./hooks";
 import { getState, listStates } from "./model";
 import { auditLog } from "@/lib/audit";
+
+/**
+ * Build a plugin's runtime config from its defaults + persisted state, decrypting
+ * `type:"secret"` fields at this point of use (the only place addon secrets are
+ * turned back into plaintext, and only server-side — never on a response path).
+ * Fails CLOSED: if a stored secret can't be decrypted (tampered/rotated key) it is
+ * withheld rather than passed through as ciphertext, and the failure is audited.
+ * @param {object} manifest
+ * @param {{config?:object}|null} [st]
+ * @returns {Record<string,any>}
+ */
+function hydrateConfig(manifest, st) {
+  const merged = { ...defaultConfig(manifest.configSchema), ...(st?.config || {}) };
+  try {
+    return decryptSecretConfig(merged);
+  } catch (err) {
+    auditLog("plugin.config.decrypt_failed", {
+      actor: { pluginId: manifest.id },
+      outcome: "error",
+      reason: err?.message || "decrypt error",
+    });
+    const safe = {};
+    for (const [k, v] of Object.entries(merged)) if (!isEncrypted(v)) safe[k] = v;
+    return safe;
+  }
+}
 
 /** pluginId -> { manifest, module, enabled, config, wired } */
 const registry = new Map();
@@ -93,7 +120,7 @@ export function initPlugins() {
       for (const entry of registry.values()) {
         const st = states[entry.manifest.id];
         entry.enabled = st ? st.enabled : !!entry.manifest.enabledByDefault;
-        entry.config = { ...defaultConfig(entry.manifest.configSchema), ...(st?.config || {}) };
+        entry.config = hydrateConfig(entry.manifest, st);
         if (entry.enabled) await wire(entry);
       }
     })();
@@ -116,7 +143,7 @@ export async function applyEnable(pluginId) {
   const entry = registry.get(pluginId);
   if (!entry) return;
   const st = await getState(pluginId);
-  entry.config = { ...defaultConfig(entry.manifest.configSchema), ...(st?.config || {}) };
+  entry.config = hydrateConfig(entry.manifest, st);
   entry.enabled = true;
   await wire(entry);
 }
@@ -136,7 +163,7 @@ export async function applyConfig(pluginId) {
   const entry = registry.get(pluginId);
   if (!entry) return;
   const st = await getState(pluginId);
-  entry.config = { ...defaultConfig(entry.manifest.configSchema), ...(st?.config || {}) };
+  entry.config = hydrateConfig(entry.manifest, st);
   try {
     if (typeof entry.module.onConfigChange === "function") {
       await entry.module.onConfigChange(makeContext(pluginId, { config: entry.config }), entry.config);
@@ -182,7 +209,7 @@ export async function reconcile() {
     const st = states[entry.manifest.id];
     const enabled = st ? st.enabled : !!entry.manifest.enabledByDefault;
     if (enabled && !entry.wired) {
-      entry.config = { ...defaultConfig(entry.manifest.configSchema), ...(st?.config || {}) };
+      entry.config = hydrateConfig(entry.manifest, st);
       entry.enabled = true;
       await wire(entry);
     } else if (!enabled && entry.wired) {
