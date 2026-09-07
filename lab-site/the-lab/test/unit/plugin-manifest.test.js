@@ -1,6 +1,6 @@
 // Unit coverage for plugin manifest + config-schema validation.
 import {
-  collectManifestProblems, defineManifest, defaultConfig, validateConfig,
+  collectManifestProblems, defineManifest, defaultConfig, validateConfig, redactConfig,
 } from "@/lib/plugins/manifest.schema";
 
 const good = {
@@ -71,5 +71,56 @@ describe("config validation", () => {
     expect(value.unknown).toBeUndefined();
     expect(value.$where).toBeUndefined();
     expect(value.cap).toBe(2);
+  });
+});
+
+// ---- AD-1: card metadata + richer config types + write-only secrets --------
+
+describe("AD-1 card metadata", () => {
+  test("valid icon/category pass; bad ones are rejected", () => {
+    expect(collectManifestProblems({ ...good, icon: "@", category: "Communications" })).toEqual([]);
+    expect(collectManifestProblems({ ...good, icon: "way-too-long-icon" }).some((p) => /icon/.test(p))).toBe(true);
+    expect(collectManifestProblems({ ...good, category: 5 }).some((p) => /category/.test(p))).toBe(true);
+  });
+});
+
+describe("AD-1 select / text / secret config types", () => {
+  const schema = {
+    mode: { type: "select", options: ["read", "write"], default: "read" },
+    note: { type: "text", max: 10 },
+    apiKey: { type: "secret" },
+  };
+
+  test("select requires a non-empty options array + default within it", () => {
+    expect(collectManifestProblems({ ...good, configSchema: { m: { type: "select" } } }).some((p) => /options/.test(p))).toBe(true);
+    expect(collectManifestProblems({ ...good, configSchema: { m: { type: "select", options: ["a"], default: "b" } } }).some((p) => /default/.test(p))).toBe(true);
+    expect(collectManifestProblems({ ...good, configSchema: { m: { type: "select", options: ["a", "b"], default: "a" } } })).toEqual([]);
+  });
+
+  test("select value must be one of options; text honors max length", () => {
+    expect(validateConfig(schema, { mode: "write" }).value.mode).toBe("write");
+    expect(validateConfig(schema, { mode: "delete" }).ok).toBe(false);
+    expect(validateConfig(schema, { note: "ok" }).value.note).toBe("ok");
+    expect(validateConfig(schema, { note: "waytoolongvalue" }).ok).toBe(false);
+  });
+
+  test("defaultConfig never seeds a secret value", () => {
+    expect(defaultConfig(schema)).toEqual({ mode: "read" }); // no apiKey key at all
+  });
+
+  test("secret: a value is stored; a blank patch LEAVES the stored secret unchanged", () => {
+    const set = validateConfig(schema, { apiKey: "sk_live_123" });
+    expect(set.value.apiKey).toBe("sk_live_123");
+    const blank = validateConfig(schema, { apiKey: "" }, { apiKey: "sk_live_123" });
+    expect(blank.value.apiKey).toBe("sk_live_123"); // unchanged, not cleared
+  });
+
+  test("redactConfig strips secret values + reports set/unset; never serializes the secret", () => {
+    const { config, secretsSet } = redactConfig(schema, { mode: "write", apiKey: "sk_live_123" });
+    expect(config).toEqual({ mode: "write" });
+    expect(config.apiKey).toBeUndefined();
+    expect(JSON.stringify(config)).not.toContain("sk_live_123");
+    expect(secretsSet).toEqual({ apiKey: true });
+    expect(redactConfig(schema, { mode: "read" }).secretsSet).toEqual({ apiKey: false });
   });
 });

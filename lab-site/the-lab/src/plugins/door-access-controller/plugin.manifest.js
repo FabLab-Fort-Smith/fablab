@@ -17,6 +17,8 @@ export default defineManifest({
   description:
     "Policy-driven physical door access (NFC / QR / app) over the VPS socket-server, with a signed offline allowlist.",
   author: "FabLab Fort Smith",
+  icon: "▤",                        // addon-manager card (AD-1)
+  category: "Access & Security",
   sockets: {
     // Revoke a member's door access the moment they're suspended or removed.
     hooks: ["membership.suspended", "member.deleted"],

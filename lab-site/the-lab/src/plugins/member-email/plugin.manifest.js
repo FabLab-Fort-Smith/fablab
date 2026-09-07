@@ -9,6 +9,8 @@ export default defineManifest({
   version: "1.0.0",
   description: "Active members self-claim an @fablabfortsmith.org mailbox (PurelyMail).",
   author: "FabLab Fort Smith",
+  icon: "@",                    // addon-manager card (AD-1)
+  category: "Communications",
   sockets: {
     // Lifecycle hygiene: clean up a member's mailbox when they're removed. (The
     // suspended event is declared for a future auto-suspend; not yet emitted.)
