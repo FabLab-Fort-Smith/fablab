@@ -94,7 +94,7 @@ export function PublicNav() {
           <span className="dot pulse" style={{ background: 'var(--green)' }} />
           ONLINE
         </span>
-        <Link href="/auth/login" className="btn btn--ghost btn--sm pnav-desktop" style={{ fontSize: 10 }}>$ ./sign-in</Link>
+        <Link href="/auth/signin" className="btn btn--ghost btn--sm pnav-desktop" style={{ fontSize: 10 }}>$ ./sign-in</Link>
         <Link href="/auth/register" className="btn btn--filled btn--sm pnav-desktop" style={{ fontSize: 10 }}>$ ./join</Link>
         <button
           ref={toggleRef}
@@ -136,7 +136,7 @@ export function PublicNav() {
           ))}
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <Link href="/auth/login" onClick={closeMenu} className="btn btn--ghost btn--sm" style={{ flex: 1, justifyContent: 'center', fontSize: 11 }}>$ ./sign-in</Link>
+          <Link href="/auth/signin" onClick={closeMenu} className="btn btn--ghost btn--sm" style={{ flex: 1, justifyContent: 'center', fontSize: 11 }}>$ ./sign-in</Link>
           <Link href="/auth/register" onClick={closeMenu} className="btn btn--filled btn--sm" style={{ flex: 1, justifyContent: 'center', fontSize: 11 }}>$ ./join</Link>
         </div>
       </div>
@@ -244,7 +244,7 @@ function HeroBoot({ memberCount }) {
           </p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <Link href="/auth/register" className="btn btn--filled" style={{ fontSize: 11 }}>$ ./join --now</Link>
-            <Link href="/auth/login" className="btn btn--ghost" style={{ fontSize: 11 }}>$ ./sign-in</Link>
+            <Link href="/auth/signin" className="btn btn--ghost" style={{ fontSize: 11 }}>$ ./sign-in</Link>
             <a href="/api/v1/discord/invite" target="_blank" rel="noopener noreferrer" className="btn btn--ghost" style={{ fontSize: 11, borderColor: 'var(--magenta)', color: 'var(--magenta)' }}>$ ./discord</a>
           </div>
         </div>
@@ -668,7 +668,7 @@ function PublicFooter() {
           <div>
             <div style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: '0.14em', marginBottom: 12 }}>ACCOUNT</div>
             <nav style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[['/auth/login', './login'], ['/auth/register', './register'], ['/dashboard', './dashboard']].map(([href, label]) => (
+              {[['/auth/signin', './login'], ['/auth/register', './register'], ['/dashboard', './dashboard']].map(([href, label]) => (
                 <Link key={href} href={href} style={{ color: 'var(--text-mid)', fontSize: 11, textDecoration: 'none', letterSpacing: '0.06em' }}
                   onMouseEnter={e => e.target.style.color = 'var(--green)'}
                   onMouseLeave={e => e.target.style.color = 'var(--text-mid)'}

@@ -32,7 +32,7 @@ test("landing nav exposes a discoverable Sign In action (#123)", () => {
   const signIn = getAllByRole("link", { name: /sign-in/i });
   // Present in both the desktop row and the mobile panel.
   expect(signIn.length).toBeGreaterThanOrEqual(1);
-  signIn.forEach(el => expect(el).toHaveAttribute("href", "/auth/login"));
+  signIn.forEach(el => expect(el).toHaveAttribute("href", "/auth/signin"));
 });
 
 test("hamburger toggle is a labelled button wired with aria-expanded/aria-controls (#124)", () => {
