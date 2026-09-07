@@ -8,8 +8,9 @@
 import * as memberEmail from "./member-email";
 import * as doorAccessController from "./door-access-controller";
 import * as contactSubmissions from "./contact-submissions";
+import * as repairNotifications from "./repair-notifications";
 
 /** @type {Array<{manifest: object, register?: Function, onEnable?: Function, onDisable?: Function, onConfigChange?: Function}>} */
-export const PLUGINS = [memberEmail, doorAccessController, contactSubmissions];
+export const PLUGINS = [memberEmail, doorAccessController, contactSubmissions, repairNotifications];
 
 export default PLUGINS;
