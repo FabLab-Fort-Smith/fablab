@@ -1,13 +1,37 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import MatrixRain from './components/effects/MatrixRain';
 
+// Landing navigation links (in-page anchors). Shared by the desktop row and the mobile panel.
+const NAV_LINKS = [
+  ['#about', './about'],
+  ['#pulse', './pulse'],
+  ['#membership', './join'],
+  ['#board', './board'],
+  ['#contact', './contact'],
+];
+
 // ─── PublicNav ────────────────────────────────────────────────────────────────
-function PublicNav() {
+/**
+ * Landing-page top navigation.
+ *
+ * Responsive: on wide screens the links, clock, Sign In and Join render inline; on narrow
+ * screens (<=760px) they collapse behind a hamburger toggle (#124). The toggle is a real
+ * <button> with aria-expanded/aria-controls, is keyboard operable (Enter/Space to toggle,
+ * Esc to close), moves focus to the first menu item on open and back to the toggle on close,
+ * and relies on the global visible focus ring + prefers-reduced-motion rules in globals.css.
+ *
+ * Sign In is surfaced as a clearly-labelled action alongside Join in both layouts (#123) so
+ * returning members do not have to open Join to find it.
+ */
+export function PublicNav() {
   const [ts, setTs] = useState('');
   const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const toggleRef = useRef(null);
+  const menuRef = useRef(null);
 
   useEffect(() => {
     const tick = () => setTs(new Date().toLocaleTimeString('en-US', { hour12: false }));
@@ -22,8 +46,26 @@ function PublicNav() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Open mobile menu: manage focus + Escape-to-close. Focus moves to the first menu item on
+  // open; Esc closes and returns focus to the toggle (WCAG 2.4.3 focus order, 2.1.2 no trap).
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const first = menuRef.current?.querySelector('a, button');
+    first?.focus();
+    const onKeyDown = e => {
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+        toggleRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [menuOpen]);
+
+  const closeMenu = () => setMenuOpen(false);
+
   return (
-    <nav style={{
+    <nav aria-label="Primary" style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
       background: scrolled ? 'rgba(5,8,5,0.95)' : 'rgba(5,8,5,0.85)',
       backdropFilter: 'blur(6px)',
@@ -36,24 +78,78 @@ function PublicNav() {
         <Link href="/" style={{ color: 'var(--green)', fontFamily: 'var(--display)', fontSize: 15, letterSpacing: '-0.04em', textDecoration: 'none', textShadow: '0 0 12px var(--green)' }}>
           THE_LAB
         </Link>
-        <span style={{ color: 'var(--bd-hot)', opacity: 0.4, fontSize: 12 }}>|</span>
-        <nav style={{ display: 'flex', gap: 20 }}>
-          {[['#about', './about'], ['#pulse', './pulse'], ['#membership', './join'], ['#board', './board'], ['#contact', './contact']].map(([href, label]) => (
+        <span className="pnav-desktop" aria-hidden="true" style={{ color: 'var(--bd-hot)', opacity: 0.4, fontSize: 12 }}>|</span>
+        <div className="pnav-desktop" style={{ display: 'flex', gap: 20 }}>
+          {NAV_LINKS.map(([href, label]) => (
             <a key={href} href={href} style={{ color: 'var(--text-mid)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', textDecoration: 'none', transition: 'color 0.12s' }}
               onMouseEnter={e => e.target.style.color = 'var(--green)'}
               onMouseLeave={e => e.target.style.color = 'var(--text-mid)'}
             >{label}</a>
           ))}
-        </nav>
+        </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <span style={{ color: 'var(--text-dim)', fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '0.05em' }}>{ts}</span>
-        <span className="pill" style={{ background: 'rgba(57,255,20,0.1)' }}>
+        <span className="pnav-desktop" style={{ color: 'var(--text-dim)', fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '0.05em' }}>{ts}</span>
+        <span className="pill pnav-desktop" style={{ background: 'rgba(57,255,20,0.1)' }}>
           <span className="dot pulse" style={{ background: 'var(--green)' }} />
           ONLINE
         </span>
-        <Link href="/auth/register" className="btn btn--sm" style={{ fontSize: 10 }}>$ ./join</Link>
+        <Link href="/auth/signin" className="btn btn--ghost btn--sm pnav-desktop" style={{ fontSize: 10 }}>$ ./sign-in</Link>
+        <Link href="/auth/register" className="btn btn--filled btn--sm pnav-desktop" style={{ fontSize: 10 }}>$ ./join</Link>
+        <button
+          ref={toggleRef}
+          type="button"
+          className="pnav-hamburger"
+          aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          aria-expanded={menuOpen}
+          aria-controls="landing-mobile-menu"
+          onClick={() => setMenuOpen(o => !o)}
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 38, height: 32, padding: 0,
+            background: 'transparent', border: '1px solid var(--bd-1)',
+            color: 'var(--green)', fontSize: 18, lineHeight: 1, cursor: 'pointer',
+          }}
+        >
+          <span aria-hidden="true">{menuOpen ? '✕' : '≡'}</span>
+        </button>
       </div>
+
+      {/* Mobile menu panel — collapsed unless the hamburger is open; hidden entirely on desktop. */}
+      <div
+        id="landing-mobile-menu"
+        ref={menuRef}
+        className="pnav-mobile-menu"
+        style={{
+          display: menuOpen ? 'block' : 'none',
+          position: 'absolute', top: 52, left: 0, right: 0,
+          background: 'rgba(5,8,5,0.98)',
+          borderBottom: '1px solid var(--bd-1)',
+          padding: '16px 24px 20px',
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16 }}>
+          {NAV_LINKS.map(([href, label]) => (
+            <a key={href} href={href} onClick={closeMenu} style={{ color: 'var(--text-mid)', fontSize: 13, letterSpacing: '0.1em', textTransform: 'uppercase', textDecoration: 'none', padding: '8px 0' }}>
+              {label}
+            </a>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <Link href="/auth/signin" onClick={closeMenu} className="btn btn--ghost btn--sm" style={{ flex: 1, justifyContent: 'center', fontSize: 11 }}>$ ./sign-in</Link>
+          <Link href="/auth/register" onClick={closeMenu} className="btn btn--filled btn--sm" style={{ flex: 1, justifyContent: 'center', fontSize: 11 }}>$ ./join</Link>
+        </div>
+      </div>
+
+      <style>{`
+        @media (max-width: 760px) {
+          .pnav-desktop { display: none !important; }
+        }
+        @media (min-width: 761px) {
+          .pnav-hamburger { display: none !important; }
+          .pnav-mobile-menu { display: none !important; }
+        }
+      `}</style>
     </nav>
   );
 }
@@ -148,7 +244,7 @@ function HeroBoot({ memberCount }) {
           </p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <Link href="/auth/register" className="btn btn--filled" style={{ fontSize: 11 }}>$ ./join --now</Link>
-            <a href="#about" className="btn btn--ghost" style={{ fontSize: 11 }}>$ ./tour</a>
+            <Link href="/auth/signin" className="btn btn--ghost" style={{ fontSize: 11 }}>$ ./sign-in</Link>
             <a href="/api/v1/discord/invite" target="_blank" rel="noopener noreferrer" className="btn btn--ghost" style={{ fontSize: 11, borderColor: 'var(--magenta)', color: 'var(--magenta)' }}>$ ./discord</a>
           </div>
         </div>
@@ -276,22 +372,24 @@ function CommunityPulseSection({ memberCount }) {
               ) : recentBounties.length === 0 ? (
                 <div style={{ padding: '16px 18px', color: 'var(--text-dim)', fontSize: 12 }}>[no open bounties]</div>
               ) : (
-                <table className="term-table" style={{ width: '100%' }}>
-                  <thead>
-                    <tr>
-                      <th>TITLE</th>
-                      <th>STATUS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentBounties.map((b) => (
-                      <tr key={b._id || b.id}>
-                        <td style={{ color: 'var(--text)' }}>{b.title}</td>
-                        <td><span style={{ color: 'var(--green)', fontSize: 9, letterSpacing: '0.1em' }}>[{b.status || 'open'}]</span></td>
+                <div className="term-table-wrap" role="region" aria-label="Open bounties" tabIndex={0}>
+                  <table className="term-table" style={{ width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th>TITLE</th>
+                        <th>STATUS</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {recentBounties.map((b) => (
+                        <tr key={b._id || b.id}>
+                          <td style={{ color: 'var(--text)' }}>{b.title}</td>
+                          <td><span style={{ color: 'var(--green)', fontSize: 9, letterSpacing: '0.1em' }}>[{b.status || 'open'}]</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>
@@ -570,7 +668,7 @@ function PublicFooter() {
           <div>
             <div style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: '0.14em', marginBottom: 12 }}>ACCOUNT</div>
             <nav style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[['/auth/login', './login'], ['/auth/register', './register'], ['/dashboard', './dashboard']].map(([href, label]) => (
+              {[['/auth/signin', './login'], ['/auth/register', './register'], ['/dashboard', './dashboard']].map(([href, label]) => (
                 <Link key={href} href={href} style={{ color: 'var(--text-mid)', fontSize: 11, textDecoration: 'none', letterSpacing: '0.06em' }}
                   onMouseEnter={e => e.target.style.color = 'var(--green)'}
                   onMouseLeave={e => e.target.style.color = 'var(--text-mid)'}
