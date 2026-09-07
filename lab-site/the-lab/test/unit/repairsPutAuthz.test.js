@@ -6,12 +6,16 @@
 jest.mock("@/auth", () => ({ __esModule: true, auth: jest.fn() }));
 jest.mock("@/app/api/v1/repairs/model", () => {
   const actual = jest.requireActual("@/app/api/v1/repairs/model");
-  return { __esModule: true, ...actual, default: { updateRepair: jest.fn() } };
+  return {
+    __esModule: true,
+    ...actual,
+    default: { updateRepair: jest.fn(), getAllRepairs: jest.fn(), countRepairs: jest.fn() },
+  };
 });
 jest.mock("@/lib/plugins/registry", () => ({ __esModule: true, emitEvent: jest.fn().mockResolvedValue(undefined) }));
 jest.mock("@/lib/plugins/hooks", () => ({ __esModule: true, CORE_EVENTS: { REPAIR_UPDATED: "repair.updated" } }));
 
-import { PUT } from "@/app/api/v1/repairs/route";
+import { GET, PUT } from "@/app/api/v1/repairs/route";
 import { auth } from "@/auth";
 import RepairModel from "@/app/api/v1/repairs/model";
 
@@ -29,6 +33,41 @@ beforeEach(() => {
   jest.clearAllMocks();
   auth.mockResolvedValue(ADMIN);
   RepairModel.updateRepair.mockResolvedValue({ repairID: VALID_ID, status: "completed" });
+  RepairModel.getAllRepairs.mockResolvedValue([]);
+  RepairModel.countRepairs.mockResolvedValue(0);
+});
+
+describe("GET authorization (unauthenticated PII-list exposure)", () => {
+  const getReq = () => new Request("http://localhost/api/v1/repairs", { method: "GET" });
+
+  test("anonymous (no session) → 401 and the repair list is NOT read", async () => {
+    auth.mockResolvedValue(null);
+    const res = await GET(getReq());
+    expect(res.status).toBe(401);
+    expect(RepairModel.getAllRepairs).not.toHaveBeenCalled();
+    expect(RepairModel.countRepairs).not.toHaveBeenCalled();
+    // No repair data in the denial body.
+    expect(await res.json()).toEqual({ error: "Unauthorized." });
+  });
+
+  test("authenticated non-admin → 403 and the repair list is NOT read", async () => {
+    auth.mockResolvedValue({ user: { role: "member", userID: "u-1" } });
+    const res = await GET(getReq());
+    expect(res.status).toBe(403);
+    expect(RepairModel.getAllRepairs).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({ error: "Forbidden." });
+  });
+
+  test("admin → 200 with the list", async () => {
+    RepairModel.getAllRepairs.mockResolvedValue([{ repairID: VALID_ID, status: "pending", name: "Ada" }]);
+    RepairModel.countRepairs.mockResolvedValue(1);
+    const res = await GET(getReq());
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.repairs).toHaveLength(1);
+    expect(RepairModel.getAllRepairs).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("authorization (deny by default, fail closed)", () => {

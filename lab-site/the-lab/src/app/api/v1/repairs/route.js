@@ -3,8 +3,30 @@ import RepairModel, { isValidRepairID, isValidStatus, sanitizeRepairUpdate } fro
 import { CORE_EVENTS } from '@/lib/plugins/hooks';
 import { emitEvent } from '@/lib/plugins/registry';
 
+/**
+ * Authorize the caller as an admin for a repairs read/mutation. A repair record
+ * carries the requester's PII (name/email/phone) and repairs are a staff-managed
+ * queue (no per-user ownership), so both the full-list read (GET) and updates
+ * (PUT) are admin-only — matching the admin repair dashboard's own gate. Derives
+ * the actor from the server session (never a client-supplied field), denies by
+ * default, fails closed, and returns a generic message with no internal detail.
+ * (/api/* is not covered by middleware, so each handler must call this itself.)
+ *
+ * @returns {Promise<Response|null>} a denial Response (401/403), or null if authorized
+ */
+async function requireAdmin() {
+    const session = await auth();
+    if (!session?.user) return Response.json({ error: 'Unauthorized.' }, { status: 401 });
+    if (session.user.role !== 'admin') return Response.json({ error: 'Forbidden.' }, { status: 403 });
+    return null;
+}
+
 export async function GET(req) {
     try {
+        // AuthZ: the list exposes every requester's PII — admin-only (fail closed).
+        const denied = await requireAdmin();
+        if (denied) return denied;
+
         const { searchParams } = new URL(req.url);
         const status = searchParams.get('status');
         const filter = status ? { status } : {};
@@ -48,13 +70,9 @@ export async function POST(req) {
 
 export async function PUT(req) {
     try {
-        // AuthN + authZ: updating a repair is a staff action. Derive the actor from
-        // the server session (never a client-supplied field) and require the single
-        // privileged role (`admin`) — deny by default, fail closed, generic errors.
-        // (/api/* is not covered by middleware, so the route must protect itself.)
-        const session = await auth();
-        if (!session?.user) return Response.json({ error: 'Unauthorized.' }, { status: 401 });
-        if (session.user.role !== 'admin') return Response.json({ error: 'Forbidden.' }, { status: 403 });
+        // AuthN + authZ: updating a repair is a staff action — admin-only.
+        const denied = await requireAdmin();
+        if (denied) return denied;
 
         const { searchParams } = new URL(req.url);
         const repairID = searchParams.get('repairID');
