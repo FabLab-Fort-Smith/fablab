@@ -87,7 +87,7 @@ describe("route send-gating", () => {
         UserModel.getGoogleIdentityUsers.mockResolvedValue([googleOnly(1)]);
         const raw = JSON.stringify(await (await POST(req({ send: true }))).json());
         expect(raw).not.toContain("user1@example.org");
-        expect(raw).toContain("u****@example.org");
+        expect(raw).toContain("u***@example.org");
     });
 });
 
@@ -164,9 +164,16 @@ describe("failure handling", () => {
 });
 
 describe("maskEmail", () => {
-    test("keeps the domain, hides the local part", () => {
-        expect(maskEmail("ada@example.org")).toBe("a**@example.org");
-        expect(maskEmail("a@x.io")).toBe("a*@x.io");
+    test("keeps the first char + domain, hides the rest behind a fixed '***'", () => {
+        expect(maskEmail("ada@example.org")).toBe("a***@example.org");
+        expect(maskEmail("a@x.io")).toBe("a***@x.io");
+    });
+    test("REGRESSION #83: mask does not disclose the local-part length", () => {
+        // A star-per-character mask leaked how long the address was. The fixed run must be
+        // identical regardless of local-part length — same shape for short and long locals.
+        expect(maskEmail("bo@x.io")).toBe("b***@x.io");
+        expect(maskEmail("bartholomew@x.io")).toBe("b***@x.io");
+        expect(maskEmail("bo@x.io").length).toBe(maskEmail("bartholomew@x.io").length);
     });
     test("malformed input does not throw or echo", () => {
         expect(maskEmail("not-an-email")).toBe("<malformed>");

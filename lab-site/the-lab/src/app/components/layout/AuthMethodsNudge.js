@@ -87,12 +87,15 @@ export default function AuthMethodsNudge() {
             }}
         >
             <div style={{ flex: 1, minWidth: 240 }}>
-                <h2
+                {/* A <p><strong>, not a heading (#83): this banner renders inside LabShell,
+                    ahead of the page's own <h1>, so an <h2> here would inject a heading above
+                    the page outline. The region stays labelled via aria-labelledby on the id. */}
+                <p
                     id="google-retire-heading"
                     style={{ margin: 0, fontSize: 12.5, color: 'var(--amber)', fontWeight: 700 }}
                 >
-                    Google sign-in is no longer available
-                </h2>
+                    <strong>Google sign-in is no longer available</strong>
+                </p>
                 <p style={{ margin: '4px 0 0', color: 'var(--text-mid)' }}>
                     Google was your only way to sign in. Set a password now — or link Discord — so you
                     can keep getting into your account.
