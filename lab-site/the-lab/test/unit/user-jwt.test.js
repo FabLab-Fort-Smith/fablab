@@ -20,3 +20,17 @@ test("User signs and verifies a token with JWT_SECRET from env", async () => {
   expect(decoded.email).toBe("ada@example.com");
   expect(decoded.userID).toBe(user.userID);
 });
+
+// Issue #130: the dead "Show Email Address" privacy toggle was removed. A member's
+// email is never exposed to other members (the public projection strips it), so the
+// setting had no consumer and misleadingly defaulted email to non-private. The
+// privacy defaults must no longer carry a `showEmail` key.
+test("User privacy defaults omit the removed showEmail toggle (issue #130)", async () => {
+  process.env.JWT_SECRET = "test-jwt-secret";
+  jest.resetModules();
+  const { default: User } = await import("@/app/api/v1/users/class");
+
+  const user = new User("Ada", "Lovelace", "ada", "ada@example.com", "pw", "", "user", "verified");
+  expect(user.privacy).not.toHaveProperty("showEmail");
+  expect(user.privacy).toEqual({ showDiscord: true, showPhone: false });
+});
