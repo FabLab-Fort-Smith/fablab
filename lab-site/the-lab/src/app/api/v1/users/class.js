@@ -48,8 +48,11 @@ export default class User {
         this.badges = []; // ✅ Earned Badges
         
         // ✅ Privacy Settings
+        // NOTE: no `showEmail` toggle — a member's email is never exposed to other
+        // members (the public projection in access.js strips email and `privacy`),
+        // so the setting had no consumer. Removed to avoid implying a control that
+        // does nothing and defaulting email to non-private (issue #130).
         this.privacy = {
-            showEmail: true,
             showDiscord: true,
             showPhone: false
         };

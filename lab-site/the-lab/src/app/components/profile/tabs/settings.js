@@ -6,7 +6,6 @@ const SettingsTab = ({ user }) => {
     const [passwordModal, setPasswordModal] = useState(false);
     const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
     const [privacySettings, setPrivacySettings] = useState({
-        showEmail: user.privacy?.showEmail ?? true,
         showDiscord: user.privacy?.showDiscord ?? true,
         showPhone: user.privacy?.showPhone ?? false
     });
@@ -114,7 +113,7 @@ const SettingsTab = ({ user }) => {
 
             <Section title="// PRIVACY SETTINGS">
                 <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 16 }}>Control what contact information is visible on your public profile.</div>
-                {[['showEmail', 'Show Email Address'], ['showDiscord', 'Show Discord Handle'], ['showPhone', 'Show Phone Number']].map(([key, label]) => (
+                {[['showDiscord', 'Show Discord Handle'], ['showPhone', 'Show Phone Number']].map(([key, label]) => (
                     <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                         <Toggle checked={privacySettings[key]} onChange={() => handlePrivacyChange(key)} />
                         <span style={{ fontSize: 13, color: 'var(--text)' }}>{label}</span>
