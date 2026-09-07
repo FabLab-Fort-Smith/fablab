@@ -10,13 +10,11 @@ export default function MobileBottomNav() {
     const [openPost, setOpenPost] = useState(false);
 
     let active = -1;
-    if (pathname.includes('/dashboard/community/feed')) active = 0;
-    else if (pathname.includes('/dashboard/checkin')) active = 1;
+    if (pathname.includes('/dashboard/checkin')) active = 1;
     else if (pathname.includes('/dashboard/member/') || pathname.includes('/profile')) active = 3;
     else if (pathname.includes('/dashboard/activities/leaderboard')) active = 4;
 
     const NAV = [
-        { label: 'Feed', icon: '⊞', idx: 0, action: () => router.push('/dashboard/community/feed') },
         { label: 'Check In', icon: '◉', idx: 1, action: () => router.push('/dashboard/checkin') },
         { label: 'Post', icon: '＋', idx: 2, action: () => setOpenPost(true) },
         { label: 'Profile', icon: '◎', idx: 3, action: () => router.push(`/dashboard/${session?.user?.userID}/profile`) },

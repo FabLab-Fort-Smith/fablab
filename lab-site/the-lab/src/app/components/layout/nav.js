@@ -33,7 +33,6 @@ export function navForRole(role, userID) {
     }, {
       title: 'community',
       items: [
-        { id: '/dashboard/community/feed',           icon: '⌬', label: 'feed' },
         { id: '/dashboard/community/directory',      icon: '∷', label: 'directory' },
         { id: '/dashboard/community/announcements',  icon: '✉', label: 'announcements', hot: 'amber' },
         { id: '/dashboard/community/code-of-conduct', icon: '§', label: 'conduct.md' },
@@ -83,7 +82,6 @@ export function navForRole(role, userID) {
         { id: `/dashboard/${id}`,                      icon: '◉', label: 'as.member · home' },
         { id: '/dashboard/activities/leaderboard',     icon: '⚑', label: 'leaderboard' },
         { id: '/dashboard/activities/holodeck',        icon: '◐', label: 'holodeck' },
-        { id: '/dashboard/community/feed',             icon: '⌬', label: 'community.feed' },
         { id: '/dashboard/community/directory',        icon: '∷', label: 'directory' },
       ],
     }, {
