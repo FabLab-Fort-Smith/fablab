@@ -127,6 +127,16 @@ function collectConfigSchemaProblems(schema) {
         problems.push(`configSchema.${field}.default must be one of its options`);
       }
     }
+    if (spec.type === "secret") {
+      // Fail closed: a secret must never carry a hardcoded default (secret-in-code +
+      // would serialize to the client via configSchema) or an options allow-list.
+      if (spec.default !== undefined) {
+        problems.push(`configSchema.${field}.default is not allowed on a secret field`);
+      }
+      if (spec.options !== undefined) {
+        problems.push(`configSchema.${field}.options is not allowed on a secret field`);
+      }
+    }
   }
   return problems;
 }

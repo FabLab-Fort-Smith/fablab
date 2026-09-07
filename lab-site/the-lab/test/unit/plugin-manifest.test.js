@@ -97,6 +97,12 @@ describe("AD-1 select / text / secret config types", () => {
     expect(collectManifestProblems({ ...good, configSchema: { m: { type: "select", options: ["a", "b"], default: "a" } } })).toEqual([]);
   });
 
+  test("secret field rejects a hardcoded default or options (fail-closed)", () => {
+    expect(collectManifestProblems({ ...good, configSchema: { k: { type: "secret", default: "sk_live_x" } } }).some((p) => /default is not allowed on a secret/.test(p))).toBe(true);
+    expect(collectManifestProblems({ ...good, configSchema: { k: { type: "secret", options: ["a"] } } }).some((p) => /options is not allowed on a secret/.test(p))).toBe(true);
+    expect(collectManifestProblems({ ...good, configSchema: { k: { type: "secret" } } })).toEqual([]);
+  });
+
   test("select value must be one of options; text honors max length", () => {
     expect(validateConfig(schema, { mode: "write" }).value.mode).toBe("write");
     expect(validateConfig(schema, { mode: "delete" }).ok).toBe(false);
