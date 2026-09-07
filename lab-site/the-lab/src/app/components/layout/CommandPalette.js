@@ -27,7 +27,6 @@ const ALL_ROUTES = [
   { cat: 'activities', label: 'leaderboard',      path: '/dashboard/activities/leaderboard' },
   { cat: 'activities', label: 'bounty.board',     path: '/dashboard/activities/bounties' },
   // Community
-  { cat: 'community', label: 'feed',              path: '/dashboard/community/feed' },
   { cat: 'community', label: 'directory',         path: '/dashboard/community/directory' },
   { cat: 'community', label: 'announcements',     path: '/dashboard/community/announcements' },
   { cat: 'community', label: 'conduct.md',        path: '/dashboard/community/code-of-conduct' },
