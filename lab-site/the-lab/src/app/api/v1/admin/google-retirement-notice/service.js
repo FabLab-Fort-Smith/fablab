@@ -112,5 +112,8 @@ export async function runGoogleRetirementNotice({ send = false, force = false, l
 export function maskEmail(addr) {
     const [local, domain] = String(addr).split('@');
     if (!domain) return '<malformed>';
-    return `${local.slice(0, 1)}${'*'.repeat(Math.max(1, local.length - 1))}@${domain}`;
+    // Fixed-shape mask (#83): keep the first character and the domain for triage, and hide
+    // the rest of the local part behind a constant '***'. A star-per-character mask would
+    // disclose the local-part length; a fixed run does not (info-disclosure hardening).
+    return `${local.slice(0, 1)}***@${domain}`;
 }

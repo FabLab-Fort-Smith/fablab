@@ -432,9 +432,14 @@ export async function sendNudgeEmail(email, firstName, step, message, actionLink
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Nudge email sent for step: ${step}`);
+        logger.info({ step }, 'nudge email sent');
     } catch (error) {
-        console.error(`Error sending nudge email:`, error);
+        // SEC-24: log the failure SHAPE only — nodemailer attaches the recipient to the
+        // error (rejected/response/envelope), which the logger's redaction list does not cover.
+        logger.error(
+            { code: error?.code, responseCode: error?.responseCode, command: error?.command },
+            'nudge email send failed'
+        );
     }
 }
 
