@@ -23,8 +23,9 @@ jest.mock("@/lib/plugins/registry", () => ({
 }));
 
 import {
-  encryptSecret, decryptSecret, isEncrypted, encryptSecretConfig, decryptSecretConfig,
+  encryptSecret, decryptSecret, isEncrypted, encryptSecretConfig, decryptSecretConfig, ENVELOPE_PREFIX,
 } from "@/lib/plugins/secretCrypto";
+import { validateConfig } from "@/lib/plugins/manifest.schema";
 import { setConfig } from "@/lib/plugins/service";
 import PluginStateModel from "@/lib/plugins/model";
 import * as registry from "@/lib/plugins/registry";
@@ -92,6 +93,21 @@ describe("secretCrypto — AES-256-GCM at rest", () => {
     expect(dec.apiKey).toBe(PLAINTEXT);
     expect(dec.label).toBe("Hello");
   });
+
+  test("validateConfig rejects an inbound secret starting with the envelope prefix", () => {
+    const crafted = ENVELOPE_PREFIX + "abc";
+    const res = validateConfig(SCHEMA, { apiKey: crafted }, {});
+    expect(res.ok).toBe(false);
+    expect(res.errors.join(" ")).toContain(ENVELOPE_PREFIX);
+    expect(res.value).not.toHaveProperty("apiKey"); // not carried through as plaintext
+  });
+
+  test("blank-patch keeps a stored envelope (guard only applies to inbound patch values)", () => {
+    const stored = encryptSecret(PLAINTEXT); // an envelope living in `current` (from storage)
+    const res = validateConfig(SCHEMA, { apiKey: "" }, { apiKey: stored, label: "Hello" });
+    expect(res.ok).toBe(true);
+    expect(res.value.apiKey).toBe(stored); // unchanged, never rejected
+  });
 });
 
 describe("service.setConfig — write-only + at-rest (issue #196)", () => {
@@ -137,6 +153,14 @@ describe("service.setConfig — write-only + at-rest (issue #196)", () => {
     expect(stored.label).toBe("World"); // the non-secret patch still applies
     expect(res.secretsSet).toEqual({ apiKey: true });
     expect(JSON.stringify(res)).not.toContain("enc:v1:gcm:");
+  });
+
+  test("rejects an inbound secret that looks like our ciphertext envelope (fail closed, not stored plaintext)", async () => {
+    PluginStateModel.getState.mockResolvedValue(null);
+    const crafted = ENVELOPE_PREFIX + "not-really-encrypted";
+    await expect(setConfig("demo", { apiKey: crafted }, ADMIN)).rejects.toThrow(/Invalid config/);
+    // Nothing was persisted — the guard fires before the DB write.
+    expect(PluginStateModel.setConfig).not.toHaveBeenCalled();
   });
 
   test("replacing the secret with a new value re-encrypts it (still ciphertext)", async () => {

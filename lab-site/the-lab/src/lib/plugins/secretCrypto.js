@@ -19,7 +19,7 @@
 import crypto from "crypto";
 
 /** Marker prefix identifying an addon-secret ciphertext envelope. */
-const ENVELOPE_PREFIX = "enc:v1:gcm:";
+export const ENVELOPE_PREFIX = "enc:v1:gcm:";
 const KEY_ENV = "ENCRYPTION_KEY";
 // Fixed, non-secret HKDF salt + info for domain separation from other uses of the
 // same master key. Changing these would invalidate existing ciphertext.

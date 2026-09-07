@@ -5,6 +5,8 @@
 // permissions its admin actions require. Manifests are validated + frozen at
 // registry build time; they are never executed. See docs/architecture/plugin-platform.md.
 
+import { ENVELOPE_PREFIX } from "./secretCrypto";
+
 /**
  * The catalog of sockets (extension points) a plugin may bind to. A manifest
  * that references a socket outside this catalog is rejected at build time.
@@ -225,6 +227,10 @@ function coerce(spec, raw, field, errors) {
       // a non-empty string replaces it.
       if (raw === "" || raw === undefined || raw === null) return undefined;
       if (typeof raw !== "string") return void errors.push(`${field} must be a string`);
+      // Fail closed against envelope-prefix confusion: an INBOUND secret that looks like our
+      // internal ciphertext envelope would be mistaken for already-encrypted and stored in the
+      // clear. A genuine user secret never legitimately starts with this marker — reject it.
+      if (raw.startsWith(ENVELOPE_PREFIX)) return void errors.push(`${field} must not start with "${ENVELOPE_PREFIX}"`);
       if (spec.max !== undefined && raw.length > spec.max) return void errors.push(`${field} must be ≤ ${spec.max} chars`);
       return raw;
     }
