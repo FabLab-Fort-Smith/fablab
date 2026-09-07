@@ -1,19 +1,10 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import express from 'express';
 import { createServer } from 'http';
-import { pathToFileURL } from 'url';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import { verifyDeviceSecret, loadDeviceSecrets } from './lib/deviceAuth.js';
 import { requireApiSecret } from './lib/apiAuth.js';
-import offline from './lib/offlineAccess.js';
-import { makeAuthorizeScan } from './lib/scanAuthorize.js';
-import {
-    loadBrokerSecrets, loadBrokerDoorMap, makeBrokerAuth, makeRateLimiter, makeBrokerUplink,
-    makeUplinkConnection, relayEnvelopes, makeBrokerRegistry,
-} from './lib/brokerUplink.js';
-import { makeRequestBrokerResync, makeResyncTrigger } from './lib/brokerResync.js';
-import { makeRequestBrokerAudit } from './lib/brokerAudit.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -37,28 +28,15 @@ if (configuredDeviceCount === 0) {
     console.log(`Loaded secrets for ${configuredDeviceCount} device(s).`);
 }
 
-// --- Scan authorization (shared by the WS `scan` handler and the HTTP /api/v2/authorize) ---
-// Online-first with a fail-secure offline fallback; see vps/lib/scanAuthorize.js. Extracted there
-// so it is unit-testable. `cardId` is Restricted/PII and is NEVER logged.
-const authorizeScan = makeAuthorizeScan({ offline });
-
 // --- WebSocket Server ---
-// Two endpoints on one HTTP server, path-routed at the upgrade (below): devices/Pico on the default
-// path (unchanged), the on-site broker's Link-B uplink on `/broker`. Kept separate so the two
-// principals (device secret vs broker bearer) never share a handler or authenticate cross-boundary.
-// maxPayload bounds pre-auth memory/CPU on these internet-facing sockets (CWE-400): control frames
-// are tiny and envelopes arrive over HTTP, not inbound WS, so 64 KiB is generous.
-const WS_MAX_PAYLOAD = 64 * 1024;
-const BROKER_AUTH_TIMEOUT_MS = 5000; // drop a broker socket that never authenticates (pre-auth DoS)
-const deviceWss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD });
-const brokerWss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD });
+const wss = new WebSocketServer({ server });
 
-deviceWss.on('connection', (ws, req) => {
+wss.on('connection', (ws, req) => {
     const ip = req.socket.remoteAddress;
     console.log(`[WS] New connection from ${ip}`);
     let authenticatedDeviceId = null;
 
-    ws.on('message', async (message) => {
+    ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
 
@@ -82,35 +60,6 @@ deviceWss.on('connection', (ws, req) => {
                 }
             } else if (data.type === 'ping') {
                 ws.send(JSON.stringify({ type: 'pong' }));
-            } else if (data.type === 'scan') {
-                // Door scan (Flow A): the Pico forwards a card read here; we decide (online-first,
-                // offline fallback) and return the result. The Pico fires its OWN relay on a granted
-                // result (fail-secure — if this reply never arrives, the door stays locked). We do NOT
-                // push an UNLOCK command for scans; server-push UNLOCK stays reserved for the app-tap
-                // path (Flow B, /api/unlock).
-                if (!authenticatedDeviceId) {
-                    // Unauthenticated device must never get a decision (spoofing / DoS). Fail closed.
-                    ws.send(JSON.stringify({ type: 'scan_result', requestId: data.requestId, granted: false, reason: 'UNAUTHENTICATED' }));
-                    return;
-                }
-                const cardId = data.cred;
-                const doorId = data.doorId || authenticatedDeviceId; // default the door to the device
-                if (!cardId) {
-                    ws.send(JSON.stringify({ type: 'scan_result', requestId: data.requestId, granted: false, reason: 'MISSING_CRED' }));
-                    return;
-                }
-                const decision = await authorizeScan({ cardId, doorId, tz: data.tz });
-                // SEC §9 audit event: device scan decision — actor(device)+door+outcome, NEVER the card code.
-                console.log(`[WS] scan device=${authenticatedDeviceId} door=${doorId} granted=${decision.granted} mode=${decision.mode}${decision.reason ? ' reason=' + decision.reason : ''}`);
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        type: 'scan_result',
-                        requestId: data.requestId,
-                        granted: Boolean(decision.granted),
-                        reason: decision.reason,
-                        mode: decision.mode,
-                    }));
-                }
             }
 
         } catch (e) {
@@ -124,54 +73,6 @@ deviceWss.on('connection', (ws, req) => {
             devices.delete(authenticatedDeviceId);
         }
     });
-});
-
-// --- Broker uplink (Link-B, cloud side — S2c-2) ---
-// The on-site broker dials this endpoint (wss:// terminated at the edge proxy). It authenticates with
-// a bearer (constant-time), then proxies online scans (`authz`) and receives per-door envelope pushes.
-// Deny-by-default, authn-before-act, owned-door scope (BOLA), per-broker rate limit. The scan `code`
-// is Restricted/PII (§5) and is never logged. See vps/lib/brokerUplink.js.
-const brokerUplink = makeBrokerUplink({
-    authorizeScan,
-    authenticate: makeBrokerAuth(loadBrokerSecrets()),
-    doorMap: loadBrokerDoorMap(),
-    allow: makeRateLimiter({}),
-});
-const brokerConnCount = Object.keys(loadBrokerSecrets()).length;
-if (brokerConnCount === 0) {
-    console.warn('⚠️ No BROKER_UPLINK_SECRETS configured — broker uplink authentication will reject all brokers.');
-} else {
-    console.log(`Loaded uplink secrets for ${brokerConnCount} broker(s).`);
-}
-// Connected brokers: brokerId -> SET of member connections. An active/standby HA pair shares one
-// logical brokerId (design §9), so BOTH members are tracked and fed envelopes (S5) — the standby's
-// rung-2 cache stays fresh for a seamless failover.
-const registry = makeBrokerRegistry();
-// The security logic lives in the pure driver (vps/lib/brokerUplink.js); this is just socket glue.
-const brokerLog = (event, fields = {}) => console.log(`[Broker] ${event} ${JSON.stringify(fields)}`);
-// On a broker (re)connect, ask the app to rebuild+push that broker's envelopes (S2c-2c). Best-effort +
-// per-broker cooldown so a flapping broker can't storm the app; fire-and-forget (never blocks auth).
-const resyncTrigger = makeResyncTrigger({ resync: makeRequestBrokerResync({ log: brokerLog }), log: brokerLog });
-const ingestAudit = makeRequestBrokerAudit({ log: brokerLog }); // relay an edge audit batch to the app (S6-b-c1)
-const acceptBrokerConn = makeUplinkConnection({ uplink: brokerUplink, registry, log: brokerLog, onConnect: resyncTrigger, ingestAudit });
-
-brokerWss.on('connection', (ws, req) => {
-    const ip = req.socket.remoteAddress;
-    const conn = acceptBrokerConn(ws, { ip });
-    // Fail-secure pre-auth timeout: a socket that never authenticates is closed (CWE-400 / M1).
-    const authTimer = setTimeout(() => { if (!conn.brokerId()) { try { ws.close(); } catch { /* gone */ } } }, BROKER_AUTH_TIMEOUT_MS);
-    authTimer.unref?.();
-    ws.on('message', (raw) => { conn.message(raw); });
-    ws.on('close', () => { clearTimeout(authTimer); conn.close(); });
-    ws.on('error', () => { /* transient; fail-secure — nothing is granted on a dead uplink */ });
-});
-
-// Route the WS upgrade by path: `/broker` → broker uplink, everything else → devices (unchanged).
-server.on('upgrade', (req, socket, head) => {
-    let pathname = '/';
-    try { pathname = new URL(req.url, 'http://localhost').pathname; } catch { /* default */ }
-    const wssFor = pathname === '/broker' ? brokerWss : deviceWss;
-    wssFor.handleUpgrade(req, socket, head, (ws) => wssFor.emit('connection', ws, req));
 });
 
 // --- HTTP API for Web App ---
@@ -317,12 +218,6 @@ app.post('/api/toggle-light', requireApiSecret, (req, res) => {
     }
 });
 
-// Healthcheck — MUST be declared before the '/api/status/:deviceId' param route below, or
-// Express matches "healthcheck" as a deviceId and shadows it (container HEALTHCHECK relies on this).
-app.get('/api/status/healthcheck', (req, res) => {
-    res.json({ status: 'ok', uptime: process.uptime() });
-});
-
 // Endpoint to get status of a device
 app.get('/api/status/:deviceId', (req, res) => {
     const { deviceId } = req.params;
@@ -332,61 +227,11 @@ app.get('/api/status/:deviceId', (req, res) => {
     res.json({ deviceId, connected: isConnected });
 });
 
-// --- door-access addon: offline allowlist (Flow C) ---
-// The addon pushes a signed snapshot here; we verify + store it, and fall back to it when the
-// app core is unreachable on a scan. See vps/lib/offlineAccess.js + the door-access design doc.
-
-// Receive + store the signed offline allowlist (verified before storing — a forged push is rejected).
-app.post('/api/v2/allowlist', requireApiSecret, (req, res) => {
-    const result = offline.setSnapshot(req.body);
-    if (!result.stored) return res.status(400).json({ error: 'Invalid allowlist signature' });
-    console.log(`[Allowlist] Stored snapshot: ${result.entryCount} entries, expires ${result.expiresAt}`);
-    return res.json({ stored: true, expiresAt: result.expiresAt, entryCount: result.entryCount });
+// Healthcheck
+app.get('/api/status/healthcheck', (req, res) => {
+    res.json({ status: 'ok', uptime: process.uptime() });
 });
 
-app.get('/api/v2/allowlist/status', requireApiSecret, (req, res) => {
-    res.json(offline.snapshotStatus());
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
-
-// Authorize a scan: try the app core first; on ANY failure, decide offline (fail-secure).
-// The panel/device should call THIS instead of the app's check-access directly, so it keeps
-// working during an app/network outage. Returns { granted, mode: 'online'|'offline', reason? }.
-app.post('/api/v2/authorize', requireApiSecret, async (req, res) => {
-    const { cardId, doorId, tz } = req.body || {};
-    if (!cardId || !doorId) return res.status(400).json({ error: 'cardId and doorId are required' });
-    // Shared decision path (identical to the WS `scan` handler): online-first, offline fallback.
-    const decision = await authorizeScan({ cardId, doorId, tz });
-    return res.json(decision);
-});
-
-// --- Broker envelope relay (S2c-2) ---
-// The app builds per-broker×door signed envelopes (re-keyed to each brokerIndexKey) and POSTs them
-// here; the cloud relays them down the matching broker's live uplink (mirrors the addon allowlist
-// push). Defense-in-depth: an envelope for a door the broker does not own is dropped, not relayed
-// (BOLA). apiAuth-guarded; the app is the only caller.
-app.post('/api/v2/broker/:brokerId/envelopes', requireApiSecret, (req, res) => {
-    const { brokerId } = req.params;
-    const body = req.body;
-    const envelopes = Array.isArray(body) ? body : (body && Array.isArray(body.envelopes) ? body.envelopes : null);
-    if (!envelopes) return res.status(400).json({ error: 'body must be an array of signed envelopes' });
-
-    const r = relayEnvelopes({ uplink: brokerUplink, registry }, brokerId, envelopes);
-    if (r.rejected) console.warn(`[Broker] relay dropped ${r.rejected} envelope(s) for doors not owned by ${brokerId}`);
-    if (!r.connected) {
-        // The broker isn't connected right now; it re-syncs on reconnect (later slice). Report it so
-        // the caller can back off rather than retry forever.
-        return res.status(503).json({ error: 'broker not connected', brokerId, relayed: 0, rejected: r.rejected });
-    }
-    console.log(`[Broker] relayed ${r.relayed} envelope(s) to ${brokerId}`);
-    return res.json({ relayed: r.relayed, rejected: r.rejected });
-});
-
-// Listen only when run directly (Docker CMD `node socket-server.js`), not when imported by a test.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-    server.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-    });
-}
-
-// Exported for integration tests (bind an ephemeral port there); production uses the guard above.
-export { app, server, registry, brokerWss, deviceWss };

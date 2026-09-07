@@ -103,7 +103,7 @@ export default function Sidebar({ session, open, onClose, isMobile }) {
       </div>
 
       {/* Nav groups */}
-      <nav aria-label="Primary" style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }} className="term-scroll">
+      <div style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }} className="term-scroll">
         {nav.map((section) => (
           <div key={section.title} style={{ marginBottom: 14 }}>
             <div style={{ padding: '4px 14px', fontSize: 9.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--text-dim)', fontFamily: 'var(--mono)', userSelect: 'none' }}>
@@ -119,7 +119,6 @@ export default function Sidebar({ session, open, onClose, isMobile }) {
                   key={item.id + section.title}
                   href={item.id}
                   onClick={isMobile ? onClose : undefined}
-                  aria-current={active ? 'page' : undefined}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     width: '100%', padding: '6px 14px',
@@ -132,7 +131,7 @@ export default function Sidebar({ session, open, onClose, isMobile }) {
                     transition: 'background 0.08s',
                   }}
                 >
-                  <span aria-hidden="true" style={{ width: 12, color: active ? 'var(--green)' : 'var(--text-dim)', flexShrink: 0 }}>{item.icon}</span>
+                  <span style={{ width: 12, color: active ? 'var(--green)' : 'var(--text-dim)', flexShrink: 0 }}>{item.icon}</span>
                   <span style={{ flex: 1 }}>{item.label}</span>
                   {item.count !== undefined && item.count !== null && (
                     <span style={{
@@ -147,7 +146,7 @@ export default function Sidebar({ session, open, onClose, isMobile }) {
             })}
           </div>
         ))}
-      </nav>
+      </div>
 
       {/* Logout */}
       <div style={{ padding: '8px 12px', borderTop: '1px solid var(--bd-1)' }}>

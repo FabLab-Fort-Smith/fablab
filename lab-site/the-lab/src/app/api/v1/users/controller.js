@@ -2,7 +2,6 @@
 
 import { auth } from "@/auth";
 import UserService from "./service";
-import { auditLog } from "@/lib/audit";
 
 // SEC-02: the user API is not behind middleware, so every handler authenticates
 // at the edge and passes the caller's identity (the `actor`) into the service,
@@ -189,18 +188,6 @@ export default class UserController {
                 );
             }
 
-            // Audit privilege/access-sensitive changes made through the broad admin PUT so this path
-            // isn't an unaudited alternative to the dedicated AC-3 role/status endpoints (SEC #183 carry-in).
-            if (isAdminUser) {
-                // Use the persisted user's id (never the lookup `query`, which may be an email/phone —
-                // no PII in retained audit) and the persisted value (truthful trail). (SEC #188 L-1/L-2)
-                const targetID = updatedUser.userID || query;
-                if (Object.prototype.hasOwnProperty.call(updateData, "role"))
-                    auditLog("admin.member.role.change", { actor: session.user.userID, target: targetID, after: updatedUser.role, source: "users.PUT", outcome: "success" });
-                if (updateData.membership && Object.prototype.hasOwnProperty.call(updateData.membership, "status"))
-                    auditLog("admin.member.status.change", { actor: session.user.userID, target: targetID, after: updatedUser.membership?.status, source: "users.PUT", outcome: "success" });
-            }
-
             return new Response(
                 JSON.stringify({ message: "User updated successfully", user: updatedUser }),
                 { status: 200 }
@@ -243,7 +230,6 @@ export default class UserController {
                 );
             }
 
-            auditLog("admin.member.delete", { actor: session.user.userID, target: userID, outcome: "success" });
             return new Response(
                 JSON.stringify({ message: "User deleted successfully." }),
                 { status: 200 }
@@ -272,7 +258,6 @@ export default class UserController {
             }
 
             const result = await UserService.nudgeUser(userID, preview);
-            if (!preview) auditLog("admin.member.nudge", { actor: session.user.userID, target: userID, outcome: "sent" });
             return new Response(JSON.stringify(result), { status: 200 });
         } catch (error) {
             console.error("Error in UserController.nudgeUser:", error);
@@ -308,7 +293,6 @@ export default class UserController {
             }
 
             const result = await UserService.mergeUsers(targetUserID, sourceUserID, overrides, toActor(session));
-            auditLog("admin.member.merge", { actor: session.user.userID, target: targetUserID, source: sourceUserID, outcome: "success" });
             return new Response(JSON.stringify({ success: true, user: result }), { status: 200 });
         } catch (error) {
             console.error("Error in UserController.mergeUsers:", error);

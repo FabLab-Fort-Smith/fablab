@@ -4,9 +4,8 @@
 # Talks to the Coolify API over the tailnet (COOLIFY_URL). Re-runnable. Prints the API response on
 # any failure. Deploys are GATED behind --deploy (an action); config/env changes run by default.
 #
-# Usage:  bash coolify/reconcile.sh [--app the-lab|socket-server] [--env staging|production] [--dry-run] [--deploy] [--confirm-production]
-#   --app NAME            which application: the-lab (Next.js, default) or socket-server (IoT WS tier)
-#   --env NAME            which environment to reconcile (default: staging)
+# Usage:  bash coolify/reconcile.sh [--env staging|production] [--dry-run] [--deploy] [--confirm-production]
+#   --env NAME            which application to reconcile (default: staging)
 #   --dry-run             show what WOULD change (discover + plan); make no writes
 #   --deploy              after reconciling, trigger a deployment of the app
 #   --confirm-production  REQUIRED for any WRITE to production (belt-and-braces so a stray
@@ -21,7 +20,7 @@ PLATFORM_ENVF="../.env"     # COOLIFY_URL/TOKEN live here regardless of target e
 ENVF="$PLATFORM_ENVF"        # app-secret source; re-pointed per environment below
 umask 077
 
-DRY=0; DEPLOY=0; ENV_TARGET=staging; CONFIRM_PROD=0; APP_TARGET=the-lab
+DRY=0; DEPLOY=0; ENV_TARGET=staging; CONFIRM_PROD=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1 ;;
@@ -29,15 +28,12 @@ while [ "$#" -gt 0 ]; do
     --confirm-production) CONFIRM_PROD=1 ;;
     --env) shift; ENV_TARGET="${1:-}" ;;
     --env=*) ENV_TARGET="${1#--env=}" ;;
-    --app) shift; APP_TARGET="${1:-}" ;;
-    --app=*) APP_TARGET="${1#--app=}" ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
     *) printf 'unknown arg: %s\n' "$1" >&2; exit 2 ;;
   esac
   shift
 done
 case "$ENV_TARGET" in staging|production) ;; *) printf 'unknown --env: %s (expected staging|production)\n' "$ENV_TARGET" >&2; exit 2 ;; esac
-case "$APP_TARGET" in the-lab|socket-server) ;; *) printf 'unknown --app: %s (expected the-lab|socket-server)\n' "$APP_TARGET" >&2; exit 2 ;; esac
 
 info(){ printf '  %s\n' "$*"; }
 warn(){ printf 'WARN: %s\n' "$*" >&2; }
@@ -57,30 +53,29 @@ PROJECT_NAME="the-lab"                 # existing Coolify project
 GITHUB_APP_NAME="fab-lab-fort-smith"   # connected GitHub App source
 GIT_REPOSITORY="FabLab-Fort-Smith/fablab"
 BUILD_PACK="dockerfile"
+BASE_DIRECTORY="/lab-site/the-lab"     # monorepo subdir (ADR 0005)
+DOCKERFILE_LOCATION="/Dockerfile"      # relative to BASE_DIRECTORY
+PORTS_EXPOSES="3000"                   # Next.js standalone (Dockerfile EXPOSE 3000)
 PRIMARY_DOMAIN="fablabfortsmith.org"
-# App shape per --app (the-lab Next.js vs the IoT socket-server). Both build from a Dockerfile in
-# their own monorepo subdir (ADR 0005).
-case "$APP_TARGET" in
-  the-lab)       BASE_DIRECTORY="/lab-site/the-lab";     DOCKERFILE_LOCATION="/Dockerfile"; PORTS_EXPOSES="3000" ;;  # Next.js standalone
-  socket-server) BASE_DIRECTORY="/lab-site/the-lab/vps"; DOCKERFILE_LOCATION="/Dockerfile"; PORTS_EXPOSES="3001" ;;  # WS access-control tier
-esac
 
 # ---- per-environment desired state (selected by --env) ----
 # Each environment has its OWN app, branch, domain, and secret file. Production became the live
 # site at the Vercel cutover (ADR 0006); staging stays the dev->staging. parallel-run target.
-# Branch + secret file are per-ENV, shared by both apps. Production keeps its OWN secret file
-# (prod MongoDB, the EXISTING prod ENCRYPTION_KEY — a fresh key makes every stored member email
-# undecryptable — prod Turnstile, prod URLs), never mixed with staging (issue #85).
 case "$ENV_TARGET" in
-  staging)    GIT_BRANCH="dev";  ENVF="../.env" ;;
-  production) GIT_BRANCH="main"; ENVF="../.env.production" ;;
-esac
-# App name + public domain(s) per app × env.
-case "${APP_TARGET}:${ENV_TARGET}" in
-  the-lab:staging)          APP_NAME="the-lab-staging";          DOMAINS="https://staging.${PRIMARY_DOMAIN}" ;;
-  the-lab:production)       APP_NAME="the-lab-production";       DOMAINS="https://${PRIMARY_DOMAIN},https://www.${PRIMARY_DOMAIN}" ;;
-  socket-server:staging)    APP_NAME="socket-server-staging";    DOMAINS="https://socket-staging.${PRIMARY_DOMAIN}" ;;  # single-label: CF Universal SSL (*.domain) doesn't cover 2-level socket.staging.<domain>
-  socket-server:production) APP_NAME="socket-server-production"; DOMAINS="https://socket.${PRIMARY_DOMAIN}" ;;
+  staging)
+    APP_NAME="the-lab-staging"
+    GIT_BRANCH="dev"
+    DOMAINS="https://staging.${PRIMARY_DOMAIN}"
+    ENVF="../.env"
+    ;;
+  production)
+    APP_NAME="the-lab-production"
+    GIT_BRANCH="main"
+    DOMAINS="https://${PRIMARY_DOMAIN},https://www.${PRIMARY_DOMAIN}"
+    # Separate secret file: prod MongoDB, prod ENCRYPTION_KEY (reusing it is mandatory — a fresh
+    # key makes every stored member email undecryptable), prod Turnstile widget, prod URLs.
+    ENVF="../.env.production"
+    ;;
 esac
 # Per-PR preview URL. SINGLE-label host under the apex so Cloudflare Universal SSL's
 # *.fablabfortsmith.org edge cert covers it (a 2-level *.preview.<domain> would need ACM/Enterprise).
@@ -108,22 +103,6 @@ case "$ENV_TARGET" in
   staging)    APP_ENV_FIXED=(AUTH_TRUST_HOST=true "AUTH_URL=https://staging.${PRIMARY_DOMAIN}") ;;
   production) APP_ENV_FIXED=(AUTH_TRUST_HOST=true "AUTH_URL=https://${PRIMARY_DOMAIN}") ;;
 esac
-
-# the-lab: WS_SERVER_URL lets pair-card/pair-key reach the socket-server (added with the door addon).
-[ "$APP_TARGET" = the-lab ] && APP_ENV_OPTIONAL+=(WS_SERVER_URL)
-
-# --- socket-server: its own env shape (OVERRIDES the the-lab defaults above) ---
-# DEVICE_SECRETS = deviceId->secret JSON (vps/lib/deviceAuth.js); INTERNAL_API_SECRET authenticates
-# the app's check-access calls; SOCKET_API_SECRET guards the /api/unlock + /api/v2 control routes.
-# APP_INTERNAL_URL (fixed per env) is where the socket-server calls the app core online-first.
-if [ "$APP_TARGET" = socket-server ]; then
-  APP_ENV_REQUIRED=(DEVICE_SECRETS INTERNAL_API_SECRET SOCKET_API_SECRET)
-  APP_ENV_OPTIONAL=(DOOR_ALLOWLIST_VERIFY_KEY DOOR_CARD_INDEX_KEY)  # offline allowlist verify keys — optional until offline mode is exercised
-  case "$ENV_TARGET" in
-    staging)    APP_ENV_FIXED=(PORT=3001 "APP_INTERNAL_URL=https://staging.${PRIMARY_DOMAIN}") ;;
-    production) APP_ENV_FIXED=(PORT=3001 "APP_INTERNAL_URL=https://${PRIMARY_DOMAIN}") ;;
-  esac
-fi
 # =======================================================================================
 
 # --- guards: per-env secret file present, and production writes explicitly confirmed ---

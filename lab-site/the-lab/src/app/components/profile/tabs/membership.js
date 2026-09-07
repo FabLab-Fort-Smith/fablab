@@ -162,10 +162,9 @@ const MembershipTab = ({ user, onUpdateMembership, membershipApplied = false }) 
                 const res = await fetch(`/api/v1/users?userID=${user.userID}`);
                 if (!res.ok) return;
                 const data = await res.json();
-                // Post-retire the raw code is no longer returned; a `pairedAt` marker confirms pairing.
-                const ak = data?.user?.membership?.accessKey;
-                if (ak?.code || ak?.pairedAt) {
-                    setCardCode(ak.code || 'paired');
+                const code = data?.user?.membership?.accessKey?.code;
+                if (code) {
+                    setCardCode(code);
                     setPairingActive(false);
                     setShowPairInstructions(false);
                     showToast('NFC card paired successfully!', 'success');

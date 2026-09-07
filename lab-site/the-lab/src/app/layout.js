@@ -7,8 +7,8 @@ export const viewport = {
     themeColor: "#000000",
     width: "device-width",
     initialScale: 1,
-    // Do NOT set maximumScale/userScalable — blocking pinch-zoom fails WCAG 2.2 SC 1.4.4 (Resize
-    // Text) / 1.4.10 (Reflow). Users must be able to zoom (AC-8b).
+    maximumScale: 1,
+    userScalable: false,
     // PWA runs display:standalone (fullscreen) — opt into the safe-area insets so
     // top chrome can pad below the status bar/notch instead of being clipped.
     viewportFit: "cover",

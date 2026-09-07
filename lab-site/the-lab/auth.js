@@ -9,7 +9,6 @@ import AuthService from '@/app/api/auth/[...nextauth]/service'; // Email encrypt
 import DiscordService from '@/lib/discord';
 import TransactionService from '@/app/api/v1/transactions/service';
 import { maskId } from '@/lib/redact'; // redact identifiers in logs (CLAUDE.md §5/§9, #133)
-import { revalidateToken, deidentifyInvalidated } from '@/lib/sessionRevocation'; // session revocation (AC-8a)
 
 const baseURL = `${process.env.NEXT_PUBLIC_URL}`;
 
@@ -422,21 +421,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     console.error("Grace period check failed:", e);
                 }
             }
-            // Revocation on refresh: invalidate a session whose account was deleted / GDPR-purged /
-            // merged away, and propagate a role demotion. Throttled + fail-open; logic lives in the
-            // unit-tested @/lib/sessionRevocation (SEC #184/#188 carry-in).
-            await revalidateToken(token, {
-                getUser: (userID) => UsersService.getUserByQuery({ userID }),
-                log: (m) => console.log(m),
-                maskId,
-            });
-
             return token;
         },
         async session({ session, token }) {
-            // Account gone → de-identified session so every server-side role/ownership check fails
-            // closed (role/userID undefined → not admin → 401) without throwing.
-            if (deidentifyInvalidated(session, token)) return session;
             if (token) {
                 session.user.userID = token.userID;
                 session.user.name = token.name;

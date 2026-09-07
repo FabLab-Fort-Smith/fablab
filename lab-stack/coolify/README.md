@@ -100,24 +100,9 @@ value to use and manages everything else.)
 
 > Back up Coolify config (export) alongside the MongoDB backups; both are needed to rebuild.
 
-## 7. Socket-server (IoT access-control tier)
-The door/access WebSocket server (`lab-site/the-lab/vps/`, `Dockerfile` → port 3001) is a **second
-Coolify app**, reconciled by the same script with `--app socket-server` (default `--app the-lab`):
-- **Domains:** `socket-staging.fablabfortsmith.org` (staging), `socket.fablabfortsmith.org` (prod).
-  Add a **proxied Cloudflare DNS record** for each (→ the VPS) before first deploy, like the app.
-- **Env (from the vault → `.env`):** `DEVICE_SECRETS` (deviceId→secret JSON; item *The-Lab
-  socket-server (IoT)*), `INTERNAL_API_SECRET`, `SOCKET_API_SECRET`; fixed `PORT=3001` +
-  `APP_INTERNAL_URL` (the app's own URL, for online-first `check-access`). Offline allowlist verify
-  keys `DOOR_ALLOWLIST_VERIFY_KEY` / `DOOR_CARD_INDEX_KEY` are optional until offline mode is used
-  (**not yet vaulted** — add when enabling offline).
-- **Deploy:** `bash coolify/reconcile.sh --app socket-server --env staging --deploy` (then
-  `--env production --confirm-production`). Pairs with the app's `WS_SERVER_URL` (now synced).
-- The Pico's `config.json` `device_secret` must equal this device's value in `DEVICE_SECRETS`.
-
 ## Automated app config (config-as-code)
-- **`reconcile.sh`** — idempotent, API-driven reconciliation of a Coolify application over the
-  tailnet API; select the app with `--app the-lab` (default) or `--app socket-server`, and the
-  environment with `--env staging|production`. `make coolify-plan` (dry-run) / `make coolify-apply`
-  (+`ARGS=--deploy`). Desired state is declared at the top of the script.
+- **`reconcile.sh`** — idempotent, API-driven reconciliation of the `the-lab-staging` application
+  (create/update, env sync, domains) over the tailnet API. `make coolify-plan` (dry-run) /
+  `make coolify-apply` (+`ARGS=--deploy`). Desired state is declared at the top of the script.
 - Runbooks: `docs/runbooks/deploy-app.md`, `redeploy-rollback.md`, `rebuild-coolify-from-code.md`.
 - Tailnet-first admin + Cloudflare-gated webhooks: **ADR 0012** + `../cloudflare/access-policy.md`.

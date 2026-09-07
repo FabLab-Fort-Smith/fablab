@@ -1,8 +1,0 @@
-# On-device secrets/config — never commit (WiFi creds, device secret). Ship config.example.json.
-config.json
-secrets.json
-*.secret
-
-# Generated
-__pycache__/
-*.pyc

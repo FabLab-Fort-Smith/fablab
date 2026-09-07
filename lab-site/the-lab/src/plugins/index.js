@@ -6,9 +6,8 @@
 // onDisable?, onConfigChange? }.
 
 import * as memberEmail from "./member-email";
-import * as doorAccessController from "./door-access-controller";
 
 /** @type {Array<{manifest: object, register?: Function, onEnable?: Function, onDisable?: Function, onConfigChange?: Function}>} */
-export const PLUGINS = [memberEmail, doorAccessController];
+export const PLUGINS = [memberEmail];
 
 export default PLUGINS;
