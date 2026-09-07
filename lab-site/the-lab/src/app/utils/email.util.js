@@ -18,6 +18,32 @@ const transporter = nodemailer.createTransport({
 });
 
 /**
+ * Escape a value for safe interpolation into an HTML email body (CWE-79).
+ *
+ * Neutralizes the five HTML metacharacters so member-controlled fields — first
+ * name, bounty title/description/reward, actor names, volunteer-log description,
+ * and the public contact-form name/email/message — cannot inject markup or
+ * script into a rendered email. Only untrusted, user-supplied values are passed
+ * through this; static server copy is left as authored.
+ *
+ * `&` is replaced first so already-safe output is never double-escaped. Non-string
+ * input is coerced with String(); null/undefined become an empty string (so a
+ * missing name renders blank rather than the literal "undefined").
+ *
+ * @param {*} value - The untrusted value to escape.
+ * @returns {string} The HTML-escaped string, safe to place in element text.
+ */
+export function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
  * ✅ Send a verification email to the user
  * @param {string} email - The user's email address
  * @param {string} token - The verification token
@@ -106,13 +132,13 @@ export async function sendBountyNotificationEmail(email, firstName, bounty) {
         html: `
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #00ff00;">New Bounty Alert! 🚨</h2>
-                <p>Hey ${firstName},</p>
+                <p>Hey ${escapeHtml(firstName)},</p>
                 <p>A new bounty has just been posted at the Lab:</p>
-                
+
                 <div style="border: 1px solid #333; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                    <h3 style="margin-top: 0; color: #fff;">${bounty.title}</h3>
-                    <p style="color: #ccc;">${bounty.description}</p>
-                    <p><strong>Reward:</strong> ${rewardText}</p>
+                    <h3 style="margin-top: 0; color: #fff;">${escapeHtml(bounty.title)}</h3>
+                    <p style="color: #ccc;">${escapeHtml(bounty.description)}</p>
+                    <p><strong>Reward:</strong> ${escapeHtml(rewardText)}</p>
                     ${bounty.stakeValue > 0 ? `<p><strong>Stake:</strong> +${bounty.stakeValue}</p>` : ''}
                 </div>
 
@@ -142,7 +168,7 @@ export async function sendDeclineEmail(email, firstName) {
         html: `
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #cccccc; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #39ff14;">The Lab</h2>
-                <p>Hi ${firstName || 'there'},</p>
+                <p>Hi ${escapeHtml(firstName || 'there')},</p>
                 <p>Thank you for your interest in The Lab. After reviewing your application, we aren't able to move forward at this time.</p>
                 <p>We appreciate your interest in the community and hope to see you at a future event.</p>
                 <p style="color: #666; font-size: 12px;">— The Lab Team</p>
@@ -170,11 +196,11 @@ export async function sendBountyClaimedEmail(email, creatorName, bounty, claimer
         html: `
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #00ff00;">Bounty Claimed! 🎯</h2>
-                <p>Hey ${creatorName},</p>
-                <p><strong>${claimerName}</strong> has claimed your bounty:</p>
-                
+                <p>Hey ${escapeHtml(creatorName)},</p>
+                <p><strong>${escapeHtml(claimerName)}</strong> has claimed your bounty:</p>
+
                 <div style="border: 1px solid #333; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                    <h3 style="margin-top: 0; color: #fff;">${bounty.title}</h3>
+                    <h3 style="margin-top: 0; color: #fff;">${escapeHtml(bounty.title)}</h3>
                 </div>
 
                 <a href="${bountyLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">View Details</a>
@@ -203,11 +229,11 @@ export async function sendBountySubmittedEmail(email, creatorName, bounty, submi
         html: `
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #00ff00;">Work Submitted! 📝</h2>
-                <p>Hey ${creatorName},</p>
-                <p><strong>${submitterName}</strong> has submitted work for your bounty:</p>
-                
+                <p>Hey ${escapeHtml(creatorName)},</p>
+                <p><strong>${escapeHtml(submitterName)}</strong> has submitted work for your bounty:</p>
+
                 <div style="border: 1px solid #333; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                    <h3 style="margin-top: 0; color: #fff;">${bounty.title}</h3>
+                    <h3 style="margin-top: 0; color: #fff;">${escapeHtml(bounty.title)}</h3>
                     <p>Please review the submission and verify the work.</p>
                 </div>
 
@@ -240,11 +266,11 @@ export async function sendBountyVerifiedEmail(email, assigneeName, bounty) {
         html: `
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #00ff00;">Bounty Verified! ✅</h2>
-                <p>Hey ${assigneeName},</p>
-                <p>Great job! Your work on <strong>${bounty.title}</strong> has been verified.</p>
-                
+                <p>Hey ${escapeHtml(assigneeName)},</p>
+                <p>Great job! Your work on <strong>${escapeHtml(bounty.title)}</strong> has been verified.</p>
+
                 <div style="border: 1px solid #333; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                    <p><strong>Reward Received:</strong> ${rewardText}</p>
+                    <p><strong>Reward Received:</strong> ${escapeHtml(rewardText)}</p>
                     ${bounty.stakeValue > 0 ? `<p><strong>Stake Earned:</strong> +${bounty.stakeValue}</p>` : ''}
                 </div>
 
@@ -272,7 +298,7 @@ export async function sendApplicationReceivedEmail(email, firstName) {
         html: `
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #00ff00;">Application Received</h2>
-                <p>Hey ${firstName},</p>
+                <p>Hey ${escapeHtml(firstName)},</p>
                 <p>Thanks for applying to join The Lab! We've received your application and our team will review it shortly.</p>
                 <p>You'll receive another email when your status changes or if we need more information.</p>
             </div>
@@ -335,7 +361,7 @@ export async function sendStatusChangeEmail(email, firstName, newStatus) {
         html: `
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #00ff00;">${subject}</h2>
-                <p>Hey ${firstName},</p>
+                <p>Hey ${escapeHtml(firstName)},</p>
                 <p>${message}</p>
                 
                 <a href="${actionLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px; margin-top: 20px;">${actionText}</a>
@@ -364,7 +390,7 @@ export async function sendProfileCompletionEmail(email, firstName, userID) {
         html: `
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #00ff00;">Set Up Your Profile</h2>
-                <p>Hey ${firstName},</p>
+                <p>Hey ${escapeHtml(firstName)},</p>
                 <p>Now that you are a member, it's a great time to set up your public profile!</p>
                 <p>This helps other members know who you are, what skills you have, and what projects you are working on.</p>
                 
@@ -396,7 +422,7 @@ export async function sendNudgeEmail(email, firstName, step, message, actionLink
         html: `
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #00ff00;">Friendly Reminder!</h2>
-                <p>Hey ${firstName},</p>
+                <p>Hey ${escapeHtml(firstName)},</p>
                 <p>${message}</p>
                 
                 <a href="${actionLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px; margin-top: 20px;">${actionText}</a>
@@ -453,12 +479,12 @@ export async function sendVolunteerHoursApprovedEmail(email, firstName, hours, d
         html: `
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #00ff00;">Hours Approved</h2>
-                <p>Hey ${firstName},</p>
+                <p>Hey ${escapeHtml(firstName)},</p>
                 <p>Your volunteer log has been approved:</p>
-                
+
                 <div style="border: 1px solid #333; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                    <p><strong>Hours:</strong> ${hours}</p>
-                    <p><strong>Description:</strong> ${description}</p>
+                    <p><strong>Hours:</strong> ${escapeHtml(hours)}</p>
+                    <p><strong>Description:</strong> ${escapeHtml(description)}</p>
                 </div>
 
                 <p>Thank you for contributing to The Lab community!</p>
@@ -489,11 +515,11 @@ export async function sendContactEmail(name, email, message) {
         html: `
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #00ff00;">New Contact Message</h2>
-                <p><strong>Name:</strong> ${name}</p>
-                <p><strong>Email:</strong> ${email}</p>
+                <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+                <p><strong>Email:</strong> ${escapeHtml(email)}</p>
                 <div style="border: 1px solid #333; padding: 15px; margin: 20px 0; border-radius: 4px;">
                     <p><strong>Message:</strong></p>
-                    <p style="white-space: pre-wrap;">${message}</p>
+                    <p style="white-space: pre-wrap;">${escapeHtml(message)}</p>
                 </div>
             </div>
         `
@@ -537,7 +563,7 @@ export async function sendGoogleRetirementEmail(email, firstName) {
         html: `
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #00ff00;">Google sign-in is no longer available</h2>
-                <p>Hi ${firstName || 'there'},</p>
+                <p>Hi ${escapeHtml(firstName || 'there')},</p>
                 <p>We have retired "Sign in with Google" at The Lab. Google was the
                 <strong>only</strong> way you signed in, so you will need to set a password to get
                 back into your account. It takes about a minute.</p>

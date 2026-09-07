@@ -516,6 +516,31 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /api/v1/users/auth-methods:
+    get:
+      tags: [users]
+      summary: Which sign-in methods the current session user has
+      description: >
+        Booleans only for the authenticated user — never another account's. Read fresh from
+        the database (not the JWT) so it reflects a just-set password or newly linked Discord.
+        Returns no password material, hashes, or email. Powers the Google-retirement nudge
+        (docs/analysis/google-oauth-removal-impact.md §6).
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: The current user's sign-in method flags.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasPassword: { type: boolean }
+                  hasGoogle: { type: boolean, description: "Legacy — Google sign-in is retired; true only for historical links." }
+                  hasDiscord: { type: boolean }
+                  googleOnly: { type: boolean, description: "No password and no Discord — the account can no longer sign in until a password is set." }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /api/v1/users/nudge:
     post:
       tags: [users]
@@ -1772,6 +1797,46 @@ paths:
       responses:
         '200': { description: Groups of users sharing an identity signal. }
         '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/admin/google-retirement-notice:
+    post:
+      tags: [admin]
+      summary: Email the Google-only cohort the sign-in retirement notice (admin only)
+      description: >
+        Defaults to a DRY RUN — nothing is sent unless `send` is exactly `true`, so a stray
+        call cannot mail members. Idempotent: accounts already notified are skipped unless
+        `force:true` (reminder pass). Rate-limited (3 runs/hour) to protect the shared SMTP
+        relay's reputation. Responds with counts and MASKED addresses only — never plaintext
+        member email (docs/analysis/google-oauth-removal-impact.md §6, Phase 2).
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                send: { type: boolean, default: false, description: "Must be exactly true to actually send; otherwise a dry run." }
+                force: { type: boolean, default: false, description: "Re-notify accounts already stamped as notified (reminder pass)." }
+                limit: { type: integer, minimum: 1, description: "Cap the number of recipients this run." }
+      responses:
+        '200':
+          description: Run summary with counts and masked addresses.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cohort: { type: integer, description: "Size of the Google-only cohort considered." }
+                  sent: { type: integer }
+                  failed: { type: integer }
+                  sentButUnstamped:
+                    type: integer
+                    description: "Sent but the notified stamp did not persist — handle individually, never blanket re-run."
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { description: Rate limited (max 3 runs/hour); includes a Retry-After header. }
 
   /api/v1/admin/member-plans:
     get:
