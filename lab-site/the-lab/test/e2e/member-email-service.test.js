@@ -29,6 +29,7 @@ import Service from "@/plugins/member-email/service";
 import * as purelymail from "@/lib/purelymail";
 import UserService from "@/app/api/v1/users/service";
 import Model from "@/plugins/member-email/model";
+import { auditLog } from "@/lib/audit";
 
 const CONFIG = { maxMailboxesPerMember: 1, minAccountCredit: 1, additionalReserved: [] };
 const MEMBER = { userID: "m1", role: "user" };
@@ -139,6 +140,23 @@ describe("M1 race-safe cap", () => {
     Model.findActiveByUserSorted.mockResolvedValue([{ localPart: "jdoe" }]);
     await expect(Service.claim({ localPart: "jdoe" }, MEMBER, CONFIG)).resolves.toMatchObject({ status: "active" });
     expect(Model.deleteByLocalPart).not.toHaveBeenCalled();
+  });
+
+  test("over-cap rollback: a provider-delete failure KEEPS the local record (no local/provider divergence) and audits erase_failed", async () => {
+    // Over-cap (our record is idx 1, cap 1) triggers rollback, but the provider
+    // deleteMailbox fails. The local record must NOT be dropped — deleting it
+    // while the provider still holds the mailbox would diverge state and orphan
+    // a paid mailbox. Mirrors L5 erasure integrity: local delete only after a
+    // confirmed provider delete; else keep it + audit erase_failed. Fail closed.
+    Model.findActiveByUserSorted.mockResolvedValue([{ localPart: "earlier" }, { localPart: "jdoe" }]);
+    purelymail.deleteMailbox.mockRejectedValue(new Error("provider down"));
+    await expect(Service.claim({ localPart: "jdoe" }, MEMBER, CONFIG)).rejects.toMatchObject({ status: 409 });
+    expect(purelymail.deleteMailbox).toHaveBeenCalledWith("jdoe");
+    expect(Model.deleteByLocalPart).not.toHaveBeenCalled(); // local record kept, not silently dropped
+    expect(auditLog).toHaveBeenCalledWith("email.mailbox.erase_failed", expect.objectContaining({
+      target: expect.objectContaining({ localPart: "jdoe" }),
+      outcome: "error",
+    }));
   });
 });
 
