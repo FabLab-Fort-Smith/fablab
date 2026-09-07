@@ -15,10 +15,11 @@ import NotificationService from "../notifications/service";
 import WalletService from "@/app/api/v1/wallet/service";
 import { CORE_EVENTS } from "@/lib/plugins/hooks";
 import { emitEvent } from "@/lib/plugins/registry";
-import { 
-    sendApplicationReceivedEmail, 
-    sendStatusChangeEmail, 
-    sendAdminNotificationEmail
+import {
+    sendApplicationReceivedEmail,
+    sendStatusChangeEmail,
+    sendAdminNotificationEmail,
+    escapeHtml
 } from "@/app/utils/email.util";
 
 export default class UserService {
@@ -345,7 +346,7 @@ export default class UserService {
                     // Notify Admin
                     sendAdminNotificationEmail(
                         "New Membership Application",
-                        `${updatedUser.firstName} ${updatedUser.lastName} has submitted a new membership application. Please review it.`,
+                        `${escapeHtml(updatedUser.firstName)} ${escapeHtml(updatedUser.lastName)} has submitted a new membership application. Please review it.`,
                         `${process.env.NEXT_PUBLIC_URL}/dashboard/onboarding-reviews`,
                         "Review Application"
                     ).catch(console.error);
@@ -355,7 +356,7 @@ export default class UserService {
                     // Notify Admin
                     sendAdminNotificationEmail(
                         "New Volunteer Hours Submitted",
-                        `${updatedUser.firstName} ${updatedUser.lastName} has submitted new volunteer hours for approval.`,
+                        `${escapeHtml(updatedUser.firstName)} ${escapeHtml(updatedUser.lastName)} has submitted new volunteer hours for approval.`,
                         `${process.env.NEXT_PUBLIC_URL}/dashboard/volunteers`,
                         "Review Hours"
                     ).catch(console.error);
@@ -382,7 +383,7 @@ export default class UserService {
                         // Notify Admin
                         sendAdminNotificationEmail(
                             "New Member - Access Key Needed",
-                            `${updatedUser.firstName} ${updatedUser.lastName} has completed onboarding and payment. They are now a Probationary Member and need an Access Key issued.`,
+                            `${escapeHtml(updatedUser.firstName)} ${escapeHtml(updatedUser.lastName)} has completed onboarding and payment. They are now a Probationary Member and need an Access Key issued.`,
                             `${process.env.NEXT_PUBLIC_URL}/dashboard/members`,
                             "Manage Member"
                         ).catch(console.error);
