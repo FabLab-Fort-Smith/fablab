@@ -1,4 +1,6 @@
 import RepairModel from './model';
+import { CORE_EVENTS } from '@/lib/plugins/hooks';
+import { emitEvent } from '@/lib/plugins/registry';
 
 export async function GET(req) {
     try {
@@ -31,6 +33,11 @@ export async function POST(req) {
         }
 
         const repair = await RepairModel.createRepair({ name, email, deviceType, issueDescription, contactMethod, phone });
+
+        // Notify enabled plugins (best-effort, ID-only; no PII in the payload; a
+        // slow/throwing handler never breaks the intake).
+        await emitEvent(CORE_EVENTS.REPAIR_CREATED, { repairID: repair.repairID }).catch(() => {});
+
         return Response.json({ repair }, { status: 201 });
     } catch (error) {
         console.error('POST /api/v1/repairs error:', error);
@@ -47,6 +54,12 @@ export async function PUT(req) {
         const update = await req.json();
         const updated = await RepairModel.updateRepair(repairID, update);
         if (!updated) return Response.json({ error: 'Repair not found.' }, { status: 404 });
+
+        // Notify enabled plugins (best-effort, ID-only; status is a non-PII enum).
+        await emitEvent(CORE_EVENTS.REPAIR_UPDATED, {
+            repairID: updated.repairID,
+            status: updated.status,
+        }).catch(() => {});
 
         return Response.json({ repair: updated });
     } catch (error) {

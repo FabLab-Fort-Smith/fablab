@@ -9,15 +9,55 @@
 import { auditLog } from "@/lib/audit";
 
 /**
- * Canonical core events. Payloads carry IDs only — never PII. A plugin handler
- * fetches what it needs through its own published services.
+ * Canonical core events an enabled plugin may subscribe to (ADR 0013 catalog).
+ *
+ * INVARIANTS (never relax — see the-lab/CLAUDE.md §4 and the plugin-platform doc):
+ * - **ID-only payloads.** A payload carries entity IDs and non-PII enum/scalar
+ *   fields ONLY — never emails, names, phone numbers, messages, tokens, secrets,
+ *   or whole domain objects. A handler re-fetches what it needs through its own
+ *   published services. This keeps PII out of the in-process bus, out of plugin
+ *   reach, and out of the audit log if a handler fails.
+ * - **Static + typed.** The set is frozen here; core code emits only these names
+ *   (emitHook/emitEvent refuse an unknown event) and a plugin may only subscribe
+ *   to a known one (onHook refuses an unknown event). No dynamic event names.
+ *
+ * Payload shapes (the trailing comment is the documented contract):
+ *   member.registered       { userID }                       new member account created
+ *   member.updated          { userID }                       a member's profile/record changed
+ *   membership.activated     { userID, type? }               membership moved to active
+ *   membership.suspended     { userID }                      membership suspended/cancelled
+ *   member.deleted           { userID }                      member account deleted
+ *   checkin.created          { userID }                      a member checked in to the lab
+ *   bounty.created           { bountyID }                    a bounty was created
+ *   bounty.updated           { bountyID, status }            a bounty's lifecycle status changed
+ *   payment.succeeded        { paymentID, subscriptionID? }  a Square payment completed
+ *   contact.submitted        { submissionID }                a public contact form was submitted
+ *   repair.created           { repairID }                    a repair request was submitted
+ *   repair.updated           { repairID, status }            a repair request's status changed
+ *   announcement.published    { announcementID }             an announcement went live
+ *
  * @type {Readonly<Record<string,string>>}
  */
 export const CORE_EVENTS = Object.freeze({
+  // Member / membership lifecycle
   MEMBER_REGISTERED: "member.registered", // { userID }
+  MEMBER_UPDATED: "member.updated", // { userID }
   MEMBERSHIP_ACTIVATED: "membership.activated", // { userID, type? }
   MEMBERSHIP_SUSPENDED: "membership.suspended", // { userID }
   MEMBER_DELETED: "member.deleted", // { userID }
+  // Presence
+  CHECKIN_CREATED: "checkin.created", // { userID }
+  // Bounties
+  BOUNTY_CREATED: "bounty.created", // { bountyID }
+  BOUNTY_UPDATED: "bounty.updated", // { bountyID, status }
+  // Payments (Square)
+  PAYMENT_SUCCEEDED: "payment.succeeded", // { paymentID, subscriptionID? }
+  // Public intake
+  CONTACT_SUBMITTED: "contact.submitted", // { submissionID }
+  REPAIR_CREATED: "repair.created", // { repairID }
+  REPAIR_UPDATED: "repair.updated", // { repairID, status }
+  // Communications
+  ANNOUNCEMENT_PUBLISHED: "announcement.published", // { announcementID }
 });
 
 const KNOWN_EVENTS = new Set(Object.values(CORE_EVENTS));

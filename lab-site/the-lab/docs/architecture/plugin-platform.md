@@ -54,14 +54,32 @@ adminNav path throws — a malformed plugin fails loudly, never half-loads.
 ### Hook (event) bus — `src/lib/plugins/hooks.js`
 The core emits typed domain events at canonical transition sites; enabled plugins subscribe. This is
 how a plugin reacts to core state **without importing another feature's model** — the bus mediates.
-Handlers are best-effort and isolated (a throw is audited, never breaks the emitter). Core events:
+Handlers are best-effort and isolated (a throw is audited, never breaks the emitter). Payloads carry
+**IDs and non-PII scalars only** — never emails/names/messages/amounts/whole objects; a handler
+re-fetches what it needs through its own published services. The canonical catalog
+(`CORE_EVENTS` in `hooks.js`):
 
 | Event | Emitted from | Payload |
 |---|---|---|
 | `member.registered` | `AuthService.register` | `{ userID }` |
+| `member.updated` | *(deferred — see note)* | `{ userID }` |
 | `membership.activated` | `memberships/confirm` (status→active) | `{ userID, type }` |
 | `membership.suspended` | `memberships/subscription` (cancel / non-active sync) | `{ userID }` |
 | `member.deleted` | `UserService.deleteUser` | `{ userID }` |
+| `checkin.created` | `checkin` route (POST, on check-in) | `{ userID }` |
+| `bounty.created` | `BountyService.createBounty` | `{ bountyID }` |
+| `bounty.updated` | `BountyService.verifyBounty` / `cancelBounty` | `{ bountyID, status }` |
+| `payment.succeeded` | `square/webhooks/payment` (payment COMPLETED) | `{ paymentID, subscriptionID? }` |
+| `contact.submitted` | `contact` route (POST) | `{ submissionID }` |
+| `repair.created` | `repairs` route (POST) | `{ repairID }` |
+| `repair.updated` | `repairs` route (PUT) | `{ repairID, status }` |
+| `announcement.published` | `AnnouncementService.createAnnouncement` | `{ announcementID }` |
+
+> **`member.updated` is defined but not yet emitted.** Its only clean domain trigger is the member
+> profile-update flow (`profile/tabs/settings.js`), currently being changed by another PR; the
+> generic `UserModel.updateUser` is too low-level/noisy to emit from. The event name is reserved in
+> the catalog so a plugin can subscribe today; wiring the emit is a follow-up once the profile PR
+> lands.
 
 Core code emits via **`registry.emitEvent(event, payload)`** (not the raw bus): it **reconciles**
 this instance's wiring against the DB first, so an event still reaches a plugin that was enabled on a

@@ -3,6 +3,8 @@ import Announcement from "./class";
 import AnnouncementModel from "./model";
 import DiscordService from "@/lib/discord";
 import Constants from "@/lib/constants";
+import { CORE_EVENTS } from "@/lib/plugins/hooks";
+import { emitEvent } from "@/lib/plugins/registry";
 
 export default class AnnouncementService {
     
@@ -26,6 +28,12 @@ export default class AnnouncementService {
             if (data.postToDiscord) {
                 await this.postToDiscord(createdAnnouncement);
             }
+
+            // Notify enabled plugins (best-effort, ID-only; no title/content in the
+            // payload; a slow/throwing handler never breaks publishing).
+            await emitEvent(CORE_EVENTS.ANNOUNCEMENT_PUBLISHED, {
+                announcementID: createdAnnouncement?._id ? String(createdAnnouncement._id) : null,
+            }).catch(() => {});
 
             return createdAnnouncement;
         } catch (error) {
