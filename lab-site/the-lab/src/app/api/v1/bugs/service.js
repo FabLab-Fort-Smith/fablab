@@ -3,6 +3,8 @@ import BugModel from "./model";
 import UserModel from "../users/model";
 import Constants from "@/lib/constants";
 import NotificationService from "../notifications/service";
+import { bugboardMirrorReady, createBugIssue } from "@/lib/bugboardGithub";
+import { auditLog } from "@/lib/audit";
 
 export default class BugService {
     static async createBug(data) {
@@ -111,8 +113,73 @@ export default class BugService {
                     await UserModel.updateUser({ userID: bug.submittedBy }, userUpdates);
                 }
             }
+
+            // Additive, best-effort mirror of the verified bug to GitHub Issues (#137).
+            // Self-contained + fail-closed: it NEVER throws into the verify path, so
+            // stake/badges above are already committed regardless of the mirror outcome.
+            await BugService.mirrorVerifiedBugToGithub(bug, submitter);
         }
 
         return { success: true };
+    }
+
+    /**
+     * Mirror a verified bug to a GitHub issue (issue #137). Additive and
+     * best-effort — the in-app board stays the source of truth.
+     *
+     * Guarantees:
+     *  - Idempotent: if the bug already has a githubIssueNumber, no second issue
+     *    is created (safe to re-verify).
+     *  - Skipped when the mirror is unconfigured (no GITHUB_BUGBOARD_TOKEN), e.g.
+     *    dev/local — the board works unchanged.
+     *  - Fail-closed: any error is swallowed and audited SHAPE-ONLY (bugID + a
+     *    short reason code, never the token or PII), leaving githubIssueNumber
+     *    unset so a later re-verify can retry. It never breaks the verify action.
+     *
+     * @param {object} bug - the bug doc (pre-update; carries githubIssueNumber if mirrored)
+     * @param {object|null} [submitter] - the submitter user doc, for USERNAME attribution
+     * @returns {Promise<void>}
+     */
+    static async mirrorVerifiedBugToGithub(bug, submitter = null) {
+        try {
+            // Idempotent — one issue per bug, ever.
+            if (bug?.githubIssueNumber) return;
+
+            if (!bugboardMirrorReady()) {
+                auditLog("bugboard.mirror.skipped", {
+                    target: { bugID: bug?.bugID },
+                    reason: "not_configured",
+                });
+                return;
+            }
+
+            // Attribute by USERNAME only (never email — the record has none and we
+            // do not fetch it). submittedBy is a userID, a safe non-PII fallback.
+            const submitterUsername =
+                submitter?.username || submitter?.firstName || "unknown";
+
+            const { number, url } = await createBugIssue({
+                bugID: bug.bugID,
+                title: bug.title,
+                description: bug.description,
+                submitterUsername,
+            });
+
+            await BugModel.updateBug(bug.bugID, {
+                githubIssueNumber: number,
+                githubIssueUrl: url,
+            });
+
+            auditLog("bugboard.mirror.created", {
+                target: { bugID: bug.bugID, githubIssueNumber: number },
+            });
+        } catch (err) {
+            // Shape-only audit: NO token, NO PII, NO stack — just bugID + a code.
+            auditLog("bugboard.mirror.failed", {
+                target: { bugID: bug?.bugID },
+                outcome: "failure",
+                reason: err?.code || err?.name || "error",
+            });
+        }
     }
 }

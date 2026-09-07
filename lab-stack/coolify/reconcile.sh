@@ -112,6 +112,15 @@ esac
 # the-lab: WS_SERVER_URL lets pair-card/pair-key reach the socket-server (added with the door addon).
 [ "$APP_TARGET" = the-lab ] && APP_ENV_OPTIONAL+=(WS_SERVER_URL)
 
+# the-lab: bug-board -> GitHub Issues mirror (#137). GITHUB_BUGBOARD_TOKEN is a SECRET (fine-grained
+# PAT, Issues:read+write on the tracker repo) pulled from the per-env secret file like any other app
+# secret — optional/non-boot-blocking so the board still works if it's unset (the mirror just skips).
+# REPO + LABEL are non-secret managed CONSTANTS (fixed for the self-hosted deployment, not from .env).
+if [ "$APP_TARGET" = the-lab ]; then
+  APP_ENV_OPTIONAL+=(GITHUB_BUGBOARD_TOKEN)
+  APP_ENV_FIXED+=(GITHUB_BUGBOARD_REPO=FabLab-Fort-Smith/fablab GITHUB_BUGBOARD_LABEL=bug-board)
+fi
+
 # --- socket-server: its own env shape (OVERRIDES the the-lab defaults above) ---
 # DEVICE_SECRETS = deviceId->secret JSON (vps/lib/deviceAuth.js); INTERNAL_API_SECRET authenticates
 # the app's check-access calls; SOCKET_API_SECRET guards the /api/unlock + /api/v2 control routes.
