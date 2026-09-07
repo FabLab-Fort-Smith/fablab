@@ -4,6 +4,8 @@ import UserService from "@/app/api/v1/users/service";
 import { getSubscription, pauseSubscription } from "@/lib/square";
 import { verifySquareSignature } from "@/lib/squareSignature";
 import { claimWebhookEvent, releaseWebhookEvent } from "@/lib/webhookIdempotency";
+import { CORE_EVENTS } from "@/lib/plugins/hooks";
+import { emitEvent } from "@/lib/plugins/registry";
 
 export async function POST(request) {
   let eventId;
@@ -74,7 +76,15 @@ export async function POST(request) {
 
         if (payment.status === "COMPLETED") {
             console.log("✅ Payment Completed:", payment.id);
-            
+
+            // Notify enabled plugins (best-effort, ID-only; after signature +
+            // idempotency claim, so duplicates don't re-emit and a slow/throwing
+            // handler never breaks webhook processing). No PII/amount in payload.
+            await emitEvent(CORE_EVENTS.PAYMENT_SUCCEEDED, {
+                paymentID: payment.id,
+                subscriptionID: payment.subscription_id || null,
+            }).catch(() => {});
+
             // Check for sponsorship note
             // Format: "Sponsorship for user: <userID>" OR "SPONSORSHIP_SUB:<recipientId>:<donorId>"
             const note = payment.note || "";

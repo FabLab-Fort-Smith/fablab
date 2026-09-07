@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { sendContactEmail } from '@/app/utils/email.util';
 import ContactSubmissionModel from '@/app/api/v1/contact-submissions/model';
+import { CORE_EVENTS } from '@/lib/plugins/hooks';
+import { emitEvent } from '@/lib/plugins/registry';
 
 export async function POST(request) {
   try {
@@ -14,7 +16,13 @@ export async function POST(request) {
     }
 
     // Save to database
-    await ContactSubmissionModel.createSubmission({ name, email, message });
+    const saved = await ContactSubmissionModel.createSubmission({ name, email, message });
+
+    // Notify enabled plugins (best-effort, ID-only; no name/email/message in the
+    // payload; a slow/throwing handler never breaks the contact flow).
+    await emitEvent(CORE_EVENTS.CONTACT_SUBMITTED, {
+      submissionID: saved?._id ? String(saved._id) : null,
+    }).catch(() => {});
 
     // Send email
     await sendContactEmail(name, email, message);

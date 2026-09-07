@@ -8,6 +8,8 @@ import DiscordService from "@/lib/discord";
 import Constants from "@/lib/constants";
 import { v4 as uuidv4 } from 'uuid';
 import WalletService from "@/app/api/v1/wallet/service";
+import { CORE_EVENTS } from "@/lib/plugins/hooks";
+import { emitEvent } from "@/lib/plugins/registry";
 
 export default class BountyService {
     static async createBounty(data) {
@@ -138,6 +140,9 @@ export default class BountyService {
         } catch (error) {
             console.error("❌ Error sending new bounty notifications:", error);
         }
+
+        // Notify enabled plugins (best-effort, ID-only; never breaks creation).
+        await emitEvent(CORE_EVENTS.BOUNTY_CREATED, { bountyID }).catch(() => {});
 
         return createdBounty;
     }
@@ -378,7 +383,10 @@ export default class BountyService {
                 status: 'verified',
                 completedAt: new Date()
             });
-            
+
+            // Notify enabled plugins (best-effort, ID-only; never breaks verify).
+            await emitEvent(CORE_EVENTS.BOUNTY_UPDATED, { bountyID, status: 'verified' }).catch(() => {});
+
             assigneeID = bounty.assignedTo || (bounty.submissions.length > 0 ? bounty.submissions[0].userID : null);
         }
         
@@ -572,7 +580,12 @@ export default class BountyService {
             }
         }
 
-        return await BountyModel.updateBounty(bountyID, { status: 'cancelled' });
+        const cancelled = await BountyModel.updateBounty(bountyID, { status: 'cancelled' });
+
+        // Notify enabled plugins (best-effort, ID-only; never breaks cancel).
+        await emitEvent(CORE_EVENTS.BOUNTY_UPDATED, { bountyID, status: 'cancelled' }).catch(() => {});
+
+        return cancelled;
     }
 
     static async deleteBounty(bountyID, userID) {

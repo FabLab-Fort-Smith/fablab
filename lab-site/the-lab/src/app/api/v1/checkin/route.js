@@ -5,6 +5,8 @@ import CheckInModel from "./model";
 import NotificationService from "../notifications/service";
 import DiscordService from "@/lib/discord";
 import Constants from "@/lib/constants";
+import { CORE_EVENTS } from "@/lib/plugins/hooks";
+import { emitEvent } from "@/lib/plugins/registry";
 
 export const runtime = "nodejs";
 
@@ -74,6 +76,9 @@ export async function POST(req) {
         // Create/Update CheckIn Log
         if (isCheckingIn) {
             await CheckInModel.createCheckIn(user.userID);
+
+            // Notify enabled plugins (best-effort, ID-only; never breaks check-in).
+            await emitEvent(CORE_EVENTS.CHECKIN_CREATED, { userID: user.userID }).catch(() => {});
 
             // Check for Lab Regular Badge (5 Check-ins)
             try {
