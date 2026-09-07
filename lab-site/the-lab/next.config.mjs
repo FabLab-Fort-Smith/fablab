@@ -1,4 +1,5 @@
 import withPWAInit from "@ducanh2912/next-pwa";
+import { resolveBuildHash } from "./src/lib/buildHash.js";
 
 const withPWA = withPWAInit({
   dest: "public",
@@ -51,6 +52,13 @@ const nextConfig = {
   // Self-hosting on Coolify: emit a standalone server bundle (.next/standalone) so the
   // Dockerfile can ship a lean runtime image. No-op on Vercel; this copy isn't deployed there.
   output: "standalone",
+  // Stamp the deployed commit into the client bundle so the sidebar "build" badge shows
+  // what's actually running instead of always "dev" (#132). Coolify injects SOURCE_COMMIT
+  // as a build arg (threaded via the Dockerfile builder stage); NEXT_PUBLIC_* is inlined at
+  // build time. Local/dev builds have no commit → resolveBuildHash() falls back to "dev".
+  env: {
+    NEXT_PUBLIC_BUILD_HASH: resolveBuildHash(process.env.SOURCE_COMMIT),
+  },
   // Silence the Turbopack error since we are using a Webpack plugin (next-pwa)
   // PWA is disabled in dev mode anyway, so Turbopack should be fine for dev.
   turbopack: {},
