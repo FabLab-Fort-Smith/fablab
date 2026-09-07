@@ -62,6 +62,22 @@ export const CORE_EVENTS = Object.freeze({
 
 const KNOWN_EVENTS = new Set(Object.values(CORE_EVENTS));
 
+/**
+ * Per-handler dispatch bound (ms). A single vetted-but-slow/hanging subscriber
+ * must not add unbounded latency to the awaited domain action that emitted the
+ * event — the payment webhook path (Square times out ~10s) especially. When a
+ * handler exceeds this bound the emitter audits it (shape-only) and moves on,
+ * exactly like the existing throw/reject isolation; the detached handler promise
+ * is left to settle on its own and its outcome ignored. Sibling handlers and the
+ * emitter are therefore bounded by this value, not by an arbitrary plugin.
+ * (#210, CWE-405-adjacent — see @rules/topic-reliability.md.)
+ * @type {number}
+ */
+export const HOOK_HANDLER_TIMEOUT_MS = 2000;
+
+/** Unique sentinel so a handler that resolves with `undefined` isn't mistaken for a timeout. */
+const TIMED_OUT = Symbol("hook-handler-timeout");
+
 /** event -> Map<pluginId, handler>. Keyed by plugin so disable can unbind cleanly. */
 const subscribers = new Map();
 
@@ -92,9 +108,69 @@ export function offPlugin(pluginId) {
 }
 
 /**
+ * Dispatch one plugin handler under the per-handler bound. Never rejects: a
+ * throw, an async rejection, and a timeout are each isolated and audited
+ * (shape-only — pluginId + event, never the payload) so one plugin can neither
+ * break nor stall the emitter or a sibling.
+ * @param {string} pluginId
+ * @param {(payload:object)=>(void|Promise<void>)} handler
+ * @param {string} event
+ * @param {object} payload
+ * @returns {Promise<void>}
+ */
+async function dispatchBounded(pluginId, handler, event, payload) {
+  // Invoke inside an async IIFE so a *synchronous* throw becomes a rejection,
+  // giving throw and async-reject one uniform path.
+  const handlerPromise = (async () => handler(payload))();
+  // Detach: if the handler settles AFTER we've timed out, its (possible)
+  // rejection must not surface as an unhandledRejection.
+  handlerPromise.catch(() => {});
+
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), HOOK_HANDLER_TIMEOUT_MS);
+  });
+
+  try {
+    // Map the handler branch to a settled outcome so it wins the race on
+    // success OR failure (only a real hang lets the timeout win).
+    const outcome = await Promise.race([
+      handlerPromise.then(
+        () => null,
+        (err) => ({ error: err })
+      ),
+      timeout,
+    ]);
+
+    if (outcome === TIMED_OUT) {
+      // A vetted handler that exceeded the bound: audit and move on. The core
+      // transaction (e.g. the payment webhook) is not held past the bound.
+      auditLog("plugin.hook.timeout", {
+        actor: { pluginId },
+        target: event,
+        outcome: "timeout",
+        reason: `handler exceeded ${HOOK_HANDLER_TIMEOUT_MS}ms`,
+      });
+    } else if (outcome && outcome.error) {
+      // A plugin handler failing must never break the core transaction.
+      auditLog("plugin.hook.failed", {
+        actor: { pluginId },
+        target: event,
+        outcome: "error",
+        reason: outcome.error?.message || "handler error",
+      });
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Emit an event to all subscribed plugins. Fire-and-forget semantics: every
- * handler runs, each wrapped so a failure is audited and isolated. Awaiting the
- * returned promise waits for all handlers to settle.
+ * handler runs, each wrapped so a failure OR a timeout is audited and isolated.
+ * Awaiting the returned promise waits for all handlers to settle OR hit the
+ * per-handler bound (HOOK_HANDLER_TIMEOUT_MS) — whichever comes first — so a
+ * slow/hanging vetted plugin cannot add latency to the emitting domain action.
  * @param {string} event - one of CORE_EVENTS
  * @param {object} [payload] - IDs only, no PII
  * @returns {Promise<void>}
@@ -104,19 +180,9 @@ export async function emitHook(event, payload = {}) {
   const handlers = subscribers.get(event);
   if (!handlers || handlers.size === 0) return;
   await Promise.all(
-    [...handlers.entries()].map(async ([pluginId, handler]) => {
-      try {
-        await handler(payload);
-      } catch (err) {
-        // A plugin handler failing must never break the core transaction.
-        auditLog("plugin.hook.failed", {
-          actor: { pluginId },
-          target: event,
-          outcome: "error",
-          reason: err?.message || "handler error",
-        });
-      }
-    })
+    [...handlers.entries()].map(([pluginId, handler]) =>
+      dispatchBounded(pluginId, handler, event, payload)
+    )
   );
 }
 
