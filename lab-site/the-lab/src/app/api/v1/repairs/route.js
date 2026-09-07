@@ -1,4 +1,5 @@
-import RepairModel from './model';
+import { auth } from '@/auth';
+import RepairModel, { isValidRepairID, isValidStatus, sanitizeRepairUpdate } from './model';
 import { CORE_EVENTS } from '@/lib/plugins/hooks';
 import { emitEvent } from '@/lib/plugins/registry';
 
@@ -47,11 +48,35 @@ export async function POST(req) {
 
 export async function PUT(req) {
     try {
+        // AuthN + authZ: updating a repair is a staff action. Derive the actor from
+        // the server session (never a client-supplied field) and require the single
+        // privileged role (`admin`) — deny by default, fail closed, generic errors.
+        // (/api/* is not covered by middleware, so the route must protect itself.)
+        const session = await auth();
+        if (!session?.user) return Response.json({ error: 'Unauthorized.' }, { status: 401 });
+        if (session.user.role !== 'admin') return Response.json({ error: 'Forbidden.' }, { status: 403 });
+
         const { searchParams } = new URL(req.url);
         const repairID = searchParams.get('repairID');
         if (!repairID) return Response.json({ error: 'repairID is required.' }, { status: 400 });
+        // Validate the id shape before it is ever used as a Mongo filter (BOLA/NoSQL).
+        if (!isValidRepairID(repairID)) return Response.json({ error: 'Invalid repairID.' }, { status: 400 });
 
-        const update = await req.json();
+        const body = await req.json().catch(() => null);
+        if (!body || typeof body !== 'object' || Array.isArray(body)) {
+            return Response.json({ error: 'A JSON object body is required.' }, { status: 400 });
+        }
+
+        // Bind the update to the explicit allow-list (CWE-915 mass-assignment): only
+        // staff-workflow fields are $set; identity/ownership/PII/timestamps are dropped.
+        const update = sanitizeRepairUpdate(body);
+        if (Object.keys(update).length === 0) {
+            return Response.json({ error: 'No updatable fields provided.' }, { status: 400 });
+        }
+        if ('status' in update && !isValidStatus(update.status)) {
+            return Response.json({ error: 'Invalid status.' }, { status: 400 });
+        }
+
         const updated = await RepairModel.updateRepair(repairID, update);
         if (!updated) return Response.json({ error: 'Repair not found.' }, { status: 404 });
 

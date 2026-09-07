@@ -11,6 +11,11 @@ jest.mock("@/lib/plugins/registry", () => ({
   emitEvent: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Repairs PUT is now admin-gated (#213): mock the session so this emit-site test
+// stays focused on the payload contract. Also keeps next-auth (ESM) out of the
+// module graph.
+jest.mock("@/auth", () => ({ __esModule: true, auth: jest.fn().mockResolvedValue({ user: { role: "admin", userID: "admin-1" } }) }));
+
 // Contact route deps
 jest.mock("@/app/api/v1/contact-submissions/model", () => ({
   __esModule: true,
@@ -21,11 +26,13 @@ jest.mock("@/app/utils/email.util", () => ({
   sendContactEmail: jest.fn().mockResolvedValue(undefined),
 }));
 
-// Repairs route deps
-jest.mock("@/app/api/v1/repairs/model", () => ({
-  __esModule: true,
-  default: { createRepair: jest.fn(), updateRepair: jest.fn() },
-}));
+// Repairs route deps — keep the real DTO/guard helpers (isValidRepairID,
+// isValidStatus, sanitizeRepairUpdate) the hardened route imports; only the
+// persistence methods are mocked.
+jest.mock("@/app/api/v1/repairs/model", () => {
+  const actual = jest.requireActual("@/app/api/v1/repairs/model");
+  return { __esModule: true, ...actual, default: { createRepair: jest.fn(), updateRepair: jest.fn() } };
+});
 
 import { CORE_EVENTS } from "@/lib/plugins/hooks";
 import { emitEvent } from "@/lib/plugins/registry";
@@ -94,7 +101,8 @@ describe("repair.updated emit site (PUT /api/v1/repairs)", () => {
     RepairModel.updateRepair.mockResolvedValue({ repairID: "repair-1", status: "completed", ...PII });
     const { PUT } = await import("@/app/api/v1/repairs/route");
 
-    const req = new Request("http://localhost/api/v1/repairs?repairID=repair-1", {
+    const VALID_ID = "repair-abcdef01-2345-6789-abcd-ef0123456789";
+    const req = new Request(`http://localhost/api/v1/repairs?repairID=${VALID_ID}`, {
       method: "PUT",
       headers: new Headers({ "content-type": "application/json" }),
       body: JSON.stringify({ status: "completed" }),
