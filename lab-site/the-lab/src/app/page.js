@@ -149,7 +149,7 @@ function HeroBoot({ memberCount }) {
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <Link href="/auth/register" className="btn btn--filled" style={{ fontSize: 11 }}>$ ./join --now</Link>
             <a href="#about" className="btn btn--ghost" style={{ fontSize: 11 }}>$ ./tour</a>
-            <a href="https://discord.gg/bcHSubHKQ" target="_blank" rel="noopener noreferrer" className="btn btn--ghost" style={{ fontSize: 11, borderColor: 'var(--magenta)', color: 'var(--magenta)' }}>$ ./discord</a>
+            <a href="/api/v1/discord/invite" target="_blank" rel="noopener noreferrer" className="btn btn--ghost" style={{ fontSize: 11, borderColor: 'var(--magenta)', color: 'var(--magenta)' }}>$ ./discord</a>
           </div>
         </div>
         {/* Right: boot card */}
@@ -186,8 +186,9 @@ function HeroBoot({ memberCount }) {
 // ─── AboutSection ─────────────────────────────────────────────────────────────
 function AboutSection() {
   const EQUIPMENT = [
-    { icon: '◈', name: '3D Printers', detail: 'FDM + resin' },
+    { icon: '◈', name: '3D Printers', detail: 'FDM' },
     { icon: '◉', name: 'Laser Cutter', detail: '60W CO₂' },
+    { icon: '⊗', name: 'Fiber Laser', detail: 'Metal marking & engraving' },
     { icon: '⊡', name: 'Vinyl Cutter', detail: 'Cricut + Silhouette' },
     { icon: '⊞', name: 'Electronics Lab', detail: 'Soldering, oscilloscope' },
     { icon: '⊟', name: 'Power Tools', detail: 'Drill press, saws' },
@@ -263,7 +264,7 @@ function CommunityPulseSection({ memberCount }) {
         </div>
 
         {/* Activity stream */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }} className="pulse-grid">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24 }} className="pulse-grid">
           <div>
             <div style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: '0.14em', marginBottom: 12 }}>OPEN_BOUNTIES</div>
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -292,33 +293,6 @@ function CommunityPulseSection({ memberCount }) {
                   </tbody>
                 </table>
               )}
-            </div>
-          </div>
-
-          {/* ASCII shop map */}
-          <div>
-            <div style={{ color: 'var(--text-dim)', fontSize: 9, letterSpacing: '0.14em', marginBottom: 12 }}>FACILITY_MAP</div>
-            <div className="card" style={{ padding: '16px 18px' }}>
-              <pre style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-mid)', lineHeight: 1.5, margin: 0, whiteSpace: 'pre' }}>{`
-┌──────────────────────────────┐
-│  ENTRY        RESTROOMS      │
-│   ▶                     ██   │
-├──────────┬───────────────────┤
-│ LOUNGE   │  FABRICATION LAB  │
-│          │  [3D] [LASER]     │
-│  ◈◈◈    │  [VINYL] [CNC]    │
-├──────────┤                   │
-│ OFFICE   │  ELECTRONICS AREA │
-│          │  [SOLDER] [SCOPE] │
-└──────────┴───────────────────┘
-`.trim()}</pre>
-              <div style={{ marginTop: 12, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                {[['◈', 'Seating'], ['[X]', 'Equipment'], ['▶', 'Entrance']].map(([sym, lbl]) => (
-                  <div key={lbl} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 10, color: 'var(--text-dim)' }}>
-                    <span style={{ color: 'var(--green)', fontFamily: 'var(--mono)' }}>{sym}</span> {lbl}
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         </div>
@@ -518,7 +492,6 @@ function ContactSection() {
                 {[
                   ['Members', '24/7 key fob'],
                   ['Public Events', 'Check calendar'],
-                  ['Open Lab', 'Sat 10am – 4pm'],
                 ].map(([k, v]) => (
                   <tr key={k}>
                     <td style={{ color: 'var(--text-mid)', padding: '4px 0' }}>{k}</td>
