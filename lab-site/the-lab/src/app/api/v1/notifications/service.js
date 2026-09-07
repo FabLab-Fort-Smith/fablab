@@ -11,7 +11,8 @@ import {
     sendBountyVerifiedEmail,
     sendNudgeEmail,
     sendVolunteerHoursApprovedEmail,
-    sendProfileCompletionEmail
+    sendProfileCompletionEmail,
+    escapeHtml
 } from '@/app/utils/email.util';
 
 export default class NotificationService {
@@ -81,7 +82,10 @@ export default class NotificationService {
                             await sendBountyVerifiedEmail(decryptedEmail, user.firstName || 'Member', emailData.bounty);
                             break;
                         case 'nudge':
-                            await sendNudgeEmail(decryptedEmail, user.firstName || 'Member', title, message, link, emailData.actionText);
+                            // CWE-79: `message` and `actionText` are caller-supplied and land in
+                            // the HTML email body/button — escape at composition. `title` (the
+                            // subject/step) and `link` (an href URL) are left as-is per review.
+                            await sendNudgeEmail(decryptedEmail, user.firstName || 'Member', title, escapeHtml(message), link, escapeHtml(emailData.actionText));
                             break;
                         case 'volunteer_approved':
                             await sendVolunteerHoursApprovedEmail(decryptedEmail, user.firstName || 'Member', emailData.hours, emailData.description);
