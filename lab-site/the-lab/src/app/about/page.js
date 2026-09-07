@@ -6,8 +6,9 @@ export const metadata = {
 };
 
 const EQUIPMENT = [
-  { sym: '◈', name: '3D Printers', spec: 'FDM + resin; 0.1mm resolution' },
+  { sym: '◈', name: '3D Printers', spec: 'FDM; 0.1mm resolution' },
   { sym: '◉', name: 'Laser Cutter', spec: '60W CO₂; 24×18" bed' },
+  { sym: '⊗', name: 'Fiber Laser', spec: 'Metal marking & engraving' },
   { sym: '⊡', name: 'Vinyl Cutter', spec: 'Cricut Maker + Silhouette Cameo' },
   { sym: '⊞', name: 'Electronics Lab', spec: 'Soldering, oscilloscope, bench PSU' },
   { sym: '⊟', name: 'Power Tools', spec: 'Drill press, jigsaw, band saw' },
