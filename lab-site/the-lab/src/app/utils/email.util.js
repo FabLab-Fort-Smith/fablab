@@ -606,6 +606,57 @@ export async function sendGoogleRetirementEmail(email, firstName) {
 }
 
 /**
+ * Send a generic, pre-composed notification email through the shared transporter.
+ *
+ * A small reusable sink so features/plugins that need to email an arbitrary,
+ * SERVER-DERIVED recipient (e.g. a routing inbox configured by an admin) do NOT
+ * fork their own nodemailer transport. The caller composes and escapes the HTML
+ * body (use {@link escapeHtml} on any untrusted field — CWE-79); this helper only
+ * transports it.
+ *
+ * `to` must be a single, well-formed address: header-injection characters
+ * (CR/LF), comma-separated lists, and anything without a plausible `local@domain`
+ * shape are rejected (fail closed) so a caller can never smuggle extra recipients
+ * or SMTP headers through it.
+ *
+ * On failure it logs the error SHAPE only (never `mailOptions`, the recipient, or
+ * the body — SEC-24) and throws a generic error so the caller can decide whether
+ * to retry; it never returns the SMTP error object.
+ *
+ * @param {string} to - a single recipient address
+ * @param {string} subject - the email subject (already trusted/escaped by caller)
+ * @param {string} html - the pre-composed, caller-escaped HTML body
+ * @returns {Promise<void>} resolves once SMTP accepted the message
+ * @throws {Error} on an invalid recipient or a send failure
+ */
+export async function sendNotificationEmail(to, subject, html) {
+    if (
+        typeof to !== 'string' ||
+        /[\r\n,]/.test(to) ||               // header-injection / multi-recipient guard
+        !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)
+    ) {
+        throw new Error('Invalid notification recipient');
+    }
+
+    const mailOptions = {
+        from: `"The Lab" <${process.env.EMAIL_USER}>`,
+        to,
+        subject: String(subject || 'Notification'),
+        html: String(html || ''),
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+    } catch (error) {
+        logger.error(
+            { code: error?.code, responseCode: error?.responseCode, command: error?.command },
+            'notification email send failed'
+        );
+        throw new Error('Failed to send notification email', { cause: error });
+    }
+}
+
+/**
  * ✅ Send an invite email for admin-created clients
  * @param {string} email - The invited user's email address
  * @param {string} token - The invitation token
