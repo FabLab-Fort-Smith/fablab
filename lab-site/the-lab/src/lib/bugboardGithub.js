@@ -180,6 +180,9 @@ export async function createBugIssue(bug, { fetchImpl = fetch } = {}) {
       },
       body: JSON.stringify(payload),
       signal: controller.signal,
+      // Never follow a redirect on an authenticated request (defense-in-depth: the Bearer
+      // token must only ever reach the fixed api.github.com host) — topic-api-consumption.
+      redirect: "error",
     });
     // Never surface the response body verbatim (keep failures shape-only).
     if (!res.ok) throw new BugboardMirrorError("upstream", `GitHub API responded ${res.status}`);
