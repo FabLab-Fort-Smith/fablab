@@ -18,8 +18,12 @@ export const SOCKETS = Object.freeze({
   tasks: "tasks", // guarded internal cron routes (optional)
 });
 
-/** Config-field primitive types the platform understands. No functions/objects. */
-const CONFIG_TYPES = new Set(["number", "string", "boolean", "string[]"]);
+/**
+ * Config-field types the platform understands (declarative — no functions/objects):
+ *   number · string · boolean · string[] · text (multiline string) ·
+ *   select (enum: one of `options`) · secret (write-only string — never serialized back).
+ */
+const CONFIG_TYPES = new Set(["number", "string", "boolean", "string[]", "text", "select", "secret"]);
 
 const ID_RE = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/; // kebab slug, 3-40 chars
 const SEMVER_RE = /^\d+\.\d+\.\d+$/;
@@ -92,6 +96,13 @@ export function collectManifestProblems(m) {
   if (m.enabledByDefault !== undefined && typeof m.enabledByDefault !== "boolean") {
     problems.push("enabledByDefault must be a boolean");
   }
+  // Addon-manager card metadata (AD-1) — optional, but must be strings when present.
+  if (m.icon !== undefined && (typeof m.icon !== "string" || m.icon.length > 8)) {
+    problems.push("icon must be a short string (≤ 8 chars, e.g. an emoji/glyph)");
+  }
+  if (m.category !== undefined && typeof m.category !== "string") {
+    problems.push("category must be a string");
+  }
   return problems;
 }
 
@@ -107,6 +118,24 @@ function collectConfigSchemaProblems(schema) {
     }
     if (!CONFIG_TYPES.has(spec.type)) {
       problems.push(`configSchema.${field}.type must be one of ${[...CONFIG_TYPES].join("|")}`);
+      continue;
+    }
+    if (spec.type === "select") {
+      if (!Array.isArray(spec.options) || spec.options.length === 0 || spec.options.some((o) => typeof o !== "string")) {
+        problems.push(`configSchema.${field}.options must be a non-empty array of strings (select)`);
+      } else if (spec.default !== undefined && !spec.options.includes(spec.default)) {
+        problems.push(`configSchema.${field}.default must be one of its options`);
+      }
+    }
+    if (spec.type === "secret") {
+      // Fail closed: a secret must never carry a hardcoded default (secret-in-code +
+      // would serialize to the client via configSchema) or an options allow-list.
+      if (spec.default !== undefined) {
+        problems.push(`configSchema.${field}.default is not allowed on a secret field`);
+      }
+      if (spec.options !== undefined) {
+        problems.push(`configSchema.${field}.options is not allowed on a secret field`);
+      }
     }
   }
   return problems;
@@ -120,6 +149,7 @@ function collectConfigSchemaProblems(schema) {
 export function defaultConfig(schema = {}) {
   const out = {};
   for (const [field, spec] of Object.entries(schema)) {
+    if (spec.type === "secret") continue; // never seed a secret value
     if (spec.default !== undefined) out[field] = clone(spec.default);
     else if (spec.type === "string[]") out[field] = [];
   }
@@ -178,7 +208,26 @@ function coerce(spec, raw, field, errors) {
       return raw;
     case "string":
       if (typeof raw !== "string") return void errors.push(`${field} must be a string`);
+      if (spec.max !== undefined && raw.length > spec.max) return void errors.push(`${field} must be ≤ ${spec.max} chars`);
       return raw;
+    case "text": // multiline string; same validation as string (UI hint only)
+      if (typeof raw !== "string") return void errors.push(`${field} must be a string`);
+      if (spec.max !== undefined && raw.length > spec.max) return void errors.push(`${field} must be ≤ ${spec.max} chars`);
+      return raw;
+    case "select":
+      if (typeof raw !== "string") return void errors.push(`${field} must be a string`);
+      if (!Array.isArray(spec.options) || !spec.options.includes(raw)) {
+        return void errors.push(`${field} must be one of: ${(spec.options || []).join(", ")}`);
+      }
+      return raw;
+    case "secret": {
+      // Write-only. A blank/omitted value LEAVES the stored secret unchanged (never clears it here);
+      // a non-empty string replaces it.
+      if (raw === "" || raw === undefined || raw === null) return undefined;
+      if (typeof raw !== "string") return void errors.push(`${field} must be a string`);
+      if (spec.max !== undefined && raw.length > spec.max) return void errors.push(`${field} must be ≤ ${spec.max} chars`);
+      return raw;
+    }
     case "string[]":
       if (!Array.isArray(raw) || raw.some((s) => typeof s !== "string")) {
         return void errors.push(`${field} must be an array of strings`);
@@ -191,4 +240,26 @@ function coerce(spec, raw, field, errors) {
 
 function clone(v) {
   return Array.isArray(v) ? v.slice() : v;
+}
+
+/**
+ * Redact a config object for sending to the client: `secret`-typed fields are NEVER serialized with
+ * their value. Returns the config with secret values removed, plus a `secretsSet` map so the config
+ * popup can show "set / unset" and let an admin replace (blank = keep). (AD-1 — secrets write-only.)
+ * @param {object} schema
+ * @param {object} config
+ * @returns {{ config: Record<string,any>, secretsSet: Record<string,boolean> }}
+ */
+export function redactConfig(schema = {}, config = {}) {
+  const out = {};
+  const secretsSet = {};
+  for (const [k, v] of Object.entries(config || {})) {
+    if (k.startsWith("$") || k === "_id") continue;
+    if (schema[k]?.type === "secret") continue; // never emit the value
+    out[k] = v;
+  }
+  for (const [field, spec] of Object.entries(schema)) {
+    if (spec.type === "secret") secretsSet[field] = typeof config?.[field] === "string" && config[field].length > 0;
+  }
+  return { config: out, secretsSet };
 }

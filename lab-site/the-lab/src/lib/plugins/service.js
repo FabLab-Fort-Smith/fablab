@@ -4,7 +4,7 @@
 // instance (registry). The DB is the durable source of truth.
 
 import { isAdmin } from "@/app/api/v1/users/access";
-import { validateConfig, defaultConfig } from "./manifest.schema";
+import { validateConfig, defaultConfig, redactConfig } from "./manifest.schema";
 import * as registry from "./registry";
 import PluginStateModel from "./model";
 import { auditLog } from "@/lib/audit";
@@ -44,16 +44,22 @@ export async function listPlugins(actor) {
   const states = await PluginStateModel.listStates();
   return registry.listPlugins().map(({ manifest }) => {
     const st = states[manifest.id];
+    const fullConfig = { ...defaultConfig(manifest.configSchema), ...(st?.config || {}) };
+    // Never serialize secret values back to the client (AD-1): strip them + report set/unset.
+    const { config, secretsSet } = redactConfig(manifest.configSchema || {}, fullConfig);
     return {
       id: manifest.id,
       name: manifest.name,
       version: manifest.version,
       description: manifest.description,
+      icon: manifest.icon || null,        // addon-manager card metadata (AD-1)
+      category: manifest.category || null,
       sockets: manifest.sockets,
       configSchema: manifest.configSchema || {},
       requiredPermissions: manifest.requiredPermissions || [],
       enabled: st ? st.enabled : !!manifest.enabledByDefault,
-      config: { ...defaultConfig(manifest.configSchema), ...(st?.config || {}) },
+      config,
+      secretsSet,
     };
   });
 }
@@ -102,8 +108,11 @@ export async function setConfig(pluginId, patch, actor) {
   auditLog("plugin.config.updated", {
     actor: { userID: actor?.userID ?? null, role: actor?.role ?? null },
     target: entry.manifest.id,
+    fields: Object.keys(entry.manifest.configSchema || {}).filter((k) => k in (patch || {})), // names only, no values
   });
-  return { id: entry.manifest.id, config: value };
+  // Never echo secret values back (AD-1).
+  const { config, secretsSet } = redactConfig(entry.manifest.configSchema || {}, value);
+  return { id: entry.manifest.id, config, secretsSet };
 }
 
 export default { listPlugins, setEnabled, setConfig };
