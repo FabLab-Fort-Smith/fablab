@@ -20,10 +20,30 @@ summary: Promote a validated change from staging (dev) to production (main -> ap
 > | branch | `dev` | `main` |
 > | URL | `staging.fablabfortsmith.org` | `fablabfortsmith.org` + `www` |
 > | secrets | `../.env` | `../.env.production` |
-> | Square | sandbox | **sandbox** (not yet live) |
+> | Square | sandbox | **production** (live since 2026-09-04, #180-era cutover) |
 >
 > Rules: `@rules/workflow-release.md`, `@rules/topic-config-environments.md`,
 > `@rules/workflow-gated-actions.md`.
+
+> ## 🔒 Promotion gate (MANDATORY — read first)
+> **Promotion chain: local `dev` → GitHub → **staging** → production. Production is deployed
+> DELIBERATELY, never automatically, and NEVER without explicit human approval.**
+>
+> - **Auto-deploy on push to `main` is DISABLED** for `the-lab-production` (toggled off 2026-09-06,
+>   Coolify UI — the flag is not settable via the API). So a merge to `main` **no longer deploys
+>   prod**. This runbook's `reconcile.sh … --confirm-production --deploy` (or the Coolify **Deploy**
+>   button) is now the *only* path to prod — not a break-glass alternative.
+> - **Never merge to `main` as a way to ship prod, and never run the deploy step, without explicit
+>   per-action owner approval.** `main` == prod: treat any prod deploy as gated
+>   (`@rules/workflow-gated-actions.md`).
+> - **Validate on staging first.** `staging.fablabfortsmith.org` (`dev`) must run the change and be
+>   verified before you promote. CI green ≠ validated.
+> - If auto-deploy is ever re-enabled, this gate is defeated — keep it OFF.
+>
+> _Why this exists: on 2026-09-06 a `dev→main` release PR (#190, v1.0.0) auto-deployed to prod on
+> merge, bypassing staging and approval, because `main` auto-deploy was on. Kept v1.0.0 (it was
+> tested + SEC-reviewed + staging-validated; a revert would have reintroduced patched CVEs), disabled
+> auto-deploy, and wrote this gate. See `prod-promotion-gate` (agent memory)._
 
 ## When to use
 - A change is merged to `main` and should go live on the apex.
@@ -51,10 +71,13 @@ summary: Promote a validated change from staging (dev) to production (main -> ap
 > It anonymizes and **fails closed** — see `refresh-staging-from-production.md`.
 
 
-1. **Confirm the change is on `main` and green.** Production deploys from `main`; CI must be green
-   on the merge commit (`@rules/workflow-cicd.md`).
-2. **Confirm it has soaked on staging.** `dev` is merged from `main`, so staging normally runs the
-   same code first — verify the change actually behaves there before promoting.
+1. **Confirm the change is on `main` and green.** CI must be green on the merge commit
+   (`@rules/workflow-cicd.md`). Note: merging to `main` **does not deploy prod** (auto-deploy is off);
+   promotion is the explicit deploy in step 4.
+2. **Confirm it has soaked + was validated on staging.** `staging.fablabfortsmith.org` (`dev`) must be
+   running the change and verified — functionally, not just green CI — before promoting.
+   **➜ Get explicit owner approval to deploy to production now** (gated action —
+   `@rules/workflow-gated-actions.md`). Do not proceed to step 4 without it.
 3. **Plan the production apply (no writes):**
    ```bash
    cd lab-stack && bash coolify/reconcile.sh --env production --dry-run
@@ -66,8 +89,9 @@ summary: Promote a validated change from staging (dev) to production (main -> ap
    bash coolify/reconcile.sh --env production --confirm-production --deploy
    ```
 5. **Watch the rollout.** Poll the deployment until `finished` and the app reports
-   `running:healthy`, then verify (below). Auto-deploy on push to `main` is also enabled, so a merge
-   alone triggers a build; this runbook is the explicit/break-glass path and the way env changes land.
+   `running:healthy`, then verify (below). This deliberate, approval-gated deploy is the **only** path
+   to prod — auto-deploy on `main` is disabled (see the Promotion gate). The Coolify **Deploy** button
+   on `the-lab-production` is the equivalent manual trigger.
 
 ## Verification
 6. **Public surface:** apex and `www` return `200`; `/auth/signin` `200`; `/dashboard` `307`
@@ -155,4 +179,5 @@ unmet items are recorded as accepted risks above._
 - `shared-custody.md` · ADR 0005 / 0006 / 0010 / 0012
 
 ---
-_Last validated: 2026-08-03 — this runbook's steps 14–20 are the cutover as executed. Owner: b007ab1e._
+_Last validated: 2026-09-06 — added the mandatory Promotion gate + disabled `main` auto-deploy after
+the v1.0.0 (#190) incident; steps 14–20 remain the 2026-08-03 cutover as executed. Owner: b007ab1e._
