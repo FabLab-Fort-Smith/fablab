@@ -4,8 +4,13 @@
 // process memory) — it bounds abuse from a single client and protects upstreams,
 // but it is NOT a distributed limiter. On a multi-instance deploy the effective
 // limit is per-instance. For a hard cross-instance guarantee, back this with a
-// shared store (Redis) — tracked as a follow-up. Callers key by a stable string
-// (e.g. `feature:action:userID`).
+// shared store (Redis). Callers key by a stable string (e.g.
+// `feature:action:userID`).
+//
+// DEFERRED (issue #54, ADR-0013): a Redis-backed distributed limiter is
+// intentionally NOT implemented here. No Redis client is wired into the app yet,
+// so this is infrastructure scope, not a code change — adding a Redis dependency
+// without the backing infra would be dead weight. Revisit when Redis is provisioned.
 
 const buckets = new Map(); // key -> number[] (recent hit timestamps, ms)
 const MAX_KEYS = 50_000; // safety cap so a flood of distinct keys can't grow unbounded

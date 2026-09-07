@@ -135,7 +135,23 @@ export async function claim(input, actor, config) {
     const active = await Model.findActiveByUserSorted(actor.userID);
     const idx = active.findIndex((b) => b.localPart === v.localPart);
     if (idx >= 0 && idx >= config.maxMailboxesPerMember) {
-      try { await purelymail.deleteMailbox(v.localPart); } catch { /* best effort */ }
+      // Roll back mirrors L5 erasure integrity: delete the LOCAL record ONLY
+      // after a confirmed provider delete. If the provider delete fails, keep
+      // the local record (both sides then agree the mailbox exists) and audit
+      // `erase_failed` so the tracked pointer isn't silently dropped — a local
+      // delete on a failed provider delete would diverge local vs provider
+      // state and orphan a paid mailbox. Fail closed: surface the error.
+      try {
+        await purelymail.deleteMailbox(v.localPart);
+      } catch (delErr) {
+        auditLog("email.mailbox.erase_failed", {
+          actor: { userID: actor.userID },
+          target: { userID: actor.userID, localPart: v.localPart },
+          outcome: "error",
+          reason: purelymail.purelyMailErrorDetail(delErr),
+        });
+        throw err(409, "Mailbox limit reached for this member");
+      }
       await Model.deleteByLocalPart(v.localPart);
       throw err(409, "Mailbox limit reached for this member");
     }
