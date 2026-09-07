@@ -14,6 +14,12 @@ RUN npm ci
 FROM node:22-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+# Coolify injects SOURCE_COMMIT (the deployed git commit) as a build arg. Thread it into the
+# build env so next.config.mjs can stamp NEXT_PUBLIC_BUILD_HASH into the client bundle and the
+# sidebar "build" badge shows the real short hash (#132). Empty for local `docker build` → the
+# helper falls back to "dev", so local/dev builds are unaffected.
+ARG SOURCE_COMMIT=""
+ENV SOURCE_COMMIT=${SOURCE_COMMIT}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
