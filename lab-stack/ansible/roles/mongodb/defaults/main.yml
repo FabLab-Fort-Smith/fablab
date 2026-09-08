@@ -39,3 +39,17 @@ mongodb_databases:
     user: "thelab_staging_app"
     password_env: "MONGO_APP_PASSWORD_STAGING"
 mongodb_backup_env: "/etc/fablab/mongo.env"   # root-only; sourced by the backup cron
+
+# --- staging data-mode auto-revert (real-data mode safety net; fablab #107 phase 2) ------------
+# Real production data is only ever allowed in staging inside a short, time-boxed, audited window
+# (refresh-staging-from-production.sh --real-data). This scheduled net GUARANTEES it cannot outlive
+# that window even if the operator forgets: hourly, it runs the anonymizer's --revert-if-expired
+# mode inside the staging container, which reads the `_staging_data_mode` marker and re-anonymizes
+# iff the window has passed (or the marker is missing/malformed). Idempotent + fail-safe: a no-op
+# when staging is already anonymized or the window is still active.
+mongodb_staging_revert_enabled: true
+mongodb_staging_db: "thelab_staging"                    # matched against the container's MONGODB_URI
+mongodb_staging_revert_dir: "/opt/fablab/staging-data-mode"   # where the anonymizer + wrapper live (root-only)
+mongodb_staging_revert_max_window_hours: 48             # must match the refresh script's cap
+mongodb_staging_revert_minute: "17"                     # off the backup minutes (0/20/40) to avoid contention
+

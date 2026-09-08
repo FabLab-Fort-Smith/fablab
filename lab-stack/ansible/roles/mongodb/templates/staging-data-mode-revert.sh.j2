@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# MANAGED BY ANSIBLE (roles/mongodb) — do not edit on the host.
+#
+# Unattended staging data-mode auto-revert (fablab #107 phase 2 real-data safety net). Runs hourly
+# from cron ON the VPS. It re-anonymizes staging iff a real-data window has expired (or the marker
+# is missing/malformed) and no-ops otherwise. No secrets: it uses the STAGING container's OWN
+# ENCRYPTION_KEY + MONGODB_URI (never the production key), so nothing sensitive is on argv or disk.
+set -euo pipefail
+
+REVERT_DIR="{{ mongodb_staging_revert_dir }}"
+STAGING_DB="{{ mongodb_staging_db }}"
+MAX_WINDOW_HOURS="{{ mongodb_staging_revert_max_window_hours }}"
+ANON="$REVERT_DIR/anonymize-staging.js"
+
+ts() { date -u +'%Y-%m-%dT%H:%M:%SZ'; }
+log() { printf '%s staging-data-mode-revert: %s\n' "$(ts)" "$*"; }
+
+[ -f "$ANON" ] || { log "ERROR: anonymizer missing at $ANON — cannot revert"; exit 1; }
+
+# Resolve the staging container WITHOUT Coolify: pick the running container whose own MONGODB_URI
+# points at the staging database. Config-derived, so a redeploy cannot stale a hardcoded name.
+CN=""
+for c in $(docker ps --format '{{ '{{' }}.Names{{ '}}' }}'); do
+  if docker inspect "$c" --format '{{ '{{' }}range .Config.Env{{ '}}' }}{{ '{{' }}println .{{ '}}' }}{{ '{{' }}end{{ '}}' }}' 2>/dev/null \
+      | grep -q "^MONGODB_URI=.*/${STAGING_DB}\b"; then
+    CN="$c"; break
+  fi
+done
+if [ -z "$CN" ]; then
+  log "no running staging container (MONGODB_URI -> ${STAGING_DB}) found — nothing to do"
+  exit 0
+fi
+
+# Copy the anonymizer into the container (Next standalone images do not reliably ship /app/scripts).
+# A dotted name avoids clobbering any deployed copy.
+docker cp "$ANON" "$CN:/app/.staging-data-revert.js" >/dev/null \
+  || { log "ERROR: could not copy the anonymizer into $CN"; exit 1; }
+
+# --revert-if-expired reads the marker and decides. It inherits the container's ENCRYPTION_KEY +
+# MONGODB_URI; we only pass the window cap so it matches the refresh script's cap.
+if docker exec -e STAGING_REAL_MAX_WINDOW_HOURS="$MAX_WINDOW_HOURS" "$CN" \
+     node /app/.staging-data-revert.js --revert-if-expired 2>&1 | sed "s/^/$(ts) /"; then
+  log "revert check complete"
+else
+  log "ERROR: revert check FAILED — staging may hold expired real data; investigate"
+  exit 1
+fi

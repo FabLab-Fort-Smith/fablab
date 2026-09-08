@@ -161,6 +161,49 @@
     mode: "0600"
   no_log: true
 
+# --- staging data-mode auto-revert (real-data mode safety net; fablab #107 phase 2) -----------
+# Installs the anonymizer (single source of truth: the app repo copy) + a thin wrapper on the VPS,
+# then an hourly cron that runs its --revert-if-expired mode inside the staging container. No
+# secrets are handled: the re-anonymize uses the STAGING container's OWN ENCRYPTION_KEY + MONGODB_URI
+# (it never needs the production key). Fail-safe + idempotent (no-op unless the real window expired).
+- name: Ensure the staging data-mode dir exists (root-only)
+  ansible.builtin.file:
+    path: "{{ mongodb_staging_revert_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: mongodb_staging_revert_enabled | bool
+
+# Ship the app's anonymizer verbatim — no second copy to drift. It is the same file the app repo
+# and the refresh script use; the wrapper docker-cp's it into the staging container at run time.
+- name: Install the anonymizer on the VPS (from the app repo — single source of truth)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../lab-site/the-lab/scripts/anonymize-staging.js"
+    dest: "{{ mongodb_staging_revert_dir }}/anonymize-staging.js"
+    owner: root
+    group: root
+    mode: "0600"
+  when: mongodb_staging_revert_enabled | bool
+
+- name: Install the staging data-mode revert wrapper (root-only)
+  ansible.builtin.template:
+    src: staging-data-mode-revert.sh.j2
+    dest: "{{ mongodb_staging_revert_dir }}/staging-data-mode-revert.sh"
+    owner: root
+    group: root
+    mode: "0700"
+  when: mongodb_staging_revert_enabled | bool
+
+- name: Schedule the hourly staging data-mode auto-revert
+  ansible.builtin.cron:
+    name: fablab-staging-data-mode-revert
+    user: root
+    minute: "{{ mongodb_staging_revert_minute }}"
+    hour: "*"
+    job: "{{ mongodb_staging_revert_dir }}/staging-data-mode-revert.sh >> /var/log/fablab-staging-data-mode.log 2>&1"
+    state: "{{ 'present' if mongodb_staging_revert_enabled | bool else 'absent' }}"
+
 - name: Remind — wire the app to MongoDB (no secrets printed)
   ansible.builtin.debug:
     msg:
