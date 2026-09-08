@@ -40,7 +40,7 @@ die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 COOLIFY_URL="${COOLIFY_URL:-$(env_get "$ENVF" COOLIFY_URL)}"
 COOLIFY_TOKEN="${COOLIFY_TOKEN:-$(env_get "$ENVF" COOLIFY_TOKEN)}"
 STAGING_PW="$(env_get "$ENVF" MONGO_APP_PASSWORD_STAGING)"
-[ -n "$COOLIFY_URL" ] && [ -n "$COOLIFY_TOKEN" ] || die "COOLIFY_URL / COOLIFY_TOKEN missing from $ENVF"
+if [ -z "$COOLIFY_URL" ] || [ -z "$COOLIFY_TOKEN" ]; then die "COOLIFY_URL / COOLIFY_TOKEN missing from $ENVF"; fi
 [ -n "$STAGING_PW" ] || die "MONGO_APP_PASSWORD_STAGING missing from $ENVF (run make secrets)"
 command -v jq >/dev/null || die "jq is required"
 

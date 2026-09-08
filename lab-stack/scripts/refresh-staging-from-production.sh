@@ -148,10 +148,13 @@ drop_temp() {
   "${SSH[@]}" "sudo TDB='$TEMP_DB' bash -s" >/dev/null 2>&1 <<'RDROP' || true
 set -euo pipefail
 . /opt/fablab/mongodb/mongo.env
+# Creds must expand INSIDE the container: a same-line command-prefix assignment does NOT set shell
+# vars for the "$RU"/"$RP" on that line (they would expand empty). `-e RP -e RU` forwards them into
+# the container env; `sh -c` then expands them there — so mongosh authenticates AND no credential is
+# on the host argv (`ps`-invisible).
 RP="$MONGO_INITDB_ROOT_PASSWORD" RU="$MONGO_INITDB_ROOT_USERNAME" TDB="$TDB" \
   docker exec -e RP -e RU -e TDB fablab-mongo \
-  mongosh --quiet -u "$RU" -p "$RP" --authenticationDatabase admin \
-  --eval 'db.getSiblingDB(process.env.TDB).dropDatabase()'
+  sh -c 'mongosh --quiet -u "$RU" -p "$RP" --authenticationDatabase admin --eval "db.getSiblingDB(process.env.TDB).dropDatabase()"'
 RDROP
 }
 trap 'drop_temp' EXIT
@@ -175,17 +178,19 @@ RURI="$(RU="$MONGO_INITDB_ROOT_USERNAME" RP="$MONGO_INITDB_ROOT_PASSWORD" python
 import os, urllib.parse
 print("mongodb://%s:%s@fablab-mongo:27017/?authSource=admin" % (os.environ["RU"], urllib.parse.quote(os.environ["RP"], safe="")))')"
 SRC_DB="$(printf '%s' "$PU" | sed -n 's#.*/\([^/?]*\)?.*#\1#p')"
-# Clean any stale incoming db from a previously-interrupted run before restoring into it.
+# Clean any stale incoming db from a previously-interrupted run before restoring into it. Creds
+# expand INSIDE the container (via -e RP/-e RU + sh -c) so they authenticate and stay off the argv.
 RP="$MONGO_INITDB_ROOT_PASSWORD" RU="$MONGO_INITDB_ROOT_USERNAME" TDB="$TDB" \
   docker exec -e RP -e RU -e TDB fablab-mongo \
-  mongosh --quiet -u "$RU" -p "$RP" --authenticationDatabase admin \
-  --eval 'db.getSiblingDB(process.env.TDB).dropDatabase()' >/dev/null
+  sh -c 'mongosh --quiet -u "$RU" -p "$RP" --authenticationDatabase admin --eval "db.getSiblingDB(process.env.TDB).dropDatabase()"' >/dev/null
 TMP="$(mktemp /tmp/refresh-XXXXXX.gz)"
 trap 'shred -u "$TMP" 2>/dev/null || rm -f "$TMP"; shred -u /root/.refresh-uri 2>/dev/null || rm -f /root/.refresh-uri' EXIT
-docker run --rm -e U="$PU" mongo:8.0 sh -c 'mongodump --uri="$U" --archive --gzip' > "$TMP" 2>/dev/null
+# Credential-bearing URIs go into the container ENV (prefix assignment + bare `-e U`) and expand
+# inside `sh -c` — never on the `docker run` argv, which is `ps`/proc-visible on the VPS.
+U="$PU" docker run --rm -e U mongo:8.0 sh -c 'mongodump --uri="$U" --archive --gzip' > "$TMP" 2>/dev/null
 [ -s "$TMP" ] || { echo "ERROR: production dump was empty" >&2; exit 1; }
 echo "    dump: $(stat -c %s "$TMP") bytes from db '$SRC_DB'"
-docker run --rm -i --network fablab -e U="$RURI" mongo:8.0 sh -c \
+U="$RURI" docker run --rm -i --network fablab -e U mongo:8.0 sh -c \
   "mongorestore --uri=\"\$U\" --archive --gzip --drop --nsInclude=\"$SRC_DB.*\" --nsFrom=\"$SRC_DB.*\" --nsTo=\"$TDB.*\"" \
   < "$TMP" 2>&1 | tail -1 | sed 's/^/    /'
 shred -u /root/.refresh-uri 2>/dev/null || rm -f /root/.refresh-uri
@@ -265,10 +270,11 @@ import os, urllib.parse
 print("mongodb://%s:%s@fablab-mongo:27017/?authSource=admin" % (os.environ["RU"], urllib.parse.quote(os.environ["RP"], safe="")))')"
 TMP="$(mktemp /tmp/swap-XXXXXX.gz)"
 trap 'shred -u "$TMP" 2>/dev/null || rm -f "$TMP"' EXIT
-docker run --rm --network fablab -e U="$RURI" -e TDB="$TDB" mongo:8.0 sh -c \
+# Root URI into the container ENV (bare `-e U`), off argv; TDB/SDB are non-secret db names.
+U="$RURI" docker run --rm --network fablab -e U -e TDB="$TDB" mongo:8.0 sh -c \
   'mongodump --uri="$U" --db="$TDB" --archive --gzip' > "$TMP" 2>/dev/null
 [ -s "$TMP" ] || { echo "ERROR: verified-safe dump was empty" >&2; exit 1; }
-docker run --rm -i --network fablab -e U="$RURI" -e TDB="$TDB" -e SDB="$SDB" mongo:8.0 sh -c \
+U="$RURI" docker run --rm -i --network fablab -e U -e TDB="$TDB" -e SDB="$SDB" mongo:8.0 sh -c \
   'mongorestore --uri="$U" --archive --gzip --drop --nsInclude="$TDB.*" --nsFrom="$TDB.*" --nsTo="$SDB.*"' \
   < "$TMP" 2>&1 | tail -1 | sed 's/^/    /'
 SWAP
