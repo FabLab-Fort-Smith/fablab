@@ -97,6 +97,16 @@ echo "no-leak — the password never appears in guard output:"
 run_guard the-lab staging "mongodb://thelab_app:${SECRET_PW}@fablab-mongo:27017/thelab?authSource=thelab" thelab
 out_lacks "$SECRET_PW" "reject output contains no password"
 
+# F3 (adversarial, #221 review): a password containing a RAW `@` and `/` — the case that, before the
+# last-`@` split + sanitize(), could have surfaced a password fragment in the db-path mismatch line.
+# Legacy user+db so the guard produces a mismatch and PRINTS the parsed values.
+AT_PW='p@ss/w0rd-LEAKTOKEN'
+run_guard the-lab staging "mongodb://thelab_app:${AT_PW}@fablab-mongo:27017/thelab?authSource=thelab" thelab
+if [ "$RC" -ne 0 ]; then ok "still rejects a legacy identity whose password holds '@' and '/'"; else bad "did NOT reject (rc=$RC)"; fi
+out_lacks "$AT_PW"      "no full password with @ and / in output"
+out_lacks "LEAKTOKEN"   "no password fragment (LEAKTOKEN) leaks via db-path parse"
+out_lacks "w0rd@"       "no userinfo tail (w0rd@) leaks via db-path parse"
+
 # Parser-level: extracting user/db/authSource must never surface the password.
 u="mongodb://thelab_staging_app:${SECRET_PW}@fablab-mongo:27017/thelab_staging?authSource=thelab_staging"
 parsed="$(uri_user "$u")|$(uri_dbpath "$u")|$(uri_authsource "$u")"
@@ -106,6 +116,14 @@ else
   bad "parser wrong: $parsed"
 fi
 if printf '%s' "$parsed" | grep -q "$SECRET_PW"; then bad "PASSWORD LEAKED via parser"; else ok "parser output contains no password"; fi
+
+# sanitize() unit: redacts any value still holding userinfo (`@`), passes a clean identifier through.
+if [ "$(sanitize "leftover:pw@host")" = "<unparseable — check URI percent-encoding>" ]; then
+  ok "sanitize redacts a value that still contains '@'"
+else
+  bad "sanitize did NOT redact an @-bearing value"
+fi
+if [ "$(sanitize "thelab_staging")" = "thelab_staging" ]; then ok "sanitize passes a clean identifier through"; else bad "sanitize mangled a clean identifier"; fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
