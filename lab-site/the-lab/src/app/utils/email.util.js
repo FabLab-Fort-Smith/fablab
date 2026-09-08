@@ -317,8 +317,16 @@ export async function sendApplicationReceivedEmail(email, firstName) {
  * ✅ Send Status Change Email
  */
 export async function sendStatusChangeEmail(email, firstName, newStatus) {
+    // Param classification (CWE-79, #208):
+    //   firstName  — PURE user-data → escaped at the TEMPLATE layer below.
+    //   newStatus  — a membership status; server-derived but can originate from a
+    //                client-supplied `membership.status` override, so its ONLY
+    //                interpolation into the HTML body (the default `message`) escapes
+    //                it here at composition. Every named switch case replaces `message`
+    //                with a static server string (no user substrings).
+    //   subject / actionLink / actionText — TRUSTED server constants/URLs; not escaped.
     let subject = 'Membership Status Update';
-    let message = `Your membership status has been updated to: <strong>${newStatus.toUpperCase()}</strong>.`;
+    let message = `Your membership status has been updated to: <strong>${escapeHtml(newStatus.toUpperCase())}</strong>.`;
     let actionLink = `${process.env.NEXT_PUBLIC_URL}/dashboard`;
     let actionText = 'Go to Dashboard';
 
@@ -413,6 +421,18 @@ export async function sendProfileCompletionEmail(email, firstName, userID) {
 
 /**
  * ✅ Send Nudge Email
+ *
+ * Param classification (CWE-79, #208):
+ *   firstName            — PURE user-data → escaped at the TEMPLATE layer below.
+ *   message, actionText  — MIXED params: by contract the CALLER composes the body
+ *                          fragment and must {@link escapeHtml} any untrusted
+ *                          substring before passing it (see notifications/service.js,
+ *                          per #199). They may legitimately carry server-authored
+ *                          HTML, so the template MUST NOT blanket-escape them — doing
+ *                          so would both break the server markup and double-escape the
+ *                          caller's already-escaped substrings. Pre-escaped at
+ *                          composition by contract.
+ *   step (subject) / actionLink (href) — server-derived; not HTML-body escaped.
  */
 export async function sendNudgeEmail(email, firstName, step, message, actionLink, actionText) {
     const mailOptions = {
@@ -445,6 +465,17 @@ export async function sendNudgeEmail(email, firstName, step, message, actionLink
 
 /**
  * ✅ Send Admin Notification Email
+ *
+ * Param classification (CWE-79, #208):
+ *   message, actionText  — MIXED params: the CALLER composes the body fragment
+ *                          (e.g. `${escapeHtml(firstName)} ${escapeHtml(lastName)}
+ *                          has submitted...` in users/service.js, per #199) and is
+ *                          responsible for {@link escapeHtml}-ing every untrusted
+ *                          substring. They may carry server-authored HTML, so the
+ *                          template MUST NOT blanket-escape them (that would break the
+ *                          server markup and double-escape the caller's substrings).
+ *                          Pre-escaped at composition by contract.
+ *   subject / actionLink — TRUSTED server-supplied string / URL; not HTML-body escaped.
  */
 export async function sendAdminNotificationEmail(subject, message, actionLink, actionText) {
     const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
