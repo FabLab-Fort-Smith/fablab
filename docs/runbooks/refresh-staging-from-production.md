@@ -157,8 +157,13 @@ Expect `Using Database: thelab_staging`.
 The refresh only rebuilds `thelab_staging`. Production is read-only throughout, and the legacy
 `thelab` database is still present as the pre-migration staging copy until #107 retires it.
 
+> **DB-identity drift.** `reconcile.sh` fails closed if the staging app's `MONGODB_URI`/`MONGODB_NAME`
+> do not match the post-#107 `thelab_staging` identity (a stale `.env` still on the legacy `thelab`
+> name is the classic cause). If you hit that error before refreshing, fix it first —
+> `fix-staging-db-identity.md`.
+
 ## Related
-- `promote-staging-to-prod.md`, `backup-restore.md`; `lab-stack/scripts/refresh-staging-from-production.sh`,
+- `fix-staging-db-identity.md`, `promote-staging-to-prod.md`, `backup-restore.md`; `lab-stack/scripts/refresh-staging-from-production.sh`,
   `lab-stack/scripts/staging-data-mode-revert.sh`, `lab-site/the-lab/scripts/anonymize-staging.js`,
   `lab-stack/ansible/roles/mongodb/` (scheduled auto-revert); issue #107.
 

@@ -192,6 +192,54 @@ if [ -n "$APP_UUID" ]; then info "application '$APP_NAME' exists: $APP_UUID (wil
 missing=()
 for k in "${APP_ENV_REQUIRED[@]}"; do [ -n "$(envval "$k")" ] || missing+=("$k"); done
 
+# ── DB-identity guard (the-lab): FAIL CLOSED on staging/prod MongoDB-identity drift (#107) ──────
+# reconcile pushes MONGODB_URI/MONGODB_NAME from the per-env secret file VERBATIM, so a STALE .env
+# silently points an environment's app at the wrong database. That happened once: the staging .env
+# kept the pre-#107 legacy `thelab`/`thelab_app` identity after the source of truth
+# (ansible/roles/mongodb/defaults/main.yml) moved to per-env <project>_<environment> names. This turns
+# that silent drift into a hard, actionable stop BEFORE any env push or deploy (runs in --dry-run too).
+# EXPECTED identity per env — SINGLE SOURCE, mirrors the ansible mongodb role. There is intentionally
+# NO bypass flag: the remedy is to fix the .env, not to weaken the check (docs/runbooks/fix-staging-db-identity.md).
+db_expected_ident(){ case "$1" in staging) printf thelab_staging ;; production) printf thelab_production ;; esac; }
+db_expected_user(){  case "$1" in staging) printf thelab_staging_app ;; production) printf thelab_production_app ;; esac; }
+# Parse a mongodb URI into user / db-path / authSource WITHOUT ever emitting the password.
+# (`make secrets` generates alnum passwords, so the `@` `:` `/` `?` delimiters are unambiguous.)
+# db-path splits on the LAST `@` so a password that itself contained a raw `@` is fully stripped
+# (defence in depth — unreachable with alnum passwords, but a mis-parse must never surface userinfo).
+uri_user(){ local r="${1#mongodb://}"; r="${r#mongodb+srv://}"; case "$r" in *@*) r="${r%%@*}"; printf '%s' "${r%%:*}" ;; esac; }
+uri_dbpath(){ local r="${1#mongodb://}"; r="${r#mongodb+srv://}"; r="${r##*@}"; r="${r%%\?*}"; case "$r" in */*) printf '%s' "${r#*/}" ;; esac; }
+uri_authsource(){ printf '%s' "$1" | sed -n 's/.*[?&]authSource=\([^&]*\).*/\1/p'; }
+# sanitize a parsed identifier before it is PRINTED: if it still contains an `@` the URI mis-parsed,
+# so it may hold userinfo — replace it wholesale rather than risk leaking a password fragment.
+sanitize(){ case "$1" in *@*) printf '<unparseable — check URI percent-encoding>' ;; *) printf '%s' "$1" ;; esac; }
+check_db_identity(){
+  [ "$APP_TARGET" = the-lab ] || return 0            # only the-lab carries a Mongo identity
+  local uri name exp got_user got_db got_as
+  local mismatches=()
+  uri="$(envval MONGODB_URI)"; name="$(envval MONGODB_NAME)"
+  [ -n "$uri" ] || return 0                          # empty URI is already covered by the required-env check
+  exp="$(db_expected_ident "$ENV_TARGET")"
+  got_user="$(uri_user "$uri")"; got_db="$(uri_dbpath "$uri")"; got_as="$(uri_authsource "$uri")"
+  # Comparisons use the RAW parsed values; only the values PRINTED into the message are sanitized.
+  [ "$got_user" = "$(db_expected_user "$ENV_TARGET")" ] || mismatches+=("MONGODB_URI user: expected '$(db_expected_user "$ENV_TARGET")' got '$(sanitize "$got_user")'")
+  [ "$got_db"   = "$exp" ] || mismatches+=("MONGODB_URI db path: expected '$exp' got '$(sanitize "$got_db")'")
+  [ "$got_as"   = "$exp" ] || mismatches+=("MONGODB_URI authSource: expected '$exp' got '$(sanitize "$got_as")'")
+  [ "$name"     = "$exp" ] || mismatches+=("MONGODB_NAME: expected '$exp' got '$(sanitize "$name")'")
+  if [ "${#mismatches[@]}" -gt 0 ]; then
+    printf 'ERROR: MongoDB identity does not match the %s environment (config-as-code drift):\n' "$ENV_TARGET" >&2
+    local m; for m in "${mismatches[@]}"; do printf '  - %s\n' "$m" >&2; done
+    die "refusing to push a $ENV_TARGET app pointed at the wrong database.
+  Source of truth: ansible/roles/mongodb/defaults/main.yml (#107):
+    staging    -> thelab_staging     / thelab_staging_app
+    production -> thelab_production   / thelab_production_app
+  Fix MONGODB_URI + MONGODB_NAME in $ENVF to the $ENV_TARGET identity (password from the
+  per-env MONGO_APP_PASSWORD_${ENV_TARGET^^} in that file), then re-run.
+  Remediation: docs/runbooks/fix-staging-db-identity.md. There is intentionally NO bypass."
+  fi
+  info "db-identity OK: $ENV_TARGET -> $(db_expected_user "$ENV_TARGET")@.../$exp (authSource=$exp, MONGODB_NAME=$exp)"
+}
+check_db_identity
+
 # --- desired create/update payload ---
 app_payload(){
   jq -n \

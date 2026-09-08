@@ -1,0 +1,117 @@
+---
+title: Fix staging/prod MongoDB-identity drift (reconcile guard fails closed)
+category: Data & Backup
+usage: When reconcile.sh refuses to push with a "MongoDB identity does not match" error
+order: 43
+summary: reconcile.sh fails closed if an environment's MONGODB_URI/MONGODB_NAME does not match the per-env identity in the ansible mongodb role. This is the remediation — realign the per-env .env to the correct thelab_<env> identity, converge, reconcile, and (for staging) refresh.
+---
+
+# Runbook: Fix staging/prod MongoDB-identity drift
+
+> The `reconcile.sh` DB-identity guard turns a silent config-as-code drift into a hard stop.
+> Rules: `@rules/topic-database.md`, `@rules/topic-config-environments.md`,
+> `@rules/workflow-secrets.md`, `@rules/workflow-gated-actions.md`, master §5.
+
+## When to use
+You ran `bash coolify/reconcile.sh --app the-lab --env <staging|production>` (or `--dry-run`) and it
+died with:
+
+```
+ERROR: MongoDB identity does not match the <env> environment (config-as-code drift):
+  - MONGODB_URI user: expected 'thelab_staging_app' got 'thelab_app'
+  - MONGODB_URI db path: expected 'thelab_staging' got 'thelab'
+  - MONGODB_URI authSource: expected 'thelab_staging' got 'thelab'
+  - MONGODB_NAME: expected 'thelab_staging' got 'thelab'
+ERROR: refusing to push a staging app pointed at the wrong database. ...
+```
+
+## Why this happens (the drift)
+- **Source of truth:** `lab-stack/ansible/roles/mongodb/defaults/main.yml`. Since #107 each
+  environment has its own `<project>_<environment>` database + least-privilege user:
+  - staging → db `thelab_staging`, user `thelab_staging_app`, authSource `thelab_staging`
+  - production → db `thelab_production`, user `thelab_production_app`, authSource `thelab_production`
+  The legacy `thelab` database was dropped in #107.
+- **The gap the guard closes:** `reconcile.sh` reads `MONGODB_URI` / `MONGODB_NAME` from the per-env
+  secret file (`../.env` for staging, `../.env.production` for production) and pushes them to Coolify
+  **verbatim**. A stale `.env` that still carried the pre-#107 `thelab` / `thelab_app` identity
+  therefore silently pointed the live staging app at the wrong (or a prod-adjacent) database, with no
+  error. The guard now validates the identity **before** any env push or deploy (in `--dry-run` too)
+  and **fails closed** on a mismatch. There is intentionally **no bypass flag** — the remedy is to
+  fix the `.env`, never to weaken the check.
+
+## Severity / impact
+- An app pointed at the wrong database is a data-integrity and isolation incident (a staging
+  credential must never reach production data). Treat MongoDB creds/data as **restricted** (master §5).
+
+## Prerequisites & access
+- The per-env secret file present locally (`lab-stack/../.env` staging; `lab-stack/../.env.production`
+  production) with the current per-env app password (`MONGO_APP_PASSWORD_STAGING` /
+  `MONGO_APP_PASSWORD_PRODUCTION` — operator-set, kept in the vault; pull with `make secrets-pull`).
+- Coolify token in `../.env`. For production writes: `--confirm-production` (gated — get approval).
+
+## Steps (OWNER remediation — these mutate real infra; get approval per `@rules/workflow-gated-actions.md`)
+
+1. **Realign the per-env `.env` DB identity.** Edit the target environment's secret file (the
+   gitignored `../.env` for staging / `../.env.production` for production) so the identity matches the
+   ansible role. **Never hardcode the password** — reference the generated per-env password. For
+   staging (`../.env`):
+   ```
+   MONGODB_URI=mongodb://thelab_staging_app:${MONGO_APP_PASSWORD_STAGING}@fablab-mongo:27017/thelab_staging?authSource=thelab_staging
+   MONGODB_NAME=thelab_staging
+   ```
+   For production (`../.env.production`), use `thelab_production_app` / `thelab_production` /
+   `${MONGO_APP_PASSWORD_PRODUCTION}`. (Shape is documented in the repo-root `.env.example`.) The
+   per-env app password is operator-set — if the key is missing, `make secrets-pull` from the vault
+   (do not invent one; a new value would need a matching `make converge` to re-provision the user).
+
+2. **Provision the app user on the mongod** (idempotent; needed if the per-env user does not exist
+   yet). This is a gated infra action:
+   ```bash
+   cd lab-stack
+   make converge          # reconciles thelab_<env>_app + its database from the ansible role
+   ```
+
+3. **Reconcile — the guard now passes.** Verify with a dry-run first, then apply:
+   ```bash
+   cd lab-stack
+   bash coolify/reconcile.sh --app the-lab --env staging --dry-run   # expect: "db-identity OK: staging -> ..."
+   bash coolify/reconcile.sh --app the-lab --env staging             # push env
+   bash coolify/reconcile.sh --app the-lab --env staging --deploy    # redeploy (or use redeploy-rollback.md)
+   ```
+   For production add `--confirm-production` (a gated production write).
+
+4. **Repopulate + verify (staging).** Run the anonymized refresh so `thelab_staging` has data, then
+   confirm the app reads the right database and the data is anonymized:
+   ```bash
+   cd lab-stack
+   bash scripts/refresh-staging-from-production.sh --yes            # anonymized by default (gated infra action)
+   ```
+   See `refresh-staging-from-production.md` for the full procedure and guarantees.
+
+## Verification
+```bash
+# guard is satisfied (no error, prints the OK line)
+bash coolify/reconcile.sh --app the-lab --env staging --dry-run | grep 'db-identity OK'
+# the running app is on the expected database
+curl -s -o /dev/null -w '%{http_code}\n' https://staging.fablabfortsmith.org/
+ssh fablab-prod 'docker logs <staging-container> --tail 20 | grep "Using Database"'
+```
+Expect `Using Database: thelab_staging` (staging) / `thelab_production` (production).
+
+## Rollback / abort
+- `--dry-run` mutates nothing — always run it first. If a reconcile push or deploy misbehaves,
+  follow `redeploy-rollback.md`. The refresh only rebuilds `thelab_staging`; production is read-only
+  throughout it.
+
+## Escalation
+- If the correct per-env user cannot authenticate after `make converge`, or you suspect the wrong
+  database was written to earlier, treat it as a data-isolation incident — `incident-response` and
+  page platform.
+
+## Related
+- `refresh-staging-from-production.md`, `promote-staging-to-prod.md`, `redeploy-rollback.md`,
+  `secret-rotation.md`; `lab-stack/coolify/reconcile.sh` (the guard),
+  `lab-stack/ansible/roles/mongodb/defaults/main.yml` (source of truth); issue #107.
+
+---
+_Last validated: 2026-09-08 (guard + unit test added; code + docs only — converge/reconcile/refresh against real infra are gated owner actions, not exercised here). Owner: platform._
