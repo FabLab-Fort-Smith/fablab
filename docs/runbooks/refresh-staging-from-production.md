@@ -40,12 +40,20 @@ rewrites emails/phones to synthetic values encrypted under **staging's** key, so
       `staging-only-password`.
 
 It resolves both apps **by name** through the Coolify API (no hardcoded uuids), reads production's
-`MONGODB_URI` from Coolify (never written to disk), dumps production read-only, restores into
-`thelab_staging` with `--drop`, then runs the anonymizer **inside the staging container** so it uses
-the app's own key and crypto scheme.
+`MONGODB_URI` from Coolify (never written to disk), dumps production read-only, and — **atomic
+temp-db swap (F2)** — restores the raw dump into a **transient incoming db**
+(`thelab_staging_incoming`), runs the anonymizer against THAT db **inside the staging container**
+(its own key + crypto scheme), verifies it, and **only then** swaps the verified-safe data into live
+`thelab_staging`. **Raw production PII never lands in the live staging db**, and any abort before the
+swap leaves live in its last-good, already-safe state; the incoming db is always dropped on exit.
 
 Afterwards every staging account is `member<N>@staging.invalid` with password
 **`staging-only-password`** (one shared bcrypt hash, verified to authenticate).
+
+> **Converge prerequisite.** The atomic swap needs the staging app user to have readWrite on the
+> incoming db (`extra_dbs` in the `mongodb` ansible role — least privilege, node never uses root),
+> and the auto-revert cron is installed by the same role. Run `make converge` once before using
+> this (a gated infra action).
 
 ## Real-data mode (GATED — explicit, time-boxed, auto-reverting)
 
@@ -72,13 +80,14 @@ bash scripts/refresh-staging-from-production.sh --yes --real-data \
   or a missing `--reason`/`--operator`, is **rejected** and the run falls back to **anonymized**
   (fail closed — never real). Keep windows as short as the task needs.
 - **Production key handling.** The prod `ENCRYPTION_KEY` is read **transiently** from Coolify (exactly
-  like the prod URI), passed to the container over **stdin** as a JSON line, and used only to decrypt.
-  It is **never** written to staging's env or disk, never logged/printed, and the buffer is zeroized
-  after use. It is never persisted to staging.
-- **Fail closed.** If the prod key is absent/wrong, or any decrypt/verify fails, the run **aborts the
-  real path and anonymizes instead** — staging is never left half-real or holding undecryptable prod
-  data. If real mode was requested but not applied, the wrapper exits non-zero and says so (staging is
-  left anonymized/safe).
+  like the prod URI), passed to the container over **stdin** as a JSON line (never `docker exec -e`
+  argv), and used only to decrypt. It is **never** written to staging's env or disk, never
+  logged/printed, and the buffer is zeroized after use. It is never persisted to staging. (The
+  staging DB URI now travels the same stdin channel — F4.)
+- **Fail closed.** The re-key + verify run against the **incoming** db, not live. If the prod key is
+  absent/wrong, or any decrypt/verify fails, the incoming db is scrubbed/aborted and **NOT swapped
+  in** — live `thelab_staging` keeps its last-good, already-safe state and the incoming db is dropped.
+  If real mode was requested but not applied, the wrapper exits non-zero and says so (live untouched).
 - **Audit.** A real run writes a `_staging_data_mode` marker doc (`mode:"real"`, `operator`, `reason`,
   `startedAt`, `expiresAt`) plus a log line. No member PII and no keys are in the marker.
 - **Internet-reachable staging.** Staging is on the public internet. During a real window it holds
@@ -93,6 +102,11 @@ Real data is removed automatically once the window passes — even if you forget
   `--revert-if-expired` mode inside the staging container: it re-anonymizes iff the marker is expired
   (or missing/malformed/tampered — fail-safe) and **no-ops** when already anonymized or the window is
   still active. `--force` anonymizes unconditionally. Safe to run anytime.
+- **Marker-independent scan (F1).** `--revert-if-expired` does **not** trust the marker alone: it also
+  scans live staging for real PII (prod-ciphertext user emails + any real-looking email, reusing the
+  anonymize verifier) and **scrubs if real PII is present even when the marker says `anonymized`** — so
+  a stale/tampered marker over real data is still caught by the hourly cron. A valid, unexpired real
+  window is preserved (its real data is authorized); everything else with real PII is scrubbed.
 - **Scheduled trigger (config-as-code).** The `mongodb` ansible role installs the anonymizer + a thin
   wrapper on the VPS and an **hourly cron** (`fablab-staging-data-mode-revert`, minute
   `mongodb_staging_revert_minute`) that runs `--revert-if-expired`. It uses the staging container's
@@ -150,4 +164,4 @@ The refresh only rebuilds `thelab_staging`. Production is read-only throughout, 
 
 ---
 _Last validated: 2026-08-07 (full anonymized run: 1946 docs restored, 69 users anonymized, verification passed). Owner: platform._
-_Real-data mode + auto-revert added 2026-09-08 (code + unit tests only; a real run and the timer install are gated infra actions, not yet exercised against real infra)._
+_Real-data mode + atomic temp-db swap (F2) + marker-independent auto-revert (F1) added 2026-09-08 (code + unit tests only; a real run, `make converge`, and the timer install are gated infra actions, not yet exercised against real infra)._

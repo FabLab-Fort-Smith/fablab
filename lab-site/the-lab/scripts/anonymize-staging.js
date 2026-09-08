@@ -439,7 +439,39 @@ async function verifyRealRekey(db, stagingCipher) {
   return bad;
 }
 
-// ---------------------------------------------------------------- stdin (real-mode input channel)
+// ---------------------------------------------------------------- marker-independent revert (F1)
+/**
+ * Marker-independent real-PII scan over the LIVE db: reuses the anonymized-invariant verifier, so it
+ * returns true if any user email is prod ciphertext / non-synthetic OR any document holds a
+ * real-looking email. Idempotent: on a genuinely anonymized db it returns false.
+ * @param {import('mongodb').Db} db @param {(v:any)=>string|null} decrypt @returns {Promise<boolean>}
+ */
+async function hasRealPii(db, decrypt) {
+  return (await verifyAnonymized(db, decrypt)).length > 0;
+}
+
+/**
+ * Decide whether the auto-revert must scrub. Defense in depth: do NOT trust the marker alone.
+ *  1. Marker says expired/missing/malformed/tampered/over-cap -> revert (shouldRevert).
+ *  2. Marker claims anonymized (or is otherwise not an active real window) but real PII is actually
+ *     present -> revert anyway (a stale/tampered "anonymized" marker over real data is caught).
+ * A VALID, active real window (mode:'real', unexpired, within cap) is preserved — its real PII is
+ * authorized and expected, so scrubbing it would be a self-inflicted DoS on the feature.
+ * @param {object|null} marker @param {import('mongodb').Db} db @param {(v:any)=>string|null} decrypt
+ * @param {number} nowMs @param {number} maxMs
+ * @returns {Promise<{revert:boolean, reason?:string}>}
+ */
+async function revertDecision(marker, db, decrypt, nowMs, maxMs) {
+  if (shouldRevert(marker, nowMs, maxMs)) return { revert: true, reason: 'marker expired/missing/invalid' };
+  // Reaches here only when the marker is anonymized OR a valid active real window. Preserve the
+  // active window; otherwise scrub if real PII is present despite the marker.
+  if (!(marker && marker.mode === 'real')) {
+    if (await hasRealPii(db, decrypt)) return { revert: true, reason: 'real PII found despite an anonymized marker' };
+  }
+  return { revert: false };
+}
+
+// ---------------------------------------------------------------- stdin (input channel)
 /** Read up to MAX_STDIN_BYTES from stdin and JSON.parse it, or return null if empty/invalid/TTY. */
 async function readStdinJson() {
   if (process.stdin.isTTY) return null;
@@ -460,18 +492,23 @@ async function main() {
   const argv = process.argv.slice(2);
   const has = (f) => argv.includes(f);
 
-  const uri = process.env.MONGODB_URI;
   const stagingKey = process.env.ENCRYPTION_KEY;
-  if (!uri) fail('MONGODB_URI is not set');
   if (!stagingKey) fail('ENCRYPTION_KEY is not set (must run inside the staging container)');
-
-  try { guardStaging(dbNameFromUri(uri)); } catch (e) { fail(e.message); }
-
   const stagingCipher = makeCipher(stagingKey);
   try { selfTest(stagingCipher); } catch (e) { fail(e.message); }
 
   const nowMs = Date.now();
   const maxMs = maxWindowMs();
+
+  // The stdin control channel carries the target mongoUri (F2 atomic swap: the INCOMING db) and, in
+  // real mode, the prod key + audit metadata — off argv (invisible in `ps`), off disk, off logs.
+  // --revert-if-expired runs unattended from cron against the container's OWN live db, so no stdin.
+  const input = has('--revert-if-expired') ? null : await readStdinJson();
+
+  const uri = (input && input.mongoUri) || process.env.MONGODB_URI;
+  if (!uri) fail('no target MONGODB_URI (from stdin.mongoUri or env)');
+  try { guardStaging(dbNameFromUri(uri)); } catch (e) { fail(e.message); }
+
   const client = new MongoClient(uri);
   await client.connect();
   const db = client.db();
@@ -484,20 +521,21 @@ async function main() {
       for (const b of bad) console.error(`  - ${b}`);
       process.exit(1);
     }
-    console.log('  ✓ verified: staging holds no undecryptable / real-looking production data');
+    console.log('  ✓ verified: this database holds no undecryptable / real-looking production data');
     process.exit(0);
   };
 
-  // --- auto-revert safety net -------------------------------------------------------------
+  // --- auto-revert safety net (marker + marker-independent PII scan) -----------------------
   if (has('--revert-if-expired')) {
     const marker = await readMarker(db);
-    if (!shouldRevert(marker, nowMs, maxMs)) {
-      const state = marker && marker.mode === 'real' ? `real window active until ${marker.expiresAt}` : 'already anonymized';
+    const decision = await revertDecision(marker, db, stagingCipher.decrypt, nowMs, maxMs);
+    if (!decision.revert) {
+      const state = marker && marker.mode === 'real' ? `real window active until ${marker.expiresAt}` : 'already anonymized, no real PII found';
       console.log(`  auto-revert: no-op (${state})`);
       await client.close();
       process.exit(0);
     }
-    console.log('  auto-revert: window expired / marker missing — re-anonymizing staging');
+    console.log(`  auto-revert: re-anonymizing staging (${decision.reason})`);
     return finish(await anonymizeDb(db, stagingCipher));
   }
 
@@ -507,7 +545,6 @@ async function main() {
       console.error('REAL-DATA MODE REJECTED: --real requires --yes — falling back to ANONYMIZED');
       return finish(await anonymizeDb(db, stagingCipher));
     }
-    const input = await readStdinJson();
     const v = input ? validateRealRequest(input, nowMs, maxMs) : { ok: false, error: 'no real-mode input on stdin' };
     if (!v.ok || !(input && input.prodKey)) {
       console.error(`REAL-DATA MODE REJECTED: ${v.error || 'production key missing from stdin'} — falling back to ANONYMIZED`);
@@ -582,6 +619,8 @@ module.exports = {
   verifyAnonymized,
   rekeyRealDb,
   verifyRealRekey,
+  hasRealPii,
+  revertDecision,
   readStdinJson,
 };
 

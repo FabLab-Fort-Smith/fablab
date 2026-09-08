@@ -132,18 +132,40 @@ CN="$("${SSH[@]}" "docker ps --format '{{.Names}}' | grep '^$stg_uuid' | head -1
 [ -n "$CN" ] || die "no running container found for staging app $stg_uuid"
 info "staging container: $CN"
 
-STAGING_URI="mongodb://thelab_staging_app:${STAGING_PW}@fablab-mongo:27017/${STAGING_DB}?authSource=${STAGING_DB}"
+# F2 — atomic temp-db swap. Raw prod is restored into a TRANSIENT incoming db, scrubbed + verified
+# THERE, and only swapped into the live db after it is proven safe. The live db is never touched
+# until the swap, so raw prod PII never lands in live staging and an abort can't expose it.
+TEMP_DB="${STAGING_INCOMING_DB:-thelab_staging_incoming}"
+# The staging app user is granted readWrite on the incoming db by the mongodb ansible role, so it
+# authenticates against thelab_staging (authSource) and can scrub the incoming db — node never
+# receives root mongo creds (least privilege). NOTE: this grant is a converge prerequisite.
+TEMP_URI="mongodb://thelab_staging_app:${STAGING_PW}@fablab-mongo:27017/${TEMP_DB}?authSource=${STAGING_DB}"
 
-# --- dump production, restore into staging --------------------------------------------------
+# ALWAYS drop the incoming db on exit (success or abort) via root, so a stray temp db can never leave
+# raw prod PII lingering. Idempotent (dropDatabase on a missing db is a no-op). Root creds come from
+# mongo.env on the VPS and reach `docker exec` via the ENVIRONMENT (-e VAR, no value) — never argv.
+drop_temp() {
+  "${SSH[@]}" "sudo TDB='$TEMP_DB' bash -s" >/dev/null 2>&1 <<'RDROP' || true
+set -euo pipefail
+. /opt/fablab/mongodb/mongo.env
+RP="$MONGO_INITDB_ROOT_PASSWORD" RU="$MONGO_INITDB_ROOT_USERNAME" TDB="$TDB" \
+  docker exec -e RP -e RU -e TDB fablab-mongo \
+  mongosh --quiet -u "$RU" -p "$RP" --authenticationDatabase admin \
+  --eval 'db.getSiblingDB(process.env.TDB).dropDatabase()'
+RDROP
+}
+trap 'drop_temp' EXIT
+
+# --- dump production, restore into the INCOMING db (live untouched) --------------------------
 # The archive is streamed through the VPS's /tmp and shredded; --nsInclude keeps a whole-instance
 # archive from ever touching another database (the trap that bit mongo-restore-drill.sh).
-info "dumping production and restoring into $STAGING_DB (this DROPS $STAGING_DB) ..."
+info "dumping production and restoring into $TEMP_DB (live $STAGING_DB untouched until verified) ..."
 # The production URI goes over STDIN into a root-only file, never in the remote command line:
 # anything on argv is visible in `ps` to every user on the VPS (shellcheck SC2097/SC2098 pointed at
 # the earlier version, which did exactly that). The remote script shreds it on exit.
 printf '%s' "$PROD_URI" | "${SSH[@]}" 'sudo sh -c "umask 077; cat > /root/.refresh-uri"' \
   || die "could not stage the production URI on $SSH_HOST"
-"${SSH[@]}" "sudo SDB='$STAGING_DB' bash -s" <<'REMOTE'
+"${SSH[@]}" "sudo TDB='$TEMP_DB' bash -s" <<'REMOTE'
 set -euo pipefail
 umask 077
 trap 'shred -u /root/.refresh-uri 2>/dev/null || rm -f /root/.refresh-uri' EXIT
@@ -153,13 +175,18 @@ RURI="$(RU="$MONGO_INITDB_ROOT_USERNAME" RP="$MONGO_INITDB_ROOT_PASSWORD" python
 import os, urllib.parse
 print("mongodb://%s:%s@fablab-mongo:27017/?authSource=admin" % (os.environ["RU"], urllib.parse.quote(os.environ["RP"], safe="")))')"
 SRC_DB="$(printf '%s' "$PU" | sed -n 's#.*/\([^/?]*\)?.*#\1#p')"
+# Clean any stale incoming db from a previously-interrupted run before restoring into it.
+RP="$MONGO_INITDB_ROOT_PASSWORD" RU="$MONGO_INITDB_ROOT_USERNAME" TDB="$TDB" \
+  docker exec -e RP -e RU -e TDB fablab-mongo \
+  mongosh --quiet -u "$RU" -p "$RP" --authenticationDatabase admin \
+  --eval 'db.getSiblingDB(process.env.TDB).dropDatabase()' >/dev/null
 TMP="$(mktemp /tmp/refresh-XXXXXX.gz)"
-trap 'shred -u "$TMP" 2>/dev/null || rm -f "$TMP"' EXIT
+trap 'shred -u "$TMP" 2>/dev/null || rm -f "$TMP"; shred -u /root/.refresh-uri 2>/dev/null || rm -f /root/.refresh-uri' EXIT
 docker run --rm -e U="$PU" mongo:8.0 sh -c 'mongodump --uri="$U" --archive --gzip' > "$TMP" 2>/dev/null
 [ -s "$TMP" ] || { echo "ERROR: production dump was empty" >&2; exit 1; }
 echo "    dump: $(stat -c %s "$TMP") bytes from db '$SRC_DB'"
 docker run --rm -i --network fablab -e U="$RURI" mongo:8.0 sh -c \
-  "mongorestore --uri=\"\$U\" --archive --gzip --drop --nsInclude=\"$SRC_DB.*\" --nsFrom=\"$SRC_DB.*\" --nsTo=\"$SDB.*\"" \
+  "mongorestore --uri=\"\$U\" --archive --gzip --drop --nsInclude=\"$SRC_DB.*\" --nsFrom=\"$SRC_DB.*\" --nsTo=\"$TDB.*\"" \
   < "$TMP" 2>&1 | tail -1 | sed 's/^/    /'
 shred -u /root/.refresh-uri 2>/dev/null || rm -f /root/.refresh-uri
 REMOTE
@@ -173,7 +200,7 @@ fi
   || die "the production URI is STILL on $SSH_HOST at /root/.refresh-uri — remove it manually"
 info "verified: no production credential left on $SSH_HOST"
 
-# --- anonymize INSIDE the staging container (its ENCRYPTION_KEY, its crypto scheme) ----------
+# --- scrub + verify INSIDE the staging container, against the INCOMING db --------------------
 # Ship THIS checkout's anonymizer into the container rather than relying on the deployed image
 # containing it: the image may predate the script, and even when it does contain it, running the
 # repo copy guarantees the logic that just passed review is the logic that runs.
@@ -187,44 +214,72 @@ scp -q -i "$SSH_KEY" -o BatchMode=yes "$ANON_SRC" "deploy@$SSH_HOST:/tmp/anonymi
 "${SSH[@]}" "docker cp /tmp/anonymize-staging.js $CN:/app/.anonymize-staging.run.js" >/dev/null \
   || die "could not copy the anonymizer into $CN"
 
+# Build the node stdin control channel (F4): the target mongoUri (the INCOMING db, with the staging
+# password) and — in real mode — the prod key + audit metadata travel as ONE JSON line over STDIN.
+# Secrets (staging URI, prod key) reach jq via the ENVIRONMENT (env.TEMPURI / env.PRODKEY), never
+# `--arg` (which would be on jq's argv, `ps`-visible); reason/operator/until are non-secret audit
+# metadata. The JSON then reaches ssh via a `printf` (builtin) pipe — never on any process argv,
+# never a file, never a log. ENCRYPTION_KEY comes from the container's own env, so it is not passed.
 if [ "$REAL" = "1" ]; then
-  # REAL-DATA MODE: re-key member PII from prod ciphertext to staging ciphertext.
-  # The prod ENCRYPTION_KEY + audit metadata go to the container over STDIN as one JSON line (jq
-  # builds it with safe escaping). The key reaches jq via the ENVIRONMENT and reaches ssh via a
-  # `printf` (a builtin) pipe — so it is never on any process argv (invisible in `ps`), never a
-  # file, never a log. STAGING_URI (staging password) is still passed via -e (pre-existing, staging-only).
-  info "RE-KEYING real production data into $STAGING_DB inside $CN (time-boxed, audited) ..."
-  # The prod key goes to jq via the ENVIRONMENT (env.PRODKEY), never `--arg` — a `--arg` value is on
-  # jq's argv and would be visible in `ps` on this host. Env vars are not shown in `ps` argv. Operator/
-  # reason/until are non-secret audit metadata, so `--arg` is fine for them.
-  REAL_STDIN="$(PRODKEY="$PROD_ENC_KEY" jq -cn --arg o "$REAL_OPERATOR" --arg r "$REAL_REASON" --arg u "$REAL_UNTIL" \
-    '{prodKey: env.PRODKEY, operator:$o, reason:$r, until:$u}')"
-  set +e
-  out="$(printf '%s' "$REAL_STDIN" | "${SSH[@]}" "docker exec -i -e MONGODB_URI='$STAGING_URI' -e STAGING_REAL_MAX_WINDOW_HOURS='$MAX_REAL_WINDOW_HOURS' $CN node /app/.anonymize-staging.run.js --yes --real" 2>&1)"
-  rc=$?
-  set -e
-  # Wipe the transient key material from this shell's memory as soon as it has been handed off.
-  REAL_STDIN=""; PROD_ENC_KEY=""; unset REAL_STDIN PROD_ENC_KEY
-  printf '%s\n' "$out" | sed 's/^/    /'
-  [ "$rc" -eq 0 ] || die "REAL-DATA RUN FAILED — $STAGING_DB is unsafe. Do not use it (re-run to anonymize)."
-  # The node script keeps staging SAFE on any real-mode failure by scrubbing to anonymized (exit 0
-  # == verified-safe). But that means a wrong prod key silently downgrades — enforce operator INTENT
-  # here: if the success marker is absent, real was NOT applied. Staging is anonymized (safe), but
-  # the operator asked for real and must know.
-  if ! printf '%s' "$out" | grep -q 'REAL-DATA MODE ACTIVE'; then
-    die "REAL-DATA MODE WAS NOT APPLIED (see output above) — staging was left ANONYMIZED. Check the production ENCRYPTION_KEY / window and re-run."
-  fi
-  info "done: $STAGING_DB refreshed with REAL production data (re-keyed to staging)"
+  NODE_ARGS="--yes --real"
+  info "RE-KEYING real production data in $TEMP_DB inside $CN (time-boxed, audited; live untouched) ..."
+  STDIN_JSON="$(TEMPURI="$TEMP_URI" PRODKEY="$PROD_ENC_KEY" jq -cn \
+    --arg o "$REAL_OPERATOR" --arg r "$REAL_REASON" --arg u "$REAL_UNTIL" \
+    '{mongoUri: env.TEMPURI, prodKey: env.PRODKEY, operator:$o, reason:$r, until:$u}')"
+else
+  NODE_ARGS="--yes"
+  info "anonymizing $TEMP_DB inside $CN (live untouched) ..."
+  STDIN_JSON="$(TEMPURI="$TEMP_URI" jq -cn '{mongoUri: env.TEMPURI}')"
+fi
+set +e
+out="$(printf '%s' "$STDIN_JSON" | "${SSH[@]}" "docker exec -i -e STAGING_REAL_MAX_WINDOW_HOURS='$MAX_REAL_WINDOW_HOURS' $CN node /app/.anonymize-staging.run.js $NODE_ARGS" 2>&1)"
+rc=$?
+set -e
+# Wipe the transient secret material from this shell's memory as soon as it has been handed off.
+STDIN_JSON=""; PROD_ENC_KEY=""; unset STDIN_JSON PROD_ENC_KEY
+printf '%s\n' "$out" | sed 's/^/    /'
+# On ANY scrub/verify failure the incoming db is NOT swapped in — live keeps its last-good, already-
+# safe state; the EXIT trap drops the (possibly-raw) incoming db. Fail closed.
+[ "$rc" -eq 0 ] || die "SCRUB/VERIFY FAILED on $TEMP_DB — live $STAGING_DB left UNTOUCHED (last good). Incoming db dropped."
+if [ "$REAL_REQUESTED" = "1" ] && [ "$REAL" != "1" ]; then
+  warn "real-data mode was requested but rejected earlier — proceeding ANONYMIZED (see warnings above)."
+fi
+# Real mode: node keeps the incoming db SAFE on any real-mode failure by scrubbing it to anonymized
+# (exit 0 == verified-safe). Enforce operator INTENT: if the success marker is absent, real was NOT
+# applied — do NOT swap a downgraded db into live silently; abort so the operator investigates.
+if [ "$REAL" = "1" ] && ! printf '%s' "$out" | grep -q 'REAL-DATA MODE ACTIVE'; then
+  die "REAL-DATA MODE WAS NOT APPLIED (see output above) — live $STAGING_DB left UNTOUCHED. Check the production ENCRYPTION_KEY / window and re-run."
+fi
+
+# --- swap the verified-safe incoming db into live -------------------------------------------
+# Cross-database renameCollection is unsupported in MongoDB, so the cleanest atomic-enough swap is a
+# dump of the ALREADY-VERIFIED-SAFE incoming db restored into live with --drop. The data moved is
+# scrubbed/verified, so live never contains raw prod PII at any point; an interruption here leaves
+# live with verified-safe data only.
+info "swapping verified-safe $TEMP_DB into live $STAGING_DB ..."
+"${SSH[@]}" "sudo TDB='$TEMP_DB' SDB='$STAGING_DB' bash -s" <<'SWAP'
+set -euo pipefail
+. /opt/fablab/mongodb/mongo.env
+RURI="$(RU="$MONGO_INITDB_ROOT_USERNAME" RP="$MONGO_INITDB_ROOT_PASSWORD" python3 -c '
+import os, urllib.parse
+print("mongodb://%s:%s@fablab-mongo:27017/?authSource=admin" % (os.environ["RU"], urllib.parse.quote(os.environ["RP"], safe="")))')"
+TMP="$(mktemp /tmp/swap-XXXXXX.gz)"
+trap 'shred -u "$TMP" 2>/dev/null || rm -f "$TMP"' EXIT
+docker run --rm --network fablab -e U="$RURI" -e TDB="$TDB" mongo:8.0 sh -c \
+  'mongodump --uri="$U" --db="$TDB" --archive --gzip' > "$TMP" 2>/dev/null
+[ -s "$TMP" ] || { echo "ERROR: verified-safe dump was empty" >&2; exit 1; }
+docker run --rm -i --network fablab -e U="$RURI" -e TDB="$TDB" -e SDB="$SDB" mongo:8.0 sh -c \
+  'mongorestore --uri="$U" --archive --gzip --drop --nsInclude="$TDB.*" --nsFrom="$TDB.*" --nsTo="$SDB.*"' \
+  < "$TMP" 2>&1 | tail -1 | sed 's/^/    /'
+SWAP
+
+drop_temp   # immediate cleanup (the EXIT trap is the backstop)
+
+if [ "$REAL" = "1" ]; then
+  info "done: live $STAGING_DB now holds REAL production data (re-keyed to staging)"
   info "This window auto-reverts to anonymized at $REAL_UNTIL (staging-data-mode-revert.sh + scheduled task)."
   info "Staging is internet-reachable — keep the window short and restrict access during it."
 else
-  info "anonymizing $STAGING_DB inside $CN ..."
-  if ! "${SSH[@]}" "docker exec -e MONGODB_URI='$STAGING_URI' $CN node /app/.anonymize-staging.run.js --yes" 2>&1 | sed 's/^/    /'; then
-    die "ANONYMIZATION FAILED — $STAGING_DB still contains production personal data. Do not use it."
-  fi
-  if [ "$REAL_REQUESTED" = "1" ]; then
-    warn "real-data mode was requested but rejected earlier — staging is ANONYMIZED (see warnings above)."
-  fi
-  info "done: $STAGING_DB refreshed from production and anonymized"
+  info "done: live $STAGING_DB refreshed from production and anonymized"
   info "staging accounts: member<N>@staging.invalid / password 'staging-only-password'"
 fi

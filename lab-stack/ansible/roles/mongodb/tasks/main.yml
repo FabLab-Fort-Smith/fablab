@@ -118,21 +118,28 @@
 # and it propagates a password rotation). Reported changed only on creation, so a steady-state run
 # stays quiet. Passwords are read from the environment inside the container — never on a command
 # line, where `ps` would expose them.
+# `extra_dbs` (per item) grants the SAME user readWrite on additional databases, folded into the
+# authoritative roles array here so a converge cannot wipe it (updateUser REPLACES roles). The
+# staging user gets the transient refresh-incoming db this way (F2 atomic-swap; least privilege —
+# node scrubs the incoming db as the staging user, never as root).
 - name: Reconcile the least-privilege app users (create-or-update; idempotent)
   ansible.builtin.command:
     cmd: >-
       docker exec -e RP={{ mongodb_root_pw | quote }} -e AP -e AU={{ item.user | quote }}
-      -e ADB={{ item.db | quote }}
+      -e ADB={{ item.db | quote }} -e XDBS={{ (item.extra_dbs | default([])) | join(',') | quote }}
       {{ mongodb_container_name }} sh -c 'mongosh --quiet -u root -p "$RP"
       --authenticationDatabase admin --eval "
       var adb=process.env.ADB, au=process.env.AU, ap=process.env.AP;
+      var xdbs=(process.env.XDBS||\"\").split(\",\").filter(function(s){return s;});
+      var roles=[{role:\"readWrite\", db:adb}];
+      xdbs.forEach(function(x){ roles.push({role:\"readWrite\", db:x}); });
       var d=db.getSiblingDB(adb);
       if (d.getUsers().users.some(function(u){return u.user===au;})) {
         d.changeUserPassword(au, ap);
-        d.updateUser(au, {roles:[{role:\"readWrite\", db:adb}]});
+        d.updateUser(au, {roles:roles});
         print(\"reconciled:updated\");
       } else {
-        d.createUser({user:au, pwd:ap, roles:[{role:\"readWrite\", db:adb}]});
+        d.createUser({user:au, pwd:ap, roles:roles});
         print(\"reconciled:created\");
       }"'
   environment:

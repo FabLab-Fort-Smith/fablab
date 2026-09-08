@@ -11,6 +11,7 @@ import {
   makeCipher, parseWindow, validateRealRequest, shouldRevert, maxWindowMs,
   dbNameFromUri, guardStaging, selfTest,
   rekeyRealDb, verifyRealRekey, anonymizeDb, verifyAnonymized,
+  hasRealPii, revertDecision,
   readMarker, MARKER_ID, SYNTHETIC_DOMAIN, DEFAULT_MAX_WINDOW_HOURS,
 } from "../../scripts/anonymize-staging.js";
 
@@ -317,5 +318,77 @@ describe("anonymizeDb (default path unchanged + fail-closed verify)", () => {
     });
     const bad = await verifyAnonymized(db, stg.decrypt);
     expect(bad.join(" ")).toMatch(/real-looking email/);
+  });
+});
+
+// ---------------------------------------------------------------- F1: marker-independent revert
+describe("revertDecision / hasRealPii (marker-independent PII scan)", () => {
+  const now = Date.parse("2026-09-08T12:00:00Z");
+  const max = 48 * HOUR;
+  const prod = makeCipher(PROD_KEY);
+  const stg = makeCipher(STG_KEY);
+  const decrypt = stg.decrypt;
+
+  const anonDb = () => fakeDb({ users: [{ _id: "u1", email: stg.encrypt(`member1@${SYNTHETIC_DOMAIN}`) }] });
+  const prodCiphertextDb = () => fakeDb({ users: [{ _id: "u1", email: prod.encrypt("real@example.com") }] });
+  const rekeyedRealDb = () => fakeDb({ users: [{ _id: "u1", email: stg.encrypt("real.member@example.com") }] });
+
+  test("hasRealPii: false on an anonymized db, true when real/undecryptable data is present", async () => {
+    expect(await hasRealPii(anonDb(), decrypt)).toBe(false);
+    expect(await hasRealPii(prodCiphertextDb(), decrypt)).toBe(true);   // prod ciphertext
+    expect(await hasRealPii(rekeyedRealDb(), decrypt)).toBe(true);      // real (non-synthetic) email
+  });
+
+  test("SCRUBS when the marker LIES 'anonymized' but real PII is present (stale/tampered marker)", async () => {
+    const d = await revertDecision({ mode: "anonymized" }, prodCiphertextDb(), decrypt, now, max);
+    expect(d.revert).toBe(true);
+    expect(d.reason).toMatch(/real PII/i);
+  });
+
+  test("NO-OP when the marker says anonymized and the db really is anonymized", async () => {
+    const d = await revertDecision({ mode: "anonymized" }, anonDb(), decrypt, now, max);
+    expect(d.revert).toBe(false);
+  });
+
+  test("PRESERVES an active real window (does not scrub authorized real data mid-window)", async () => {
+    const marker = { mode: "real", startedAt: "2026-09-08T11:00:00Z", expiresAt: "2026-09-08T18:00:00Z" };
+    const d = await revertDecision(marker, rekeyedRealDb(), decrypt, now, max);
+    expect(d.revert).toBe(false);
+  });
+
+  test("reverts (marker) when a real window has EXPIRED, regardless of the PII scan", async () => {
+    const marker = { mode: "real", startedAt: "2026-09-07T11:00:00Z", expiresAt: "2026-09-08T11:00:00Z" };
+    const d = await revertDecision(marker, rekeyedRealDb(), decrypt, now, max);
+    expect(d.revert).toBe(true);
+    expect(d.reason).toMatch(/marker/i);
+  });
+
+  test("reverts (marker) when the marker is missing", async () => {
+    const d = await revertDecision(null, anonDb(), decrypt, now, max);
+    expect(d.revert).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------- F2: atomic-swap invariants
+// The bash wrapper performs the restore-into-temp / verify / swap; here we lock in the node-side
+// invariants the swap relies on: (1) a failed scrub/verify against the temp db returns non-empty
+// (the wrapper aborts on that and leaves live untouched), and (2) a passing scrub sets the marker so
+// the swapped-in live db carries a truthful marker.
+describe("F2 atomic-swap node invariants", () => {
+  test("a temp db that still holds prod ciphertext FAILS verify (wrapper then aborts, live untouched)", async () => {
+    const prod = makeCipher(PROD_KEY);
+    const stg = makeCipher(STG_KEY);
+    // Simulate an incoming temp db where one user was not re-keyed (still prod ciphertext).
+    const temp = fakeDb({ users: [{ _id: "u1", email: prod.encrypt("real@example.com") }] }, "thelab_staging_incoming");
+    const bad = await verifyRealRekey(temp, stg);
+    expect(bad.length).toBeGreaterThan(0); // non-zero => wrapper does NOT swap into live
+  });
+
+  test("a passing anonymize on the temp db sets a truthful marker for the swap to carry into live", async () => {
+    const stg = makeCipher(STG_KEY);
+    const temp = fakeDb({ users: [{ _id: "u1", email: makeCipher(PROD_KEY).encrypt("real@example.com") }] }, "thelab_staging_incoming");
+    const bad = await anonymizeDb(temp, stg);
+    expect(bad).toEqual([]);
+    expect(await readMarker(temp)).toMatchObject({ _id: MARKER_ID, mode: "anonymized" });
   });
 });
