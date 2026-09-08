@@ -44,6 +44,69 @@ export function escapeHtml(value) {
 }
 
 /**
+ * URL schemes allowed to reach an email `href="..."` attribute.
+ *
+ * Only navigational, non-executing schemes: `https:`/`http:` (our own
+ * NEXT_PUBLIC_URL-derived links — https in prod/staging, http on localhost in
+ * dev/test) and `mailto:`. Everything dynamic/dangerous — `javascript:`,
+ * `data:`, `vbscript:`, `file:`, `blob:`, … — is deliberately excluded.
+ */
+const SAFE_EMAIL_URL_SCHEMES = new Set(['https:', 'http:', 'mailto:']);
+
+/**
+ * The site base URL used as the safe fallback for a rejected link.
+ *
+ * Reuses the same NEXT_PUBLIC_URL the templates already derive their links from,
+ * so a neutralized link degrades to the site home rather than a dead anchor. If
+ * NEXT_PUBLIC_URL is unset, falls back to `'#'` (a no-op anchor).
+ *
+ * @returns {string} the configured site base URL, or `'#'`.
+ */
+function siteBaseUrl() {
+    const base = process.env.NEXT_PUBLIC_URL;
+    return typeof base === 'string' && base ? base : '#';
+}
+
+/**
+ * Allowlist the scheme of a URL before it is interpolated into an email
+ * `href="..."` (defense-in-depth, CWE-79 / CWE-20, #218).
+ *
+ * Every current caller passes a trusted server-composed URL (NEXT_PUBLIC_URL-
+ * derived), which passes through unchanged. The guard exists for a future caller
+ * that might pass an untrusted URL: it neutralizes a `javascript:`/`data:`/
+ * `vbscript:` URI (script execution when the link is clicked) and any
+ * attribute-breakout attempt, returning the {@link siteBaseUrl} fallback instead.
+ *
+ * A value is returned unchanged only when ALL hold:
+ *   - it is a non-empty string that parses as an absolute WHATWG `URL`
+ *     (relative-with-no-base and malformed inputs are rejected),
+ *   - its scheme is in {@link SAFE_EMAIL_URL_SCHEMES}, and
+ *   - the raw string carries no attribute-breakout (`" ' < >`) or control
+ *     characters — so it is safe in the double-quoted attribute context and the
+ *     `URL` parser cannot have stripped an embedded newline out of a
+ *     `java\nvascript:` scheme.
+ * Anything else falls back to the site base URL. Fails closed.
+ *
+ * @param {*} url - the (possibly untrusted) URL to place in an href.
+ * @returns {string} the original URL if allowlisted, else the safe fallback.
+ */
+export function safeEmailUrl(url) {
+    if (typeof url !== 'string' || url === '') return siteBaseUrl();
+    // Reject attribute-breakout / control chars on the RAW input first: the URL
+    // parser strips tab/newline/leading-control chars, so a "clean" parse of a
+    // mangled string must not be trusted back into the attribute verbatim.
+    if (/[\x00-\x20<>\x22\x27`\x7f]/.test(url)) return siteBaseUrl();
+    let parsed;
+    try {
+        parsed = new URL(url);
+    } catch {
+        return siteBaseUrl();
+    }
+    if (!SAFE_EMAIL_URL_SCHEMES.has(parsed.protocol)) return siteBaseUrl();
+    return url;
+}
+
+/**
  * ✅ Send a verification email to the user
  * @param {string} email - The user's email address
  * @param {string} token - The verification token
@@ -59,7 +122,7 @@ export async function sendVerificationEmail(email, token) {
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #00ff00;">Thanks for joining the Lab Rat Army!</h2>
                 <p>Please verify your email address by clicking the link below:</p>
-                <a href="${verificationLink}" target="_blank" style="color: #00ff00; text-decoration: none; border: 1px solid #00ff00; padding: 10px 20px; border-radius: 8px;">Verify Email</a>
+                <a href="${safeEmailUrl(verificationLink)}" target="_blank" style="color: #00ff00; text-decoration: none; border: 1px solid #00ff00; padding: 10px 20px; border-radius: 8px;">Verify Email</a>
                 <p>If you did not sign up, you can safely ignore this message.</p>
             </div>
         `
@@ -96,7 +159,7 @@ export async function sendPasswordResetEmail(email, token) {
             <div style="font-family: 'Roboto Mono', monospace; background-color: #000000; color: #00ff00; padding: 20px; border-radius: 8px;">
                 <h2 style="color: #00ff00;">Password Reset Request</h2>
                 <p>Click the link below to reset your password. This link expires in 30 minutes and can be used once.</p>
-                <a href="${resetLink}" target="_blank" style="color: #00ff00; text-decoration: none; border: 1px solid #00ff00; padding: 10px 20px; border-radius: 8px;">Reset Password</a>
+                <a href="${safeEmailUrl(resetLink)}" target="_blank" style="color: #00ff00; text-decoration: none; border: 1px solid #00ff00; padding: 10px 20px; border-radius: 8px;">Reset Password</a>
                 <p>If you did not request a password reset, you can safely ignore this message.</p>
             </div>
         `
@@ -142,7 +205,7 @@ export async function sendBountyNotificationEmail(email, firstName, bounty) {
                     ${bounty.stakeValue > 0 ? `<p><strong>Stake:</strong> +${bounty.stakeValue}</p>` : ''}
                 </div>
 
-                <a href="${bountyLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">View Bounty</a>
+                <a href="${safeEmailUrl(bountyLink)}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">View Bounty</a>
                 
                 <p style="margin-top: 20px; font-size: 12px; color: #666;">
                     You are receiving this because you are an active member of The Lab.
@@ -203,7 +266,7 @@ export async function sendBountyClaimedEmail(email, creatorName, bounty, claimer
                     <h3 style="margin-top: 0; color: #fff;">${escapeHtml(bounty.title)}</h3>
                 </div>
 
-                <a href="${bountyLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">View Details</a>
+                <a href="${safeEmailUrl(bountyLink)}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">View Details</a>
             </div>
         `
     };
@@ -237,7 +300,7 @@ export async function sendBountySubmittedEmail(email, creatorName, bounty, submi
                     <p>Please review the submission and verify the work.</p>
                 </div>
 
-                <a href="${bountyLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">Review Submission</a>
+                <a href="${safeEmailUrl(bountyLink)}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">Review Submission</a>
             </div>
         `
     };
@@ -274,7 +337,7 @@ export async function sendBountyVerifiedEmail(email, assigneeName, bounty) {
                     ${bounty.stakeValue > 0 ? `<p><strong>Stake Earned:</strong> +${bounty.stakeValue}</p>` : ''}
                 </div>
 
-                <a href="${bountyLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">View Bounty</a>
+                <a href="${safeEmailUrl(bountyLink)}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">View Bounty</a>
             </div>
         `
     };
@@ -372,7 +435,7 @@ export async function sendStatusChangeEmail(email, firstName, newStatus) {
                 <p>Hey ${escapeHtml(firstName)},</p>
                 <p>${message}</p>
                 
-                <a href="${actionLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px; margin-top: 20px;">${actionText}</a>
+                <a href="${safeEmailUrl(actionLink)}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px; margin-top: 20px;">${actionText}</a>
             </div>
         `
     };
@@ -406,7 +469,7 @@ export async function sendProfileCompletionEmail(email, firstName, userID) {
                     <p><strong>Privacy Note:</strong> You can choose to keep your profile private if you prefer. Just go to your profile settings and toggle the visibility.</p>
                 </div>
 
-                <a href="${profileLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">Edit Profile</a>
+                <a href="${safeEmailUrl(profileLink)}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">Edit Profile</a>
             </div>
         `
     };
@@ -445,7 +508,7 @@ export async function sendNudgeEmail(email, firstName, step, message, actionLink
                 <p>Hey ${escapeHtml(firstName)},</p>
                 <p>${message}</p>
                 
-                <a href="${actionLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px; margin-top: 20px;">${actionText}</a>
+                <a href="${safeEmailUrl(actionLink)}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px; margin-top: 20px;">${actionText}</a>
             </div>
         `
     };
@@ -490,7 +553,7 @@ export async function sendAdminNotificationEmail(subject, message, actionLink, a
                 <p>${message}</p>
                 
                 ${actionLink ? `
-                <a href="${actionLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px; margin-top: 20px;">${actionText || 'View Details'}</a>
+                <a href="${safeEmailUrl(actionLink)}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px; margin-top: 20px;">${actionText || 'View Details'}</a>
                 ` : ''}
             </div>
         `
@@ -612,7 +675,7 @@ export async function sendGoogleRetirementEmail(email, firstName) {
                     Profile &rarr; Settings &rarr; Connections if you would rather sign in that way.</p>
                 </div>
 
-                <a href="${setPasswordLink}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">Set a password</a>
+                <a href="${safeEmailUrl(setPasswordLink)}" target="_blank" style="display: inline-block; background-color: #00ff00; color: #000000; text-decoration: none; font-weight: bold; padding: 12px 24px; border-radius: 4px;">Set a password</a>
 
                 <p style="margin-top: 20px;">Your account, membership, and history are unchanged —
                 only the way you sign in. If the reset does not work, just reply to this email and we
