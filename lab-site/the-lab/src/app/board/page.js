@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import QRCode from 'react-qr-code';
 
@@ -27,7 +27,6 @@ const LINKS = [
 ];
 
 const fmt = cents => `$${(cents / 100).toFixed(0)}`;
-const CYCLE_MS = 10000; // 10 seconds per panel
 
 // Public funding meter for the kiosk: recurring dues + donations, stacked, against the
 // monthly goal. Dues is the steady base the lab can count on; donations are what pushes past
@@ -101,43 +100,11 @@ function GoalMeter({ stats }) {
 }
 
 export default function BoardPage() {
-  const baseUrl    = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
-  const checkInUrl = `${baseUrl}/dashboard/checkin`;
-  const donateUrl  = `${baseUrl}/donate`;
+  const baseUrl   = process.env.NEXT_PUBLIC_URL || 'http://localhost:3000';
+  const donateUrl = `${baseUrl}/donate`;
 
-  const [panel, setPanel]           = useState(0); // 0 = check-in, 1 = donate
-  const [progress, setProgress]     = useState(0); // 0–100 sweep for the timer bar
-  const [stats, setStats]           = useState(null);
+  const [stats, setStats]               = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
-
-  const progressRef = useRef(null);
-  const cycleRef    = useRef(null);
-
-  const switchTo = (idx) => {
-    setPanel(idx);
-    setProgress(0);
-  };
-
-  // Auto-cycle + progress bar
-  useEffect(() => {
-    const TICK = 50; // ms
-    let elapsed = 0;
-
-    progressRef.current = setInterval(() => {
-      elapsed += TICK;
-      setProgress(Math.min(100, (elapsed / CYCLE_MS) * 100));
-    }, TICK);
-
-    cycleRef.current = setTimeout(() => {
-      setPanel(p => (p + 1) % 2);
-      setProgress(0);
-    }, CYCLE_MS);
-
-    return () => {
-      clearInterval(progressRef.current);
-      clearTimeout(cycleRef.current);
-    };
-  }, [panel]);
 
   // Load + refresh donation stats every 5 min
   useEffect(() => {
@@ -153,12 +120,7 @@ export default function BoardPage() {
     return () => clearInterval(id);
   }, []);
 
-  const PANELS = [
-    { key: 'check_in',       accent: 'var(--green)' },
-    { key: 'support_the_lab', accent: 'var(--amber)' },
-  ];
-
-  const accent = PANELS[panel].accent;
+  const accent = 'var(--amber)';
 
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh', padding: '48px 40px', display: 'flex', flexDirection: 'column', gap: 36 }}>
@@ -173,62 +135,16 @@ export default function BoardPage() {
         </h1>
       </div>
 
-      {/* ── Panel switcher ────────────────────────────────────────────── */}
-      <div style={{ border: `1px solid ${accent}`, background: 'var(--bg-card)', transition: 'border-color 0.4s' }}>
+      {/* ── Support the lab ───────────────────────────────────────────── */}
+      <div style={{ border: `1px solid ${accent}`, background: 'var(--bg-card)' }}>
 
-        {/* Tab row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: `1px solid ${accent}` }}>
-          {PANELS.map((p, i) => (
-            <button
-              key={p.key}
-              type="button"
-              onClick={() => switchTo(i)}
-              style={{
-                background: panel === i ? 'rgba(255,255,255,0.04)' : 'none',
-                border: 'none',
-                borderRight: i === 0 ? `1px solid ${accent}` : 'none',
-                color: panel === i ? p.accent : 'var(--text-dim)',
-                fontFamily: 'var(--mono)',
-                fontSize: 10,
-                letterSpacing: '0.14em',
-                padding: '10px 0',
-                cursor: 'pointer',
-                transition: 'color 0.3s, background 0.3s',
-              }}
-            >
-              {p.key.toUpperCase().replace('_', ' ')}
-            </button>
-          ))}
-        </div>
-
-        {/* Timer bar */}
-        <div style={{ height: 2, background: 'var(--bg)', position: 'relative' }}>
-          <div style={{
-            position: 'absolute', left: 0, top: 0, bottom: 0,
-            width: `${progress}%`,
-            background: accent,
-            transition: 'background 0.4s',
-          }} />
+        <div style={{ borderBottom: `1px solid ${accent}`, padding: '10px 0', textAlign: 'center', color: accent, fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.14em' }}>
+          SUPPORT THE LAB
         </div>
 
         {/* Panel content */}
         <div style={{ padding: '32px 28px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, minHeight: 280 }}>
 
-          {panel === 0 && (
-            <>
-              <div style={{ padding: 14, background: '#fff' }}>
-                <QRCode value={checkInUrl} size={160} level="M" />
-              </div>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--text-mid)', textAlign: 'center', lineHeight: 1.7 }}>
-                scan to check in<br />
-                <Link href="/dashboard/checkin" style={{ color: 'var(--text-dim)', fontSize: 10, textDecoration: 'none' }}>
-                  or tap here on mobile
-                </Link>
-              </div>
-            </>
-          )}
-
-          {panel === 1 && (
             <div style={{ width: '100%', display: 'flex', gap: 32, alignItems: 'flex-start' }}>
               {/* QR */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, flexShrink: 0 }}>
@@ -256,7 +172,6 @@ export default function BoardPage() {
                 )}
               </div>
             </div>
-          )}
 
         </div>
       </div>
