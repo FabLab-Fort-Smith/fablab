@@ -69,6 +69,18 @@ export function loadBrokerConfig() {
     throw new Error(`BROKER_LISTEN_PORT must be a valid port (got "${process.env.BROKER_LISTEN_PORT}")`);
   }
 
+  // Cloud-uplink trust anchor (Link-B), SEPARATE from the internal edge CA (see brokerTls.js). Pin the
+  // cloud CA/cert when BROKER_UPLINK_CA is set; otherwise undefined → verify against Node's public roots.
+  const uplinkCa = process.env.BROKER_UPLINK_CA ? readFileStrict("BROKER_UPLINK_CA") : undefined;
+  // Online (rung-1) grants are returned verbatim with NO signature backstop (#151) — Link-B TLS is their
+  // SOLE integrity/authenticity control. So production MUST pin the cloud CA (design intent: "never
+  // disable the pin"). Fail CLOSED at boot if a production broker is left unpinned.
+  if (process.env.NODE_ENV === "production" && !uplinkCa) {
+    throw new Error(
+      "BROKER_UPLINK_CA is required in production: pin the cloud CA (online grants have no signature backstop — Link-B TLS is their only integrity control)",
+    );
+  }
+
   const cfg = {
     tls: {
       cert: readFileStrict("BROKER_TLS_CERT"),
@@ -79,11 +91,7 @@ export function loadBrokerConfig() {
     },
     // uplink.ca: optional PIN for the cloud cert (BROKER_UPLINK_CA). Absent → verify against Node's
     // bundled public roots (the cloud is edge-terminated with a public/LE cert). Never the edge caRoot.
-    uplink: {
-      url,
-      secret: req("BROKER_UPLINK_SECRET"),
-      ca: process.env.BROKER_UPLINK_CA ? readFileStrict("BROKER_UPLINK_CA") : undefined,
-    },
+    uplink: { url, secret: req("BROKER_UPLINK_SECRET"), ca: uplinkCa },
     brokerIndexKey: base64Key("BROKER_INDEX_KEY"),
     allowlistVerifyKeyB64: req("DOOR_ALLOWLIST_VERIFY_KEY"),
     envelopeDir: req("BROKER_ENVELOPE_DIR"),

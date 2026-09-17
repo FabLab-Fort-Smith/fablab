@@ -10,6 +10,7 @@ let dir;
 const ENV_KEYS = [
   "BROKER_TLS_CERT", "BROKER_TLS_KEY", "BROKER_CA_ROOT", "BROKER_LISTEN_PORT", "BROKER_LISTEN_HOST",
   "CLOUD_UPLINK_URL", "BROKER_UPLINK_SECRET", "BROKER_INDEX_KEY", "DOOR_ALLOWLIST_VERIFY_KEY", "BROKER_ENVELOPE_DIR",
+  "BROKER_UPLINK_CA", "NODE_ENV",
 ];
 let saved;
 
@@ -27,6 +28,7 @@ beforeEach(() => {
   process.env.BROKER_CA_ROOT = ca;
   process.env.BROKER_LISTEN_PORT = "8443";
   delete process.env.BROKER_LISTEN_HOST;
+  delete process.env.BROKER_UPLINK_CA; // default: no cloud-CA pin unless a test sets it
   process.env.CLOUD_UPLINK_URL = "wss://cloud.example/broker";
   process.env.BROKER_UPLINK_SECRET = "uplink-secret";
   process.env.BROKER_INDEX_KEY = crypto.randomBytes(32).toString("base64");
@@ -49,6 +51,42 @@ test("loads a fully-provisioned config", () => {
   expect(cfg.brokerIndexKey.length).toBe(32);
   expect(cfg.envelopeDir).toBe(path.join(dir, "env"));
   expect(brokerConfigReady().ready).toBe(true);
+});
+
+test("uplink.ca: unset → undefined (verify against public roots), never the internal caRoot", () => {
+  const cfg = loadBrokerConfig();
+  expect(cfg.uplink.ca).toBeUndefined();
+  expect(cfg.tls.caRoot.toString()).toBe("CADATA"); // internal CA loaded only for Link-A
+});
+
+test("uplink.ca: BROKER_UPLINK_CA set → the cloud CA file bytes are loaded (pin)", () => {
+  const cloudCa = path.join(dir, "cloud-ca.pem");
+  fs.writeFileSync(cloudCa, "CLOUDCA");
+  process.env.BROKER_UPLINK_CA = cloudCa;
+  const cfg = loadBrokerConfig();
+  expect(cfg.uplink.ca.toString()).toBe("CLOUDCA");
+  expect(cfg.uplink.ca.toString()).not.toBe(cfg.tls.caRoot.toString()); // distinct from the edge CA
+});
+
+test("fail-closed: BROKER_UPLINK_CA set to a missing file throws", () => {
+  process.env.BROKER_UPLINK_CA = path.join(dir, "no-such-ca.pem");
+  expect(() => loadBrokerConfig()).toThrow(/BROKER_UPLINK_CA: cannot read file/);
+});
+
+test("fail-closed: production requires BROKER_UPLINK_CA (online grants have no signature backstop)", () => {
+  process.env.NODE_ENV = "production";
+  delete process.env.BROKER_UPLINK_CA;
+  expect(() => loadBrokerConfig()).toThrow(/BROKER_UPLINK_CA is required in production/);
+  expect(brokerConfigReady().ready).toBe(false);
+});
+
+test("production with BROKER_UPLINK_CA pinned loads", () => {
+  process.env.NODE_ENV = "production";
+  const cloudCa = path.join(dir, "cloud-ca.pem");
+  fs.writeFileSync(cloudCa, "CLOUDCA");
+  process.env.BROKER_UPLINK_CA = cloudCa;
+  const cfg = loadBrokerConfig();
+  expect(cfg.uplink.ca.toString()).toBe("CLOUDCA");
 });
 
 test("fail-closed: a missing required var throws a specific error", () => {

@@ -424,7 +424,10 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
    - **S2b-2 → folded into S2c** (transport needs live peers): the mTLS **Link-A** listener, the **Link-B**
      WSS uplink client, and the cloud-side envelope sender are built + integration-tested with the container.
    - **S2c-1 ✅** broker runtime (`broker-server.js`): mTLS Link-A listener (doorId from client-cert CN)
-     + Link-B WSS uplink client (cloud cert validated + pinned, bearer post-TLS) + bounded framing/replay.
+     + Link-B WSS uplink client (cloud cert validated against public roots by default, **pinned via
+     `BROKER_UPLINK_CA` — required in production**; bearer post-TLS) + bounded framing/replay. NOTE: the
+     cloud is edge-terminated with a PUBLIC (LE) cert, so Link-B must NOT be verified against the internal
+     edge CA (that never chains → `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`); the trust anchors are split.
    - **S2c-2 ✅** *cloud side* of Link-B (`vps/lib/brokerUplink.js` + `socket-server.js`): the broker's
      dial-out endpoint (`/broker`, path-routed off the device WS). Constant-time **bearer** → brokerId
      (deny-by-default), **authn-before-act**, **owned-door scope** (BOLA) on both `authz` and the envelope
@@ -461,8 +464,11 @@ SEC touch where it crosses a boundary; nothing device-facing lands before the si
      target `brokerIndexKey`) and pushes to the **cloud** socket-server, which **relays them down each
      broker's WSS uplink** (mirrors the existing `pushAllowlist`); (c) **Link-B is `wss://` with
      verified-TLS-server-auth + a broker bearer** (`CLOUD_UPLINK_URL` + `BROKER_UPLINK_SECRET`) — this
-     is NOT mTLS. `brokerConfig` enforces only the `wss://` *scheme*; **S2c must enforce cloud cert
-     validation** (`rejectUnauthorized: true` + pin the cloud CA — never disable it), send the bearer
+     is NOT mTLS. `brokerConfig` enforces the `wss://` *scheme*; Link-B enforces cloud cert
+     validation (`rejectUnauthorized: true`, hostname/SNI) verified against **public roots by default**
+     and **pinned via `BROKER_UPLINK_CA` (mandatory in production — the cloud is edge-terminated with a
+     public/LE cert, so the trust anchor is public, NOT the internal edge CA; pinning the internal CA was
+     the original bug)**, send the bearer
      only post-TLS, and compare it constant-time. That server-auth is the load-bearing part — an online
      grant has no signature backstop, so a MITM on an unvalidated uplink could forge grants (the
      dominant rung-1 control, #151). Upgrading Link-B to full mTLS (reuse the broker's cert) is a
