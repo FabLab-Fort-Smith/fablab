@@ -12,6 +12,15 @@
 # installs from piwheels the wheels differ → regenerate the pin for that exact platform + Python:
 #   pip download -r requirements.txt --no-deps -d /tmp/wh && pip hash /tmp/wh/*   (or pip-compile --generate-hashes)
 
+# VEX — CVE-2024-12797 / GHSA-79v4-65xg-pq4g (cryptography 42.0.0–44.0.0; fixed 44.0.1): status =
+#   **NOT AFFECTED**. That CVE is an OpenSSL raw-public-key (RPK) TLS-handshake abort in the wheels'
+#   bundled OpenSSL. This edge does ALL TLS via the Python stdlib `ssl` module (system OpenSSL), and uses
+#   pyca/cryptography ONLY for Ed25519 signature verification + HMAC blind-index derivation — no TLS, no
+#   RPK — so the vulnerable code path is unreachable. Kept at 43.0.3 deliberately: 44.x complicates the
+#   armv6/armv7 piwheels build for the Pi Zero W target (the pin is regenerated per-platform at device
+#   provisioning anyway — see below), and bumping buys no security here.
+#   Time-boxed waiver: re-evaluate by 2026-12-17 (or the next dependency-patch cycle) — bump to
+#   cryptography>=44.0.1 when the armv6 wheel is available/built. Owner: door-access. @rules/workflow-cve-management.
 cryptography==43.0.3 \
     --hash=sha256:315b9001266a492a6ff443b61238f956b214dbec9910a081ba5b6646a055a805 \
     --hash=sha256:f7b178f11ed3664fd0e995a47ed2b5ff0a12d893e41dd0494f406d1cf555cab7 \

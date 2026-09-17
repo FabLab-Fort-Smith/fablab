@@ -45,10 +45,18 @@ def test_now_provider_never_mode_is_untrusted():
     assert ms == 1_700_000_000 and ok is False
 
 
-def test_now_provider_assume_mode_is_trusted():
+def test_now_provider_assume_mode_requires_env_flag(monkeypatch):
+    # I1: rtc.trust="assume" is a fail-OPEN escape hatch — refused (fail-secure to never) unless the
+    # deliberate env flag is ALSO set, so a stray config can't disable the F4 clock-floor on a real door.
+    monkeypatch.delenv("DOOR_ALLOW_ASSUME_CLOCK", raising=False)
     np = make_now_provider({"rtc": {"trust": "assume"}}, clock=lambda: 1_700_000.0)
     _, ok = np()
-    assert ok is True
+    assert ok is False  # refused without the flag → untrusted clock (deny on rung-3)
+
+    monkeypatch.setenv("DOOR_ALLOW_ASSUME_CLOCK", "1")
+    np2 = make_now_provider({"rtc": {"trust": "assume"}}, clock=lambda: 1_700_000.0)
+    _, ok2 = np2()
+    assert ok2 is True  # honored only with the explicit bench/dev flag
 
 
 def test_now_provider_systemd_reflects_sync_marker():

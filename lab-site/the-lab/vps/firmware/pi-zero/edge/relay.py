@@ -68,7 +68,13 @@ class GpioRelay(Relay):
         from gpiozero import OutputDevice
 
         pin = cfg["strike_pin"]
-        self._hold_s = cfg.get("hold_s", 3)
+        # Bound the energize time (L2): an over-long hold could leave the strike open past the systemd
+        # WatchdogSec/TimeoutStopSec SIGKILL, defeating fail-secure. Fail LOUD on a misconfig rather than
+        # silently energizing a real strike for minutes.
+        hold = cfg.get("hold_s", 3)
+        if not isinstance(hold, (int, float)) or isinstance(hold, bool) or hold <= 0 or hold > 10:
+            raise ValueError("relay hold_s must be a number in (0, 10] seconds (got %r)" % (hold,))
+        self._hold_s = hold
         # active_high maps our logical energize→physical level. initial_value=False = de-energized at rest.
         self._dev = OutputDevice(pin, active_high=cfg.get("active_high", True), initial_value=False)
         self._lock = threading.Lock()

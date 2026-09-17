@@ -180,6 +180,9 @@ class BrokerUplink:
         if self._sock is None:
             return False
         try:
+            # Deliberate send budget (L1): don't inherit whatever timeout the previous _recv_line left on
+            # the socket (which can shrink toward zero after a slow read). Still finite → fail-secure.
+            self._sock.settimeout(self._read_timeout)
             self._sock.sendall(line.encode("utf-8"))
             return True
         except (OSError, ssl.SSLError):

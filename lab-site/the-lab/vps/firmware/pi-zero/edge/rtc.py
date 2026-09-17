@@ -51,6 +51,13 @@ def make_now_provider(cfg, *, clock=time.time, synced_check=systemd_synced, rtc_
     """
     rtc_cfg = cfg.get("rtc", {}) if isinstance(cfg, dict) else {}
     mode = rtc_cfg.get("trust", "auto")
+    # `assume` unconditionally trusts the clock (bypasses the F4 clock-floor gate = a fail-OPEN escape
+    # hatch). Refuse it unless a deliberate env flag is ALSO set, so a stray config can't disable the
+    # gate on a real door — fail secure to `never` (I1).
+    if mode == "assume" and os.environ.get("DOOR_ALLOW_ASSUME_CLOCK") != "1":
+        log("rtc.assume-refused",
+            {"warning": "rtc.trust='assume' ignored without DOOR_ALLOW_ASSUME_CLOCK=1 — failing secure (never)"})
+        mode = "never"
     if mode == "assume":
         log("rtc.assume-synced", {"warning": "clock trusted unconditionally — BENCH/DEV ONLY"})
 
