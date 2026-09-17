@@ -1,13 +1,58 @@
 {
-  "_comment": "Copy to config.json on the Pi Zero (git-ignored). No secrets live here — the Zero never authenticates to the VPS; the device secret is on the Pico only.",
-  "uart_port": "/dev/serial0",
-  "uart_baud": 115200,
+  "_comment": "Copy to config.json on the Pi Zero edge node (git-ignored). NO secrets live in this file — the sensitive material (edge cert/key, edgeIndexKey, audit key) is referenced by PATH and provisioned separately (vps/pki/door-ca.sh issue-edge + edge.provision_audit_key). This is the WiFi/broker model (door-controller-wifi.md): the edge dials the on-site broker over mTLS; the old Pico-UART relay model is retired.",
+  "door_id": "front",
+  "edge_id": "edge-front-01",
+
+  "broker": {
+    "_note": "the on-site broker VIP the edge dials over mTLS (Link A). host is also the TLS server_hostname, so the broker's IP-SAN cert verifies against the internal CA.",
+    "host": "10.0.10.5",
+    "port": 8443,
+    "connect_timeout_ms": 5000,
+    "read_timeout_ms": 3000
+  },
+
+  "paths": {
+    "_note": "cert/key/ca/edge_index_key come from `door-ca.sh issue-edge`; verify_key is the PUBLIC DOOR_ALLOWLIST_VERIFY_KEY (base64 SPKI); audit_key from `edge.provision_audit_key`. edge.key + edge.index.key + audit_key are 0600. envelope_store/audit_log/clock_floor are runtime state (writable).",
+    "cert": "/etc/dooraccess/edge.crt",
+    "key": "/etc/dooraccess/edge.key",
+    "ca": "/etc/dooraccess/ca.crt",
+    "edge_index_key": "/etc/dooraccess/edge.index.key",
+    "verify_key": "/etc/dooraccess/allowlist_verify_key.b64",
+    "audit_key": "/var/lib/dooraccess/audit_key.b64",
+    "envelope_store": "/var/lib/dooraccess/envelopes",
+    "audit_log": "/var/lib/dooraccess/audit.jsonl",
+    "clock_floor": "/var/lib/dooraccess/clock_floor",
+    "_import_envelopes_note": "optional: a drop dir of signed per-door envelopes to seed the rung-3 cache at boot (each is signature+anti-rollback verified on import). Omit in normal operation (the broker pushes envelopes).",
+    "import_envelopes": null
+  },
+
+  "verify_key_b64_note": "alternative to paths.verify_key: paste the base64 SPKI DOOR_ALLOWLIST_VERIFY_KEY inline here as \"verify_key_b64\": \"...\"",
+
+  "flush_interval_ms": 60000,
+  "poll_interval_ms": 200,
   "debounce_s": 3,
+  "ota_poll_interval_ms": 3600000,
+
+  "rtc": {
+    "_note": "clock-trust policy for the F4 fail-secure gate (offline decisions LOCK on an untrusted clock). auto=trust if NTP-synced OR a hardware RTC node is present; systemd=NTP only; hwrtc=RTC node only; never=always untrusted (safest); assume=always trusted (BENCH/DEV ONLY).",
+    "trust": "auto"
+  },
+
   "nfc": {
     "driver": "pn532",
     "read_timeout": 0.5,
     "_mock_note": "set driver to 'mock' and add \"codes\": [\"AABBCCDD\"] to test without hardware"
   },
+
+  "relay": {
+    "_note": "the door strike on the edge (fail-secure: de-energized at rest, pulses only on a grant). active_high maps energize→physical level; some relay boards/strikes are active-low.",
+    "driver": "gpio",
+    "strike_pin": 23,
+    "hold_s": 3,
+    "active_high": true,
+    "_console_note": "set driver to 'console' (bench) or 'mock' (tests) to run without GPIO"
+  },
+
   "ui": {
     "driver": "gpio",
     "green_pin": 17,

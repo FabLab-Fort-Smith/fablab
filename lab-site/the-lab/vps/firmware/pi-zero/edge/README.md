@@ -48,14 +48,43 @@ The security-relevant, filesystem-backed pieces the S4b-2 runtime wires (still h
 - `protocol.py` — client Link-A framing (`build_scan_msg` with `requestId`+`nonce` for the broker replay
   guard; `parse_result` deny-by-default).
 
-**S4b-3 (next):** the concrete hardware/transport adapters + entry point — NFC reader, strike-relay GPIO,
-the mTLS socket `uplink` (using `protocol.py` framing) + supervisor loop (reconnect/backoff, heartbeat,
-`WatchdogSec`, OTA poll), `run_edge.py` main (wires real adapters + cores, generates the `bootEpoch`,
-pins `cryptography` exact+hash), audit compaction/rotation + append-failure policy, and the systemd unit.
-Bench-tested on a real Pi.
+## Adapters + entry point (S4b-3)
+The concrete hardware/transport adapters + the runnable entry point that wire the cores above into a door:
+- `uplink_client.py` — `BrokerUplink`: the Link-A **mTLS client** (pure stdlib `ssl`+`socket`). Lazy
+  connect + reconnect on a single persistent socket; verifies the broker server cert against the **pinned
+  internal CA** (`server_hostname=<broker ip>` matches the broker's IP-SAN cert), presents the edge client
+  cert, TLS 1.2+. `authorize()` sends a `scan` (`protocol.build_scan_msg`), correlates the `result` by
+  `requestId`, and is **deny-by-default** (`parse_result`); **any error/timeout/desync → None** (unreachable
+  → runtime rung-3 fallback), never a grant. `send_audit()` returns the raw `audit_ack` line. The scanned
+  `code` only ever rides the encrypted frame — never logged/stored.
+- `../nfc.py` — reused: `make_reader` (PN532 / mock). `relay.py` — `make_relay`: `GpioRelay` (strike pin,
+  **de-energized at rest + on close** = fail-secure; lazy `gpiozero`, fail-loud if the lib is missing) +
+  `ConsoleRelay`/`MockRelay` for bench/tests. `../ui.py` — reused for LED/buzzer feedback (wired in
+  `run_edge`). `rtc.py` — `make_now_provider` → `(system_ms, rtc_ok)`; conservative, injectable clock-trust
+  (NTP-sync marker and/or hardware-RTC node; unknown/absent → untrusted → offline **locks**, F4).
+- `../run_edge.py` — the main entry point: fail-loud `config.json` load, `compose()` builds the cores +
+  adapters + `EdgeRuntime`, generates a per-boot `bootEpoch`, and `run_loop()` drives the supervisor
+  (`supervisor.plan_tick` + `next_backoff_ms`): NFC poll → `handle_scan` (broker-first, rung-3 offline
+  fallback, never fail open), capped-backoff reconnect, timed `flush_audit`, an OTA-poll **stub** (no-op,
+  OTA is its own slice), graceful SIGTERM teardown (de-energize strike + close socket) and a **systemd
+  watchdog** (`sd_notify WATCHDOG=1`, inline — no dependency).
+- `../systemd/dooraccess-edge.service` (+ `systemd/README.md`) — `Type=notify`, `WatchdogSec`, restart,
+  non-root `dooraccess` user, sandboxing (`ProtectSystem=strict`, `ReadWritePaths=/var/lib/dooraccess`).
+- `../requirements.txt` — `cryptography` (+ `cffi`/`pycparser` closure) **exact-pinned with sha256 hashes**
+  for `pip install --require-hashes`.
+
+**Bench (hardware) remains:** run one real edge node end-to-end (PN532 + strike relay + a live broker over
+mTLS), the RTC HAT, and OTA — bench-tested on a Pi before rollout.
 
 ## Tests
-`edge/tests/test_edge_core.py` (pytest): cross-language parity against **JS golden vectors**
-(`goldens.json`, produced by the real cloud JS) for canonical/verify/credHash/derive, plus the full
-`decide_offline` grant/deny matrix. Run: `pip install -r edge/tests/requirements-dev.txt && PYTHONPATH=.
-python -m pytest edge/tests -q` (from `vps/firmware/pi-zero`). Gated in CI (the `edge-firmware` job).
+pytest, hardware-free + deterministic. Run from `vps/firmware/pi-zero`:
+`pip install -r edge/tests/requirements-dev.txt && PYTHONPATH=. python -m pytest edge/tests -q`.
+- `test_edge_core.py` — S4a cross-language parity vs **JS golden vectors** (`goldens.json`) +
+  `decide_offline` matrix. `test_edge_composition.py`/`test_edge_runtime.py`/`test_edge_supervisor.py` —
+  the S4b-a/S4b-2 runtime + scheduling primitives.
+- **S4b-3:** `test_edge_uplink.py` — `BrokerUplink` against a throwaway in-process **mTLS server**
+  (openssl-minted certs; self-skips if openssl is absent): grant on matching `requestId`, `None` on
+  mismatch/malformed/timeout, a rogue (non-CA) server cert rejected → never a grant, and the code never
+  logged. `test_edge_relay_rtc.py` — relay factory/fail-secure + the clock-trust policy.
+  `test_edge_run_edge.py` — `run_edge` wiring: fail-loud config, online grant → `relay.pulse()` + no-PII
+  audit, broker-unreachable → rung-3 offline decision from the store.
