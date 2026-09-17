@@ -60,7 +60,8 @@ check "edge cert has clientAuth EKU"     "openssl x509 -in '$edg/edge.crt' -noou
 check "edge.key is 0600"                 "[ \"\$(stat -c %a '$edg/edge.key')\" = 600 ]"
 check "edge index key matches golden"    "[ \"\$(cat '$edg/edge.index.key')\" = '$GOLDEN_EDGE' ]"
 if command -v jq >/dev/null 2>&1; then
-  check "registry maps door front → edge/broker" "[ \"\$(jq -r '.front.edgeDeviceId' '$ca/registry.json')\" = edge-1 ] && [ \"\$(jq -r '.front.brokerId' '$ca/registry.json')\" = broker-1 ]"
+  # broker-server.js consumes registry[edgeCN] = doorId — assert that exact shape (not the inverse).
+  check "registry maps edgeCN edge-1 → door front" "[ \"\$(jq -r '.\"edge-1\"' '$ca/registry.json')\" = front ]"
 fi
 
 echo "index key derivation refuses without the master"

@@ -110,13 +110,16 @@ cmd_issue_edge() {
   rm -f "$ext" "$out/edge.csr"
   cp "$ca_dir/ca.crt" "$out/ca.crt"
   _derive_index_key "$edge_id" "$out/edge.index.key"   # edgeIndexKey (base64)
-  # Append to the fleet registry: doorId → {edgeDeviceId, brokerId}. jq is REQUIRED (F3) so the
-  # mapping is always written — a silent skip would leave the edge unauthorized with no signal.
+  # Append to the broker registry as **edgeCN → doorId** — the exact shape broker-server.js consumes
+  # (`registry[edgeId]` where edgeId is the client-cert CN; docker-compose.broker.yml: "edgeCN -> doorId").
+  # Writing the inverse (doorId → {edgeDeviceId,brokerId}) leaves `registry[CN]` undefined → the broker
+  # can't resolve a door → the edge is silently unauthorized (DOOR_NOT_OWNED / bad-request). brokerId isn't
+  # needed here (the broker IS its own id). jq is REQUIRED (F3) so the mapping is always written.
   local reg="$ca_dir/registry.json"
   [ -f "$reg" ] || echo '{}' > "$reg"
   local tmp; tmp="$(mktemp)"
-  jq --arg d "$door_id" --arg e "$edge_id" --arg b "$broker_id" \
-    '.[$d] = {edgeDeviceId:$e, brokerId:$b}' "$reg" > "$tmp" && mv "$tmp" "$reg"
+  jq --arg d "$door_id" --arg e "$edge_id" \
+    '.[$e] = $d' "$reg" > "$tmp" && mv "$tmp" "$reg"
   echo "issued edge '$edge_id' for door '$door_id' (broker '$broker_id') → $out"
 }
 
