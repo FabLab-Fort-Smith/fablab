@@ -32,12 +32,26 @@ test("edgeListenerTlsOptions demands + verifies a client cert (mTLS)", () => {
   expect(o.minVersion).toBe("TLSv1.2");
 });
 
-test("uplinkTlsOptions verifies + pins the cloud cert (never disabled) and sets SNI", () => {
+test("uplinkTlsOptions verifies the cloud cert (never disabled) + sets SNI; default trusts public roots", () => {
   const o = uplinkTlsOptions(fakeCfg());
   expect(o.rejectUnauthorized).toBe(true); // the load-bearing rung-1 control (#151)
-  expect(o.ca).toBeDefined();
   expect(o.servername).toBe("cloud.example");
   expect(o.minVersion).toBe("TLSv1.2");
+  expect(o.cert).toBeDefined(); // still presents the broker cert (mTLS where the cloud asks)
+  // No pin configured → `ca` omitted so Node verifies against its bundled PUBLIC roots (the cloud is
+  // edge-terminated with a public/LE cert). It must NOT be the internal edge caRoot (that never verified
+  // an LE cert → UNABLE_TO_GET_ISSUER_CERT_LOCALLY, and widening caRoot would break Link-A mTLS).
+  expect(o.ca).toBeUndefined();
+});
+
+test("uplinkTlsOptions PINS the cloud CA when BROKER_UPLINK_CA is provided (uplink.ca)", () => {
+  const cfg = fakeCfg();
+  cfg.uplink.ca = Buffer.from("PINNED-CLOUD-CA");
+  const o = uplinkTlsOptions(cfg);
+  expect(o.ca).toBe(cfg.uplink.ca);       // pinned to the configured cloud CA/cert
+  expect(o.ca).not.toBe(cfg.tls.caRoot);  // never the internal edge CA
+  expect(o.rejectUnauthorized).toBe(true);
+  expect(o.servername).toBe("cloud.example");
 });
 
 // --- real in-process mTLS handshake -------------------------------------------------------------

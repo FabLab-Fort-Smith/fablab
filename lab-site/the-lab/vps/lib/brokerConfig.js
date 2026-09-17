@@ -7,7 +7,10 @@
 // Env:
 //   Link A (edges → broker, mTLS):   BROKER_TLS_CERT, BROKER_TLS_KEY (broker server cert/key),
 //                                    BROKER_CA_ROOT (verify edge client certs), BROKER_LISTEN_PORT
-//   Link B (broker → cloud, WSS):    CLOUD_UPLINK_URL (wss:// only), BROKER_UPLINK_SECRET (service cred)
+//   Link B (broker → cloud, WSS):    CLOUD_UPLINK_URL (wss:// only), BROKER_UPLINK_SECRET (service cred),
+//                                    BROKER_UPLINK_CA (optional — PIN the cloud CA/cert; default = Node's
+//                                    bundled public roots, since the cloud is edge-terminated with a
+//                                    public/LE cert. NOT the internal edge CA — see brokerTls.js.)
 //   Crypto:                          BROKER_INDEX_KEY (base64 32B), DOOR_ALLOWLIST_VERIFY_KEY (base64 spki)
 //   Store:                           BROKER_ENVELOPE_DIR
 //   Revocation (optional):           BROKER_EDGE_DENYLIST (file of revoked edge cert CNs; F7)
@@ -66,6 +69,18 @@ export function loadBrokerConfig() {
     throw new Error(`BROKER_LISTEN_PORT must be a valid port (got "${process.env.BROKER_LISTEN_PORT}")`);
   }
 
+  // Cloud-uplink trust anchor (Link-B), SEPARATE from the internal edge CA (see brokerTls.js). Pin the
+  // cloud CA/cert when BROKER_UPLINK_CA is set; otherwise undefined → verify against Node's public roots.
+  const uplinkCa = process.env.BROKER_UPLINK_CA ? readFileStrict("BROKER_UPLINK_CA") : undefined;
+  // Online (rung-1) grants are returned verbatim with NO signature backstop (#151) — Link-B TLS is their
+  // SOLE integrity/authenticity control. So production MUST pin the cloud CA (design intent: "never
+  // disable the pin"). Fail CLOSED at boot if a production broker is left unpinned.
+  if (process.env.NODE_ENV === "production" && !uplinkCa) {
+    throw new Error(
+      "BROKER_UPLINK_CA is required in production: pin the cloud CA (online grants have no signature backstop — Link-B TLS is their only integrity control)",
+    );
+  }
+
   const cfg = {
     tls: {
       cert: readFileStrict("BROKER_TLS_CERT"),
@@ -74,7 +89,9 @@ export function loadBrokerConfig() {
       listenPort,
       listenHost: process.env.BROKER_LISTEN_HOST || "0.0.0.0",
     },
-    uplink: { url, secret: req("BROKER_UPLINK_SECRET") },
+    // uplink.ca: optional PIN for the cloud cert (BROKER_UPLINK_CA). Absent → verify against Node's
+    // bundled public roots (the cloud is edge-terminated with a public/LE cert). Never the edge caRoot.
+    uplink: { url, secret: req("BROKER_UPLINK_SECRET"), ca: uplinkCa },
     brokerIndexKey: base64Key("BROKER_INDEX_KEY"),
     allowlistVerifyKeyB64: req("DOOR_ALLOWLIST_VERIFY_KEY"),
     envelopeDir: req("BROKER_ENVELOPE_DIR"),

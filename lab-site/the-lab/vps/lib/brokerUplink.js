@@ -1,7 +1,9 @@
 // Cloud side of Link-B (S2c-2): the pure, testable core the socket-server wires to accept a broker's
 // dial-out WSS uplink. The broker authenticates with a bearer (constant-time), then proxies online
 // scans (`authz`) and receives per-door envelope pushes. Design §13 S2c decision (c): Link-B is
-// verified-TLS-server-auth + a broker bearer (NOT mTLS) — the broker pins the cloud cert on its side.
+// verified-TLS-server-auth + a broker bearer (NOT mTLS). The cloud is edge-terminated with a PUBLIC
+// (LE) cert, so the broker verifies it against public roots by default and PINS it via BROKER_UPLINK_CA
+// (required in production) — see brokerTls.js/brokerConfig.js. It never trusts the internal edge CA here.
 //
 // Security posture (master §2, std-owasp-api):
 //   - Deny-by-default: an unknown/mismatched bearer authenticates to NO broker.
