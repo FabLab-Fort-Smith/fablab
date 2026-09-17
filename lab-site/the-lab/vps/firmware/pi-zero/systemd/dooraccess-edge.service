@@ -1,0 +1,56 @@
+[Unit]
+Description=FabLab door-access edge node (NFC reader + strike relay + mTLS uplink)
+Documentation=https://github.com/FabLab-Fort-Smith/The-Lab/blob/main/lab-site/the-lab/docs/architecture/door-controller-wifi.md
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+# Type=notify + WatchdogSec: run_edge.py sends sd_notify READY=1 at startup and WATCHDOG=1 each loop
+# tick. If a tick stalls past WatchdogSec, systemd kills + restarts the unit (a hung door is restarted,
+# never left silently dead). WatchdogSec must comfortably exceed poll_interval_ms (default 200ms) and any
+# relay hold (relay.hold_s, seconds) so a normal strike pulse never trips it — 30s is generous.
+Type=notify
+WatchdogSec=30
+Restart=always
+RestartSec=3
+
+# --- least privilege ---------------------------------------------------------------------------------
+# Prefer a dedicated non-root 'dooraccess' user. GPIO/serial access on Raspberry Pi OS is granted by
+# group membership, NOT root: add the user to the 'gpio' group (relay + gpiozero) and 'dialout' (PN532
+# over UART) or 'i2c'/'spi' (PN532 over I2C/SPI). Create once:
+#   sudo useradd --system --home /var/lib/dooraccess --shell /usr/sbin/nologin dooraccess
+#   sudo usermod -aG gpio,i2c,spi,dialout dooraccess
+#   sudo install -d -o dooraccess -g dooraccess -m 0750 /var/lib/dooraccess
+User=dooraccess
+Group=dooraccess
+SupplementaryGroups=gpio i2c spi dialout
+
+WorkingDirectory=/opt/dooraccess/pi-zero
+Environment=EDGE_CONFIG=/etc/dooraccess/config.json
+ExecStart=/usr/bin/python3 /opt/dooraccess/pi-zero/run_edge.py
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# --- sandboxing (systemd hardening) ------------------------------------------------------------------
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+# The only writable path: the runtime state (envelope cache, audit buffer + ack cursor, clock floor).
+# TLS/keys under /etc/dooraccess and code under /opt stay read-only (ProtectSystem=strict).
+ReadWritePaths=/var/lib/dooraccess
+# Device access for the reader/relay (needed because DevicePolicy tightens the default cgroup device ACL).
+DeviceAllow=/dev/gpiomem rw
+DeviceAllow=char-ttyAMA0 rw
+DeviceAllow=char-i2c rw
+DeviceAllow=char-spidev rw
+
+[Install]
+WantedBy=multi-user.target

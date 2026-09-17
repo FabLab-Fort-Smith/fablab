@@ -1,8 +1,41 @@
-# Pi Zero door application deps. Install on the device: pip install -r requirements.txt
-# Pin exact versions when deploying (supply chain — CLAUDE §12); ranges shown for the reference impl.
-cryptography>=43,<44      # edge offline-decision core (Ed25519 verify + HKDF + HMAC) — S4a
-pyserial>=3.5,<4          # UART link to the Pico
-# NFC (PN532 over I2C) — only needed when nfc.driver = "pn532":
-adafruit-circuitpython-pn532>=2.0,<3
-# GPIO LED/buzzer UI — only needed when ui.driver = "gpio":
-gpiozero>=2.0,<3
+# Pi Zero W edge-node runtime deps. Install on the device with hash verification (supply chain —
+# @rules/std-supplychain):  pip install --require-hashes -r requirements.txt
+#
+# `cryptography` is the one security-critical runtime dependency (the edge VERIFIES Ed25519 envelope +
+# audit signatures and derives HMAC blind indexes — a compromised build here forges door grants), so it and
+# its transitive closure (cffi, pycparser) are EXACT-pinned and hash-verified. --require-hashes demands the
+# WHOLE closure be pinned, so all three are listed. The NFC/GPIO libs are lazy-imported by the driver you
+# select in config.json → optional, listed as comments below; install them separately (also hash-pinned).
+#
+# Hashes are the authoritative PyPI sha256 for the sdist + the abi3/cpXX wheels covering dev/CI (x86_64) and
+# a 64-bit Raspberry Pi OS (aarch64), glibc + musl / cp311 + cp313. On a 32-bit (armv6/armv7) Pi OS that
+# installs from piwheels the wheels differ → regenerate the pin for that exact platform + Python:
+#   pip download -r requirements.txt --no-deps -d /tmp/wh && pip hash /tmp/wh/*   (or pip-compile --generate-hashes)
+
+cryptography==43.0.3 \
+    --hash=sha256:315b9001266a492a6ff443b61238f956b214dbec9910a081ba5b6646a055a805 \
+    --hash=sha256:f7b178f11ed3664fd0e995a47ed2b5ff0a12d893e41dd0494f406d1cf555cab7 \
+    --hash=sha256:c2e6fc39c4ab499049df3bdf567f768a723a5e8464816e8f009f121a5a9f4405 \
+    --hash=sha256:e1be4655c7ef6e1bbe6b5d0403526601323420bcf414598955968c9ef3eb7d16 \
+    --hash=sha256:df6b6c6d742395dd77a23ea3728ab62f98379eff8fb61be2744d4679ab678f73
+
+cffi==2.1.1 \
+    --hash=sha256:dd31f52ea1086513bb9df30f8fcee9b8918323ae067a3d5b78bc826a000712be \
+    --hash=sha256:a931079504ecc49efed7744c476a5c343a92fabf66dec2db95edb1b2fdc770e2 \
+    --hash=sha256:f16c709686a78c727bbbf059f92b0bf41c6fc60deec706d2dc19f529175a6125 \
+    --hash=sha256:34e261f78cb6ceaaa36f42f2613f4380d94d9c759a9c73c769ee6e0247364632 \
+    --hash=sha256:3311ed60d36f83378794e1009ac6258bafbf81f7888b4caa7b35a521e3f95813
+
+pycparser==3.0 \
+    --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992 \
+    --hash=sha256:600f49d217304a5902ac3c37e1281c9fe94e4d0489de643a9504c5cdfdfc6b29
+
+# --- optional hardware drivers (lazy-imported per config.json; not needed on a dev/CI box) ----------
+# NFC (PN532 over I2C) — only when nfc.driver = "pn532" (hash-pin on the device before install):
+#   adafruit-circuitpython-pn532==2.0.1
+# GPIO strike relay + LED/buzzer UI — only when relay.driver = "gpio" / ui.driver = "gpio":
+#   gpiozero==2.0.1
+#   RPi.GPIO==0.7.1        # gpiozero's default pin factory on Raspberry Pi OS
+#
+# The mTLS uplink, JSON framing, and audit chaining use only the Python standard library (ssl, socket,
+# hashlib, hmac, json) — no extra dependency.

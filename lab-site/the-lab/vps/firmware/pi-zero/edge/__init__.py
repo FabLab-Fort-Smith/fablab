@@ -11,9 +11,12 @@ from .crypto import (cred_hash, derive_index_key, generate_audit_keypair, sign_a
                      verify_envelope)
 from .decide import REASON, decide_offline
 from .protocol import build_audit_msg, build_scan_msg, parse_audit_ack, parse_result
+from .relay import ConsoleRelay, GpioRelay, MockRelay, Relay, make_relay
+from .rtc import make_now_provider
 from .runtime import EdgeRuntime, new_boot_epoch
 from .supervisor import due_for_flush, next_backoff_ms, plan_tick
 from .store import EnvelopeStore
+from .uplink_client import BrokerUplink
 from .windows import in_window
 
 __all__ = [
@@ -38,4 +41,11 @@ __all__ = [
     "next_backoff_ms",
     "due_for_flush",
     "plan_tick",
+    "Relay",
+    "GpioRelay",
+    "ConsoleRelay",
+    "MockRelay",
+    "make_relay",
+    "make_now_provider",
+    "BrokerUplink",
 ]
