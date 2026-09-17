@@ -7,7 +7,10 @@
 // Env:
 //   Link A (edges → broker, mTLS):   BROKER_TLS_CERT, BROKER_TLS_KEY (broker server cert/key),
 //                                    BROKER_CA_ROOT (verify edge client certs), BROKER_LISTEN_PORT
-//   Link B (broker → cloud, WSS):    CLOUD_UPLINK_URL (wss:// only), BROKER_UPLINK_SECRET (service cred)
+//   Link B (broker → cloud, WSS):    CLOUD_UPLINK_URL (wss:// only), BROKER_UPLINK_SECRET (service cred),
+//                                    BROKER_UPLINK_CA (optional — PIN the cloud CA/cert; default = Node's
+//                                    bundled public roots, since the cloud is edge-terminated with a
+//                                    public/LE cert. NOT the internal edge CA — see brokerTls.js.)
 //   Crypto:                          BROKER_INDEX_KEY (base64 32B), DOOR_ALLOWLIST_VERIFY_KEY (base64 spki)
 //   Store:                           BROKER_ENVELOPE_DIR
 //   Revocation (optional):           BROKER_EDGE_DENYLIST (file of revoked edge cert CNs; F7)
@@ -74,7 +77,13 @@ export function loadBrokerConfig() {
       listenPort,
       listenHost: process.env.BROKER_LISTEN_HOST || "0.0.0.0",
     },
-    uplink: { url, secret: req("BROKER_UPLINK_SECRET") },
+    // uplink.ca: optional PIN for the cloud cert (BROKER_UPLINK_CA). Absent → verify against Node's
+    // bundled public roots (the cloud is edge-terminated with a public/LE cert). Never the edge caRoot.
+    uplink: {
+      url,
+      secret: req("BROKER_UPLINK_SECRET"),
+      ca: process.env.BROKER_UPLINK_CA ? readFileStrict("BROKER_UPLINK_CA") : undefined,
+    },
     brokerIndexKey: base64Key("BROKER_INDEX_KEY"),
     allowlistVerifyKeyB64: req("DOOR_ALLOWLIST_VERIFY_KEY"),
     envelopeDir: req("BROKER_ENVELOPE_DIR"),

@@ -26,6 +26,10 @@ services:
     environment:
       CLOUD_UPLINK_URL: ${CLOUD_UPLINK_URL:?wss:// cloud uplink required}
       BROKER_UPLINK_SECRET: ${BROKER_UPLINK_SECRET:?broker bearer required}
+      # Optional: PIN the cloud CA/cert. Unset → verify against Node's bundled public roots (the cloud
+      # is edge-terminated with a public/LE cert). Separate from ./certs/ca.crt (internal edge CA). To
+      # pin, drop the PEM in ./certs and set BROKER_UPLINK_CA=/certs/cloud-ca.pem (recommended for prod).
+      BROKER_UPLINK_CA: ${BROKER_UPLINK_CA:-}
       BROKER_INDEX_KEY: ${BROKER_INDEX_KEY:?32-byte base64 index key required}
       DOOR_ALLOWLIST_VERIFY_KEY: ${DOOR_ALLOWLIST_VERIFY_KEY:?ed25519 verify key required}
       BROKER_ENVELOPE_DIR: /data/envelopes
